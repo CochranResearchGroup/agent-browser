@@ -290,12 +290,12 @@ fn native_image_public_completion_and_input_survive_wall_clock_correction() {
 }
 
 #[test]
-fn native_image_public_legacy_receipt_keeps_wall_clock_contract() {
+fn native_image_public_legacy_receipt_requires_qualified_recapture() {
     native_image_public_completion_case(true, true, Some("legacy"), false, None);
 }
 
 #[test]
-fn native_image_public_capture_expiry_reports_only_bounded_clock_values() {
+fn native_image_public_expired_capture_remains_acknowledged_but_input_is_refused() {
     for reason in ["future_timestamp", "age_exceeded"] {
         native_image_public_completion_case(false, true, Some(reason), false, None);
     }
@@ -380,6 +380,9 @@ fn native_image_public_completion_case(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
+    let _service_time = crate::connection::stable_time::Fixture::set(Ok(
+        crate::connection::stable_time::fixture_stamp(now),
+    ));
     let candidates=(0..9).map(|index|json!({"candidateId":format!("tile:{}:{}",index+1,"a".repeat(16)),"bounds":{"x":100+(index%3)*66,"y":200+(index/3)*66,"width":64,"height":64}})).collect::<Vec<_>>();
     let mut observation = json!({"desktopId":"viewing","generation":9,"windowId":7,"processDigest":"b".repeat(64),"window":{"x":0,"y":0,"width":640,"height":480},"displayWidth":640,"displayHeight":480,"region":{"x":0,"y":0,"width":640,"height":480},"frameSha256":"a".repeat(64),"nativeControlEpoch":4,"observedAtMs":now,"registeredActionId":profile,"puzzleSha256":"","candidates":candidates,"verify":{"x":100,"y":414,"width":80,"height":30}});
     if rounds {
@@ -397,51 +400,38 @@ fn native_image_public_completion_case(
     ))
     .unwrap());
     let capture_params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":"image-observation","params":{"classifyChallenges":true,"registeredActionId":profile}}});
-    if clock_fault.is_none() || clock_fault == Some("wall_correction") {
-        if let Some(clock) = image::NativeImageClockReading::read().unwrap().elapsed {
-            observation["clock"] = serde_json::to_value(clock).unwrap();
-        }
-    }
+    observation["serviceTime"] =
+        serde_json::to_value(crate::connection::stable_time::fixture_stamp(now)).unwrap();
     if clock_fault == Some("wall_correction") {
         observation["observedAtMs"] = json!(now + 3_000);
     }
-    if clock_fault == Some("legacy") {
-        observation["observedAtMs"] = json!(now - 5_000);
-    }
-    if let Some(reason) =
-        clock_fault.filter(|reason| !matches!(*reason, "wall_correction" | "legacy"))
-    {
-        let observed = if reason == "future_timestamp" {
-            now + 120_000
+    if let Some(reason) = clock_fault.filter(|reason| *reason != "wall_correction") {
+        observation["serviceTime"] = if reason == "legacy" {
+            Value::Null
         } else {
-            now - 120_000
+            serde_json::to_value(crate::connection::stable_time::fixture_stamp(
+                if reason == "future_timestamp" {
+                    now + 120_000
+                } else {
+                    now - 120_000
+                },
+            ))
+            .unwrap()
         };
-        observation["observedAtMs"] = json!(observed);
-        let mut failure = String::new();
-        task_operations::with_context(Some(&capture_params),||{
-            failure=match task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":profile}),|_|Ok(crate::connection::Response{success:true,data:Some(json!({"nativeImageObservation":observation})),..Default::default()})){Err(error)=>error,Ok(_)=>panic!("expired image observation must refuse completion")};Ok(Value::Null)
+        task_operations::with_context(Some(&capture_params), || {
+            let completed = task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":profile}), |_| Ok(crate::connection::Response { success:true, data:Some(json!({"nativeImageObservation":observation})), ..Default::default() })).unwrap();
+            assert!(completed.success, "Late age must not discard an acknowledged capture");
+            Ok(Value::Null)
         }).unwrap();
-        assert!(failure.contains("cause=browser_native_image_observation_expired"));
-        let safe: Value = serde_json::from_str(
-            failure
-                .split(";observationClock=")
-                .nth(1)
-                .expect("public completion must retain only bounded image clock diagnostics"),
-        )
-        .unwrap();
-        assert_eq!(safe["reason"], reason);
-        assert_eq!(safe["observedAtMs"], observed);
-        assert_eq!(safe.as_object().unwrap().len(), 4);
-        let validated = safe["validationNowMs"].as_u64().unwrap();
-        assert_eq!(safe["ageMs"], validated.saturating_sub(observed));
-        assert_eq!(reason == "future_timestamp", validated < observed);
         assert_eq!(
             task_operations::lookup("task", "image-observation").unwrap()["operation"]["state"],
-            "pending"
+            "owner_acknowledged"
         );
-        task_operations::with_context(Some(&capture_params),||{
-            let repeated=task_operations::transport(json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":profile}),|_|panic!("expired original must never redispatch capture")).unwrap();
-            assert!(!repeated.success);assert_eq!(repeated.data.unwrap()["replayed"],true);Ok(Value::Null)
+        let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_input","requestId":"stale-image-input"}});
+        task_operations::with_context(Some(&params), || {
+            let error = task_operations::transport(json!({"action":"native_input","imageAttempt":{"observationRequestId":"image-observation","selectedCandidateIds":[format!("tile:1:{}","a".repeat(16))]}}), |_| panic!("Unqualified age must never dispatch input")).err().expect("Input needs fresh reliable evidence");
+            assert!(error.contains("browser_native_time_") || error.contains("browser_native_observation_expired"), "{error}");
+            Ok(Value::Null)
         }).unwrap();
         return;
     }
@@ -505,7 +495,11 @@ fn native_image_public_completion_case(
             "uncertain"
         }
     );
-    if let Some(elapsed) = observation["clock"]["observedAtMs"].as_u64() {
+    if let Some(elapsed) = observation["serviceTime"]["earliestUtcNs"]
+        .as_str()
+        .and_then(|value| value.parse::<i64>().ok())
+        .map(|ns| ns as u64 / 1_000_000)
+    {
         assert_eq!(
             readback["operation"]["evidenceReferences"]["nativeChallengeDeadlineAtMs"],
             (elapsed + 60_000).to_string(),
@@ -576,15 +570,11 @@ fn native_image_public_completion_case(
         fresh["tileImageSha256s"] = json!(vec!["c".repeat(64); 9]);
         fresh["frameSha256"] = json!("c".repeat(64));
         fresh["observedAtMs"] = json!(now + 1);
-        if fresh.get("clock").is_some() {
-            fresh["clock"] = serde_json::to_value(
-                image::NativeImageClockReading::read()
-                    .unwrap()
-                    .elapsed
-                    .unwrap(),
-            )
-            .unwrap();
-        }
+        fresh["serviceTime"] =
+            serde_json::to_value(crate::connection::stable_time::fixture_stamp(now + 1)).unwrap();
+        let _next_time = crate::connection::stable_time::Fixture::set(Ok(
+            crate::connection::stable_time::fixture_stamp(now + 2),
+        ));
         for (index, candidate) in fresh["candidates"]
             .as_array_mut()
             .unwrap()

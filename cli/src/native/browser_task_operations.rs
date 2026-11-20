@@ -443,12 +443,17 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         created_at_ms: now_ms()?,
         completed_at_ms: None,
         evidence_references: if command.get("loginTarget").is_some() {
+            let login_observation = original_login_observation(&state, task_id, command)?;
+            let qualified_now = super::native_login_perception::qualified_time(
+                &login_observation,
+                &crate::connection::stable_time::native_now()?,
+            )?;
             let selected = super::native_login_perception::select_target(
-                &original_login_observation(&state, task_id, command)?,
+                &login_observation,
                 command["loginTarget"]["targetRef"]
                     .as_str()
                     .ok_or("browser_native_login_target_invalid")?,
-                now_ms()?,
+                qualified_now,
             )?;
             BTreeMap::from([
                 (
@@ -585,6 +590,12 @@ fn native_kernel_admit(
                 .evidence_references
                 .contains_key("nativeObservationRequestId")
     });
+    let current_time = crate::connection::stable_time::native_now()?;
+    let capture_time = observation
+        .service_time
+        .as_ref()
+        .ok_or("browser_native_time_recapture_required: obtain a fresh native_capture")?;
+    capture_time.fresh_at(&current_time, 10_000)?;
     let policy = ChallengePolicy {
         policy_digest: binding["digest"]
             .as_str()
@@ -596,7 +607,7 @@ fn native_kernel_admit(
         max_pointer_events: 3,
         max_key_events: 0,
         cooldown_ms: 0,
-        deadline_at_ms: observation.observed_at_ms.saturating_add(10_000),
+        deadline_at_ms: capture_time.earliest_ms().saturating_add(10_000),
     };
     let snapshot = ChallengeSnapshot {
         attempts_started: u8::from(prior),
@@ -608,7 +619,7 @@ fn native_kernel_admit(
         ChallengeEvent::Observed {
             posture: ObservationPosture::Eligible,
             provider_id: provider,
-            now_ms: now_ms()?,
+            now_ms: current_time.latest_ms(),
         },
     )
     .map_err(|_| "browser_native_challenge_admission_refused")?
@@ -620,7 +631,9 @@ fn native_kernel_admit(
         decide(
             &policy,
             &snapshot,
-            ChallengeEvent::StartAttempt { now_ms: now_ms()? }
+            ChallengeEvent::StartAttempt {
+                now_ms: current_time.latest_ms()
+            }
         ),
         Ok(ChallengeDecision::PermitAttempt(_))
     ) {
@@ -658,7 +671,7 @@ fn original_native_observation(
     {
         return Err("browser_native_original_observation_context_changed".into());
     }
-    observation.validate(now_ms()?)?;
+    observation.validate_structure()?;
     Ok(observation)
 }
 
@@ -1223,7 +1236,7 @@ pub(crate) fn finish(
                 let observation: super::browser_native_image::NativeImageObservation =
                     serde_json::from_value(value.clone())
                         .map_err(|_| "browser_native_image_observation_invalid")?;
-                observation.validate_current()?;
+                observation.validate_structure()?;
                 references.insert(
                     "nativeImageObservation".into(),
                     serde_json::to_string(&observation)
@@ -1238,7 +1251,7 @@ pub(crate) fn finish(
                 let observation: super::browser_native_control::NativeChallengeObservation =
                     serde_json::from_value(value.clone())
                         .map_err(|_| "browser_native_original_observation_invalid")?;
-                observation.validate(now_ms()?)?;
+                observation.validate_structure()?;
                 references.insert(
                     "nativeObservation".into(),
                     serde_json::to_string(&observation)
@@ -1394,7 +1407,7 @@ fn original_native_image_observation(
     {
         return Err("browser_native_original_observation_context_changed".into());
     }
-    observation.validate_current()?;
+    observation.validate_structure()?;
     if observation.registered_action_id != super::browser_native_image::command_profile(command) {
         return Err("browser_native_image_round_changed".into());
     }
@@ -1627,7 +1640,17 @@ fn original_login_observation(
     super::native_login_perception::select_target(
         &observation,
         command["loginTarget"]["targetRef"].as_str().unwrap(),
-        now_ms()?,
+        observation["binding"]["serviceTime"]
+            .as_object()
+            .and_then(|_| {
+                serde_json::from_value::<crate::connection::stable_time::Stamp>(
+                    observation["binding"]["serviceTime"].clone(),
+                )
+                .ok()
+            })
+            .map(|stamp| stamp.earliest_ms())
+            .or_else(|| observation["binding"]["observedAtMs"].as_u64())
+            .ok_or("browser_native_login_observation_invalid")?,
     )?;
     Ok(observation)
 }
@@ -1688,14 +1711,15 @@ fn login_episode_step(
     if prior.len() >= maximum {
         return Err(format!("browser_native_login_budget_exhausted: completedSteps={};maximumLoginSteps={maximum}; inspect browser_command action=task_operation params={{\"operation\":\"capacity\"}} and increase policy.maximumLoginSteps for this task before continuing the same episode; acknowledged originals are retained", prior.len()));
     }
-    let now = now_ms()?;
-    if prior.first().is_some_and(|row| now < row.created_at_ms) {
-        return Err("browser_native_login_clock_unqualified: inspect reliable time and obtain a fresh native_capture before continuing; original inputs remain retained".into());
-    }
+    let observed = original_login_observation(state, task, command)?;
+    let now = super::native_login_perception::qualified_time(
+        &observed,
+        &crate::connection::stable_time::native_now()?,
+    )?;
     // select_target retains account matching, submit/form and fresh-frame guards;
     // a hardcoded username/credential/submit order is not a page-state proof.
     super::native_login_perception::select_target(
-        &original_login_observation(state, task, command)?,
+        &observed,
         command["loginTarget"]["targetRef"].as_str().unwrap(),
         now,
     )?;

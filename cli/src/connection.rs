@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 use crate::process_identity::{RecordedProcessIdentity, VerifiedProcessTermination};
 
 pub(crate) mod latency;
+pub(crate) mod stable_time;
 
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;

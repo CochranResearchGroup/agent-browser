@@ -17,6 +17,8 @@ pub struct NativeChallengeObservation {
     pub frame_sha256: String,
     pub native_control_epoch: u64,
     pub observed_at_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_time: Option<crate::connection::stable_time::Stamp>,
     pub registered_action_id: String,
     pub family: String,
     pub candidate_sha256: String,
@@ -36,6 +38,12 @@ pub struct NativeChallengeBounds {
 impl NativeChallengeObservation {
     /// Use the existing Native classification age bound. No historical desktop
     /// transaction clock or controller lease is imported into this authority.
+    pub fn validate_structure(&self) -> Result<(), String> {
+        if let Some(stamp) = &self.service_time {
+            stamp.validate()?;
+        }
+        self.validate(self.observed_at_ms)
+    }
     pub fn validate(&self, now_ms: u64) -> Result<(), String> {
         let digest =
             |value: &str| value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit());
@@ -180,23 +188,29 @@ pub fn execute(
     {
         return Err("browser_native_login_target_requires_exclusive_input".into());
     }
-    let observation_started = std::time::Instant::now();
-    let image_clock = if command["registeredActionId"]
-        .as_str()
-        .is_some_and(super::browser_native_image::is_profile)
-    {
-        Some(owner.image_observation_clock()?)
+    let needs_freshness = classify
+        || command.get("nativeAttempt").is_some()
+        || command.get("loginTarget").is_some()
+        || command.get("imageAttempt").is_some()
+        || command.get("loginControls").is_some()
+        || (command["action"] == "native_capture" && command["registeredActionId"].is_string());
+    let mut time_failure = None;
+    let image_clock = if needs_freshness {
+        match owner.image_observation_clock() {
+            Ok(clock) => Some(clock),
+            Err(error) if command["action"] == "native_capture" => {
+                time_failure = Some(error);
+                None
+            }
+            Err(error) => return Err(error),
+        }
     } else {
         None
     };
-    let observed_at_ms = if let Some(clock) = &image_clock {
-        clock.wall_time_ms
-    } else {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| "browser_native_observation_clock_invalid")?
-            .as_millis() as u64
-    };
+    let observed_at_ms = image_clock.as_ref().map_or(0, |clock| clock.wall_time_ms);
+    let service_time = image_clock
+        .as_ref()
+        .and_then(|clock| clock.service_time.as_ref());
     let image_selected = if command.get("imageAttempt").is_some() {
         Some(super::browser_native_image::selection(command)?)
     } else {
@@ -207,14 +221,26 @@ pub fn execute(
             return Err("browser_native_attempt_requires_input".into());
         }
         let observation = owner.native_attempt(command)?;
-        observation.validate(observed_at_ms)?;
+        observation.validate_structure()?;
+        observation
+            .service_time
+            .as_ref()
+            .ok_or("browser_native_time_recapture_required: obtain a fresh native_capture")?
+            .fresh_at(
+                service_time.ok_or("browser_native_time_evidence_invalid")?,
+                10_000,
+            )?;
         Some(observation)
     } else {
         None
     };
     let image_attempt = if image_selected.is_some() {
         let evidence = owner.native_image_attempt(command)?;
-        evidence.validate_current()?;
+        evidence.validate_at(
+            image_clock
+                .as_ref()
+                .ok_or("browser_native_time_evidence_invalid")?,
+        )?;
         Some(evidence)
     } else {
         None
@@ -236,6 +262,10 @@ pub fn execute(
     }
     let login_selection = if command.get("loginTarget").is_some() {
         let observation = owner.native_login_attempt(command)?;
+        let observed_at_ms = super::native_login_perception::qualified_time(
+            &observation,
+            service_time.ok_or("browser_native_time_evidence_invalid")?,
+        )?;
         Some(super::native_login_perception::select_target(
             &observation,
             command["loginTarget"]["targetRef"]
@@ -515,9 +545,9 @@ pub fn execute(
                 request,
                 super::native_login_ocr::lines,
             )?;
-            let binding = json!({"desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,"windowId":window["id"],"window":body["expectedWindow"],"displayWidth":width,"displayHeight":height,"region":body["region"],"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms});
+            let binding = json!({"desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,"windowId":window["id"],"window":body["expectedWindow"],"displayWidth":width,"displayHeight":height,"region":body["region"],"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms,"serviceTime":service_time});
             return Ok(
-                json!({"source":"remote_view_native","loginControls":controls,"binding":binding,"nativeLoginObservation":{"binding":binding,"controls":controls},"taskCompleted":false}),
+                json!({"source":"remote_view_native","loginControls":controls,"binding":binding,"nativeLoginObservation":{"binding":binding,"controls":controls},"timeQualificationFailure":time_failure,"taskCompleted":false}),
             );
         }
         let mut classification = None;
@@ -569,10 +599,29 @@ pub fn execute(
                     })
                 })
                 .collect::<Result<Vec<_>, &str>>()?;
+            let classification_fresh = if let Some(before) = service_time {
+                match owner.image_observation_clock().and_then(|clock| {
+                    before.fresh_at(
+                        clock
+                            .service_time
+                            .as_ref()
+                            .ok_or("browser_native_time_evidence_invalid")?,
+                        10_000,
+                    )
+                }) {
+                    Ok(()) => true,
+                    Err(error) => {
+                        time_failure = Some(error);
+                        false
+                    }
+                }
+            } else {
+                false
+            };
             classification = Some(agent_browser_challenge_control::classify_native_challenge(
                 &words,
                 &digest,
-                observation_started.elapsed().as_millis() <= 10_000,
+                classification_fresh,
                 body["region"]
                     == json!({"x":window["x"],"y":window["y"],"width":full_width,"height":full_height}),
             ));
@@ -635,9 +684,7 @@ pub fn execute(
                     )
                     .ok()
                     .filter(|located| located["status"] == "matched" && located["visible"] == true);
-                if corroborated_target.is_some()
-                    && observation_started.elapsed().as_millis() <= 10_000
-                {
+                if corroborated_target.is_some() && classification_fresh {
                     let value = classification.as_mut().unwrap();
                     value.corpus_version = "native-challenge-corpus.v2";
                     value.limitation = "Bounded English OCR plus same-frame registered hCaptcha pixels; classification is not attempt authority, clearance or site admission; OCR scores are not probabilities";
@@ -665,7 +712,7 @@ pub fn execute(
                         "desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,"windowId":window["id"],
                         "processDigest":super::browser_native_image::digest(&window["processIdentity"] )?,
                         "window":body["expectedWindow"],"displayWidth":width,"displayHeight":height,"region":body["region"],
-                        "frameSha256":digest,"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms,
+                        "frameSha256":digest,"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms,"serviceTime":service_time,
                         "clock":image_clock.as_ref().and_then(|clock| clock.elapsed.clone()),
                         "captureScope":image_scope,"registeredActionId":registered_action,"puzzleSha256":"", "candidates":[],"verify":{"x":0,"y":0,"width":0,"height":0}
                     })).map_err(|_| "browser_native_image_observation_invalid")?)?;
@@ -689,12 +736,10 @@ pub fn execute(
                     let evidence: NativeChallengeObservation = serde_json::from_value(json!({
                         "desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,"windowId":window["id"],
                         "window":body["expectedWindow"],"displayWidth":width,"displayHeight":height,"region":body["region"],
-                        "frameSha256":digest,"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms,
+                        "frameSha256":digest,"nativeControlEpoch":body["controlEpoch"],"observedAtMs":observed_at_ms,"serviceTime":service_time,
                         "registeredActionId":action,"family":classification.as_ref().and_then(|value| value.family),"candidateSha256":located["candidateSha256"],"x":located["x"],"y":located["y"]
                     })).map_err(|_| "browser_native_registered_target_invalid")?;
-                    evidence.validate(
-                        observed_at_ms + observation_started.elapsed().as_millis() as u64,
-                    )?;
+                    evidence.validate_structure()?;
                     native_observation = Some(evidence);
                 }
                 registered_target = Some(located);
@@ -710,19 +755,20 @@ pub fn execute(
             "windowBounds":{"x":window["x"],"y":window["y"],"width":full_width,"height":full_height},
             "partialWindow":body["region"]!=json!({"x":window["x"],"y":window["y"],"width":full_width,"height":full_height}),
             "taskCompleted":false});
+        if let Some(error) = time_failure {
+            result["timeQualificationFailure"] = json!(error);
+        }
         if let Some(classification) = classification {
             result["challenge"] = serde_json::to_value(classification)
                 .map_err(|_| "browser_native_classification_invalid")?;
             result["recognition"] = recognition.unwrap_or(Value::Null);
             result["observedAtMs"] = json!(observed_at_ms);
-            result["evidenceAgeMs"] = json!(observation_started.elapsed().as_millis() as u64);
             result["nativeControlEpoch"] = body["controlEpoch"].clone();
         }
         if let Some(located) = registered_target {
             result["registeredTarget"] = located;
         }
         if let Some(evidence) = native_image_observation {
-            result["evidenceAgeMs"] = json!(evidence.age_at(&owner.image_observation_clock()?)?);
             result["nativeImageObservation"] = serde_json::to_value(evidence)
                 .map_err(|_| "browser_native_image_observation_invalid")?;
         }
@@ -738,21 +784,32 @@ pub fn execute(
         }
     }
     if let Some(evidence) = &image_attempt {
-        evidence.validate_current()?;
+        evidence.validate_at(&owner.image_observation_clock()?)?;
     }
     if let Some(evidence) = &attempt {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| "browser_native_observation_clock_invalid")?
-            .as_millis() as u64;
-        evidence.validate(now)?;
+        let current = owner.image_observation_clock()?;
+        evidence
+            .service_time
+            .as_ref()
+            .ok_or("browser_native_time_recapture_required: obtain a fresh native_capture")?
+            .fresh_at(
+                current
+                    .service_time
+                    .as_ref()
+                    .ok_or("browser_native_time_evidence_invalid")?,
+                10_000,
+            )?;
     }
     if login_selection.is_some() {
         let observation = owner.native_login_attempt(command)?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| "browser_native_observation_clock_invalid")?
-            .as_millis() as u64;
+        let current = owner.image_observation_clock()?;
+        let now = super::native_login_perception::qualified_time(
+            &observation,
+            current
+                .service_time
+                .as_ref()
+                .ok_or("browser_native_time_evidence_invalid")?,
+        )?;
         super::native_login_perception::select_target(
             &observation,
             command["loginTarget"]["targetRef"]

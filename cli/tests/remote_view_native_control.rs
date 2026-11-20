@@ -1,3 +1,9 @@
+#[allow(dead_code)]
+#[path = "../src/connection/stable_time.rs"]
+pub(crate) mod stable_time;
+mod connection {
+    pub(crate) use crate::stable_time;
+}
 // The durable round helpers are tested through the production MCP/store seam.
 #[path = "../src/native/browser_native_control.rs"]
 mod browser_native_control;
@@ -21,6 +27,14 @@ struct NativeFixture {
     calls: Vec<(String, serde_json::Value)>,
 }
 impl browser_native_control::NativeOwner for NativeFixture {
+    fn image_observation_clock(
+        &mut self,
+    ) -> Result<browser_native_image::NativeImageClockReading, String> {
+        Ok(browser_native_image::NativeImageClockReading::fixture(
+            1_000_000,
+        ))
+    }
+
     fn request(
         &mut self,
         operation: &str,
@@ -36,6 +50,7 @@ impl browser_native_control::NativeOwner for NativeFixture {
 }
 #[test]
 fn native_task_input_joins_original_process_and_current_viewing_generation() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     use agent_browser_service_model::{RecordedProcessIdentity, RemoteViewApplicationTarget};
     let original = RecordedProcessIdentity {
         pid: 42,
@@ -77,6 +92,7 @@ fn native_task_input_joins_original_process_and_current_viewing_generation() {
 
 #[test]
 fn native_task_input_never_dispatches_to_a_replaced_process() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     use agent_browser_service_model::{RecordedProcessIdentity, RemoteViewApplicationTarget};
     let original = RecordedProcessIdentity {
         pid: 42,
@@ -110,6 +126,7 @@ fn native_task_input_never_dispatches_to_a_replaced_process() {
 
 #[test]
 fn native_task_capture_is_fenced_to_the_browser_window_without_input() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     let original = agent_browser_service_model::RecordedProcessIdentity {
         pid: 42,
         start_token: "linux:boot:11".into(),
@@ -144,8 +161,17 @@ fn native_task_capture_is_fenced_to_the_browser_window_without_input() {
 
 #[test]
 fn native_task_window_remediation_uses_only_the_verified_window() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     struct RemediationOwner(NativeFixture);
     impl browser_native_control::NativeOwner for RemediationOwner {
+        fn image_observation_clock(
+            &mut self,
+        ) -> Result<browser_native_image::NativeImageClockReading, String> {
+            Ok(browser_native_image::NativeImageClockReading::fixture(
+                1_000_000,
+            ))
+        }
+
         fn request(
             &mut self,
             operation: &str,
@@ -213,10 +239,19 @@ fn native_task_window_remediation_uses_only_the_verified_window() {
 
 #[test]
 fn native_capture_classifies_same_fenced_frame_without_projecting_private_ocr_text() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     use base64::Engine;
     use sha2::Digest;
     struct OcrOwner(NativeFixture);
     impl browser_native_control::NativeOwner for OcrOwner {
+        fn image_observation_clock(
+            &mut self,
+        ) -> Result<browser_native_image::NativeImageClockReading, String> {
+            Ok(browser_native_image::NativeImageClockReading::fixture(
+                1_000_000,
+            ))
+        }
+
         fn request(
             &mut self,
             operation: &str,
@@ -308,6 +343,7 @@ fn challenge_observation() -> browser_native_control::NativeChallengeObservation
         },
         frame_sha256: "a".repeat(64),
         native_control_epoch: 4,
+        service_time: Some(stable_time::fixture_stamp(1_000_000)),
         observed_at_ms: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -322,6 +358,7 @@ fn challenge_observation() -> browser_native_control::NativeChallengeObservation
 
 #[test]
 fn native_challenge_attempt_requires_original_owner_evidence_not_caller_points() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     let original = agent_browser_service_model::RecordedProcessIdentity {
         pid: 42,
         start_token: "linux:boot:11".into(),
@@ -354,12 +391,21 @@ fn native_challenge_attempt_requires_original_owner_evidence_not_caller_points()
 
 #[test]
 fn native_challenge_attempt_binds_original_visual_epoch_window_and_single_derived_click() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     struct AttemptOwner {
         fixture: NativeFixture,
         evidence: browser_native_control::NativeChallengeObservation,
         epoch: u64,
     }
     impl browser_native_control::NativeOwner for AttemptOwner {
+        fn image_observation_clock(
+            &mut self,
+        ) -> Result<browser_native_image::NativeImageClockReading, String> {
+            Ok(browser_native_image::NativeImageClockReading::fixture(
+                1_000_000,
+            ))
+        }
+
         fn native_attempt(
             &mut self,
             _: &serde_json::Value,
@@ -401,7 +447,7 @@ fn native_challenge_attempt_binds_original_visual_epoch_window_and_single_derive
             evidence.window_id = 99;
         }
         if condition == "expired" {
-            evidence.observed_at_ms -= 10_001;
+            evidence.service_time = Some(stable_time::fixture_stamp(1_000_000 - 10_001));
         }
         let mut owner = AttemptOwner {
             fixture: NativeFixture { calls: vec![] },
@@ -438,6 +484,14 @@ struct ImagePuzzleOwner {
     fixture: NativeFixture,
 }
 impl browser_native_control::NativeOwner for ImagePuzzleOwner {
+    fn image_observation_clock(
+        &mut self,
+    ) -> Result<browser_native_image::NativeImageClockReading, String> {
+        Ok(browser_native_image::NativeImageClockReading::fixture(
+            1_000_000,
+        ))
+    }
+
     fn request(
         &mut self,
         operation: &str,
@@ -498,6 +552,7 @@ impl browser_native_control::NativeOwner for ImagePuzzleOwner {
 
 #[test]
 fn native_image_capture_registers_same_frame_candidates_without_input() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     let original = agent_browser_service_model::RecordedProcessIdentity {
         pid: 42,
         start_token: "linux:boot:11".into(),
@@ -534,10 +589,44 @@ fn native_image_capture_registers_same_frame_candidates_without_input() {
         .iter()
         .any(|(operation, _)| operation == "input"));
     assert!(result["capture"].get("ocr").is_none());
+    struct UnavailableTime(ImagePuzzleOwner);
+    impl browser_native_control::NativeOwner for UnavailableTime {
+        fn image_observation_clock(
+            &mut self,
+        ) -> Result<browser_native_image::NativeImageClockReading, String> {
+            Err("browser_native_time_unavailable:cause=stable_time_client_start_failed".into())
+        }
+        fn request(
+            &mut self,
+            operation: &str,
+            body: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            self.0.request(operation, body)
+        }
+    }
+    let mut unavailable = UnavailableTime(ImagePuzzleOwner {
+        fixture: NativeFixture { calls: vec![] },
+    });
+    let captured = browser_native_control::execute(&original, &target,
+        &serde_json::json!({"action":"native_capture","classifyChallenges":true,"registeredActionId":"hcaptcha-image-grid-3x3-v1"}), &mut unavailable).unwrap();
+    assert!(captured["timeQualificationFailure"]
+        .as_str()
+        .unwrap()
+        .contains("client_start_failed"));
+    assert!(captured["nativeImageObservation"].is_null());
+    let before_input = unavailable.0.fixture.calls.len();
+    assert!(browser_native_control::execute(&original, &target,
+        &serde_json::json!({"action":"native_input","imageAttempt":{"observationRequestId":"unqualified","selectedCandidateIds":["tile:1:aaaaaaaaaaaaaaaa"]}}), &mut unavailable).is_err());
+    assert_eq!(
+        unavailable.0.fixture.calls.len(),
+        before_input,
+        "Only freshness-dependent input must pause; capture remains inspectable"
+    );
 }
 
 #[test]
 fn native_image_attempt_derives_only_current_candidate_and_verify_points() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     let original = agent_browser_service_model::RecordedProcessIdentity {
         pid: 42,
         start_token: "linux:boot:11".into(),
@@ -561,6 +650,14 @@ fn native_image_attempt_derives_only_current_candidate_and_verify_points() {
         epoch: u64,
     }
     impl browser_native_control::NativeOwner for Owner {
+        fn image_observation_clock(
+            &mut self,
+        ) -> Result<browser_native_image::NativeImageClockReading, String> {
+            Ok(browser_native_image::NativeImageClockReading::fixture(
+                1_000_000,
+            ))
+        }
+
         fn native_image_attempt(
             &mut self,
             command: &serde_json::Value,
@@ -634,6 +731,7 @@ fn native_image_attempt_derives_only_current_candidate_and_verify_points() {
         }
         if condition == "expired" {
             evidence.clock = None;
+            evidence.service_time = Some(stable_time::fixture_stamp(1_000_000 - 120_000));
             evidence.observed_at_ms -= 120_000;
         }
         let mut selected = selected.clone();
@@ -665,6 +763,7 @@ fn native_image_attempt_derives_only_current_candidate_and_verify_points() {
 
 #[test]
 fn native_image_malformed_attempt_never_falls_back_to_legacy_input() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     let original = agent_browser_service_model::RecordedProcessIdentity {
         pid: 42,
         start_token: "linux:boot:11".into(),
@@ -720,8 +819,17 @@ fn native_image_malformed_attempt_never_falls_back_to_legacy_input() {
 
 #[test]
 fn native_image_capture_offsets_absolute_ocr_and_local_pixels_exactly_once() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     struct OffsetOwner(ImagePuzzleOwner);
     impl browser_native_control::NativeOwner for OffsetOwner {
+        fn image_observation_clock(
+            &mut self,
+        ) -> Result<browser_native_image::NativeImageClockReading, String> {
+            Ok(browser_native_image::NativeImageClockReading::fixture(
+                1_000_000,
+            ))
+        }
+
         fn request(
             &mut self,
             operation: &str,
@@ -775,11 +883,20 @@ fn native_image_capture_offsets_absolute_ocr_and_local_pixels_exactly_once() {
 
 #[test]
 fn native_image_capture_refuses_unsupported_ambiguous_partial_or_changed_pixels() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     struct ChangedOwner {
         inner: ImagePuzzleOwner,
         case: &'static str,
     }
     impl browser_native_control::NativeOwner for ChangedOwner {
+        fn image_observation_clock(
+            &mut self,
+        ) -> Result<browser_native_image::NativeImageClockReading, String> {
+            Ok(browser_native_image::NativeImageClockReading::fixture(
+                1_000_000,
+            ))
+        }
+
         fn request(
             &mut self,
             operation: &str,
@@ -907,8 +1024,17 @@ fn native_image_capture_refuses_unsupported_ambiguous_partial_or_changed_pixels(
 
 #[test]
 fn native_image_complete_puzzle_region_is_explicit_fresh_and_fully_contained() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     struct RegionOwner(ImagePuzzleOwner);
     impl browser_native_control::NativeOwner for RegionOwner {
+        fn image_observation_clock(
+            &mut self,
+        ) -> Result<browser_native_image::NativeImageClockReading, String> {
+            Ok(browser_native_image::NativeImageClockReading::fixture(
+                1_000_000,
+            ))
+        }
+
         fn request(
             &mut self,
             operation: &str,
@@ -994,6 +1120,14 @@ fn native_image_complete_puzzle_region_is_explicit_fresh_and_fully_contained() {
         evidence: browser_native_image::NativeImageObservation,
     }
     impl browser_native_control::NativeOwner for InputOwner {
+        fn image_observation_clock(
+            &mut self,
+        ) -> Result<browser_native_image::NativeImageClockReading, String> {
+            Ok(browser_native_image::NativeImageClockReading::fixture(
+                1_000_000,
+            ))
+        }
+
         fn native_image_attempt(
             &mut self,
             _: &serde_json::Value,
@@ -1015,6 +1149,7 @@ fn native_image_complete_puzzle_region_is_explicit_fresh_and_fully_contained() {
             "window" => evidence.window_id += 1,
             "stale" => {
                 evidence.clock = None;
+                evidence.service_time = Some(stable_time::fixture_stamp(1_000_000 - 120_000));
                 evidence.observed_at_ms -= 120_000;
             }
             "frame" => evidence.frame_sha256 = "f".repeat(64),
@@ -1082,11 +1217,20 @@ fn native_image_complete_puzzle_region_is_explicit_fresh_and_fully_contained() {
 
 #[test]
 fn native_image_rounds_owner_hashes_interiors_and_vetoes_rejection_at_any_confidence() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     struct RoundOwner {
         inner: ImagePuzzleOwner,
         case: &'static str,
     }
     impl browser_native_control::NativeOwner for RoundOwner {
+        fn image_observation_clock(
+            &mut self,
+        ) -> Result<browser_native_image::NativeImageClockReading, String> {
+            Ok(browser_native_image::NativeImageClockReading::fixture(
+                1_000_000,
+            ))
+        }
+
         fn request(
             &mut self,
             operation: &str,
@@ -1169,11 +1313,8 @@ fn native_image_rounds_owner_hashes_interiors_and_vetoes_rejection_at_any_confid
         serde_json::from_value(baseline["nativeImageObservation"].clone()).unwrap();
     let mut fresh: browser_native_image::NativeImageObservation =
         serde_json::from_value(interiors["nativeImageObservation"].clone()).unwrap();
-    fresh.observed_at_ms = if fresh.clock.is_some() {
-        first.observed_at_ms.saturating_sub(3_000)
-    } else {
-        first.observed_at_ms + 1
-    };
+    fresh.service_time = Some(stable_time::fixture_stamp(1_000_001));
+    let _next_time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_002)));
     let binding =
         serde_json::json!({"digest":"d".repeat(64),"providerId":"explicit-two-round-provider"});
     let selected = vec![first.candidates[0].candidate_id.clone()];
@@ -1229,6 +1370,7 @@ fn native_image_rounds_owner_hashes_interiors_and_vetoes_rejection_at_any_confid
 
 #[test]
 fn native_image_capture_completes_after_wall_clock_steps_back() {
+    let _time = stable_time::Fixture::set(Ok(stable_time::fixture_stamp(1_000_000)));
     use browser_native_image::{
         NativeImageClockReading, NativeImageElapsedClock, NativeImageObservation,
     };
@@ -1237,6 +1379,7 @@ fn native_image_capture_completes_after_wall_clock_steps_back() {
         fn image_observation_clock(&mut self) -> Result<NativeImageClockReading, String> {
             Ok(NativeImageClockReading {
                 wall_time_ms: 1_000_000,
+                service_time: Some(stable_time::fixture_stamp(200_000)),
                 elapsed: Some(NativeImageElapsedClock {
                     kind: "linux-boottime-v1".into(),
                     boot_id: "11111111-1111-4111-8111-111111111111".into(),
@@ -1275,6 +1418,7 @@ fn native_image_capture_completes_after_wall_clock_steps_back() {
     assert_eq!(observation.observed_at_ms, 1_000_000);
     let completion_clock = NativeImageClockReading {
         wall_time_ms: 997_000,
+        service_time: Some(stable_time::fixture_stamp(200_010)),
         elapsed: Some(NativeImageElapsedClock {
             kind: "linux-boottime-v1".into(),
             boot_id: "11111111-1111-4111-8111-111111111111".into(),
@@ -1292,14 +1436,14 @@ fn native_image_capture_completes_after_wall_clock_steps_back() {
     for case in ["expired", "future", "boot", "domain", "missing"] {
         let mut clock = completion_clock.clone();
         match case {
-            "expired" => clock.elapsed.as_mut().unwrap().observed_at_ms = 260_001,
-            "future" => clock.elapsed.as_mut().unwrap().observed_at_ms = 199_999,
+            "expired" => clock.service_time = Some(stable_time::fixture_stamp(260_001)),
+            "future" => clock.service_time = Some(stable_time::fixture_stamp(199_999)),
             "boot" => {
-                clock.elapsed.as_mut().unwrap().boot_id =
+                clock.service_time.as_mut().unwrap().epoch =
                     "22222222-2222-4222-8222-222222222222".into()
             }
-            "domain" => clock.elapsed.as_mut().unwrap().kind = "unknown".into(),
-            "missing" => clock.elapsed = None,
+            "domain" => clock.service_time.as_mut().unwrap().frequency_hz += 1,
+            "missing" => clock.service_time = None,
             _ => unreachable!(),
         }
         assert!(
@@ -1309,6 +1453,7 @@ fn native_image_capture_completes_after_wall_clock_steps_back() {
     }
     let mut legacy = observation.clone();
     legacy.clock = None;
+    legacy.service_time = None;
     assert!(
         legacy.validate_at(&completion_clock).is_err(),
         "Legacy wall-time future evidence remains refused"
