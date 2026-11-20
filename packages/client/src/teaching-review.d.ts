@@ -9,6 +9,7 @@ export interface TeachingEvidenceAvailability {
   id:string;artifact:string;sha256:string;state:'available'|'unavailable'|'unchecked';reason?:string;
 }
 export interface TeachingSourceState {
+ clientRecovery?:import('./client-recovery.js').ClientRecovery;failure?:Record<string,unknown>;
   recordingId: string; videoSha256: string; sourceTaskId: string;
   state: 'available' | 'unavailable' | 'unchecked'; reason?: string;
   evidence?:TeachingEvidenceAvailability[];

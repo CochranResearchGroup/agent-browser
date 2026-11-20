@@ -1,3 +1,5 @@
+import {withClientErrorRecovery} from './client-recovery.js';
+import { callClientOwner, clientRecoveryFor } from './client-recovery.js';
 import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 
@@ -20,21 +22,25 @@ export function createLoginVerifier({client,verifyAccess,callerTaskId}) {
     };
     const args={requestId:context.requestId};
     const matches=request=>request?.requestId===context.requestId&&request.attemptId===context.attemptId&&request.taskId===callerTaskId&&request.targetId===context.binding.taskId&&request.origin===context.binding.origin&&request.operation==='login'&&request.mode==='private'&&!['denied','revoked','cancelled','expired'].includes(request.state);
+    let dependencyComponent='auth_owner';
     try {
-      const before=structuredClone(await client.call('inspect_credential_request',args));
+      const before=structuredClone(await callClientOwner(client,'inspect_credential_request',args,{source:"packages/client/src/login-verification.js",owningFunction:"createLoginVerifier.verify"}));
       if(!matches(before))return {...result,category:'request_binding_unverified'};
+      dependencyComponent='application_verifier';
       const proof=structuredClone(await verifyAccess(context));
       if(proof?.state!=='verified'||proof.accountMatched!==true||context.expectedOrganization!==undefined&&proof.organizationMatched!==true||proof.applicationOrigin!==context.applicationOrigin||!bindingFields.every(key=>proof[key]===context.binding[key])||!reference(proof.evidenceRef))return result;
       result.qualification.applicationAccess='verified';result.evidenceReferences=[proof.evidenceRef];
-      const record=await client.call('inspect_authentication_completion',args),completion=record?.completion;
+      dependencyComponent='auth_owner';
+      const record=await callClientOwner(client,'inspect_authentication_completion',args,{source:"packages/client/src/login-verification.js",owningFunction:"createLoginVerifier.verify"}),completion=record?.completion;
       if(record?.requestId!==context.requestId||record.state!=='completed'||record.conflict||completion?.outcome!=='succeeded'||completion.evidenceAuthority!=='caller_observed'||completion.actor?.taskId!==callerTaskId||!reference(before.clientId)||completion.actor.clientId!==before.clientId||completion.observation?.applicationOrigin!==context.applicationOrigin||!identity(completion.observation.accountEvidence)||!reference(completion.returnId)||!Array.isArray(completion.observation.evidenceRefs)||!completion.observation.evidenceRefs.includes(proof.evidenceRef))return {...result,category:'completion_unverified'};
-      const after=await client.call('inspect_credential_request',args);
+      const after=await callClientOwner(client,'inspect_credential_request',args,{source:"packages/client/src/login-verification.js",owningFunction:"createLoginVerifier.verify"});
       if(!matches(after)||after.state!=='completed')return {...result,category:'request_binding_unverified'};
       result.qualification.authCompletion='caller_observed';
       result.receivingSettlement=['settled','held'].includes(record.receivingSettlement?.status)?record.receivingSettlement.status:'unverified';
       return {...result,outcome:'verified',category:'verified_access',nextAction:null,evidenceReferences:[proof.evidenceRef,completion.returnId]};
-    } catch {
-      return {...result,category:'verification_unavailable'};
+    } catch(error) {
+      const code=typeof error?.code==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(error.code)?error.code:'client_application_verification_unavailable';
+      return {...result,category:'verification_unavailable',dependencyFailure:{component:dependencyComponent,code,...(typeof error?.failure?.occurrenceId==='string'?{occurrenceId:error.failure.occurrenceId}:{})},...(error?.failure?{failure:error.failure}:{}),clientRecovery:error?.clientRecovery??clientRecoveryFor('client_application_verification_unavailable',{source:'packages/client/src/login-verification.js',owningFunction:'createLoginVerifier.verify',requestId:context.requestId})};
     }
   }};
 }

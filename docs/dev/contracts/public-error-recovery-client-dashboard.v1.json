@@ -104,6 +104,11 @@
       "methods": [
         "capacity"
       ]
+    },
+    "@agent-browser/client/teaching-evidence#createTeachingEvidenceClient": {
+      "source": "packages/client/src/teaching-evidence.js",
+      "export": "createTeachingEvidenceClient",
+      "kind": "client_export"
     }
   },
   "recipes": {
@@ -919,6 +924,38 @@
         "precondition": "After corrected configuration is accepted, inspect the existing owner snapshot."
       },
       "resumeCondition": "The advertised resource policy is valid; original lookup and authorization remain unchanged.",
+      "maximumAutomaticAttempts": 1
+    },
+    "teachingOwnerExpiryQualification": {
+      "rationale": "Finite retention expiry cannot be accepted or rejected from guest wall time. Original owner recording metadata and authorization remain authoritative.",
+      "requiredActor": "authenticated_recording_owner_for_pin_or_existing_scoped_reader_for_inspection",
+      "evidenceRequirement": "Exact original recording ID and current owner retention/read authority. No token or private source body belongs in this recipe or packet.",
+      "inspect": {
+        "tool": "remote_view_recordings",
+        "arguments": {
+          "recordingId": "$recordingId"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "The authenticated recording owner may pin this exact retained recording using the existing Remote View operation, then re-read owner metadata and the same teaching selection. A read-token holder cannot grant itself retention or broader access. Actual owner expiry/revocation/deletion/refusal remains authoritative. Do not manufacture a pinned flag or compare guest time.",
+          "precondition": "The current authenticated actor actually owns this original recording and is authorized to retain it; a scoped read grant alone is insufficient. No permission expansion is inferred.",
+          "call": {
+            "tool": "remote_view_recording_pin",
+            "arguments": {
+              "recordingId": "$recordingId",
+              "pinned": true
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "remote_view_recordings",
+        "arguments": {
+          "recordingId": "$recordingId"
+        }
+      },
+      "resumeCondition": "Fresh owner metadata establishes pinned retention or an independently owner-qualified lifecycle decision under the original read authority. Only the time-dependent source action pauses while unqualified; existing history/metadata inspection remains available.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -2417,6 +2454,24 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "invalid"
+    },
+    "teaching_source_expiry_unqualified": {
+      "recipe": "teachingOwnerExpiryQualification",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
     }
-  }
+  },
+  "externalToolContract": "docs/dev/contracts/client-external-owner-tools.v1.json"
 }

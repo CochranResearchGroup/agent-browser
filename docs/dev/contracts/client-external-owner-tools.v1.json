@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "agent-browser.client-external-owner-tools.v1",
+  "authority": "Reviewed active MCP tool declarations. This contract describes supported interfaces, not a caller grant or tool-availability guarantee.",
+  "tools": {
+    "remote_view_recordings": {
+      "owner": "Remote View",
+      "provenance": "Active tool declaration mcp__remote_view__remote_view_recordings, discovered without invocation during spec749 ticket760 source qualification.",
+      "arguments": {
+        "type": "object",
+        "properties": {
+          "recordingId": {"type": "string"},
+          "accessToken": {"type": "string"},
+          "application": {"type": "string"},
+          "poolId": {"type": "string"},
+          "sessionId": {"type": "string"},
+          "taskId": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "remote_view_recording_pin": {
+      "owner": "Remote View",
+      "provenance": "Active tool declaration mcp__remote_view__remote_view_recording_pin, discovered without invocation during spec749 ticket760 source qualification.",
+      "requiredActor": "authenticated_recording_owner",
+      "arguments": {
+        "type": "object",
+        "required": ["recordingId", "pinned"],
+        "properties": {
+          "recordingId": {"type": "string"},
+          "pinned": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

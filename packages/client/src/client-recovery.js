@@ -39,7 +39,36 @@ export function clientFailureError(code,context={}) {
  * @template T @param {T} result @param {Record<string, any>} [context] @returns {T}
  */
 export function withClientResultRecovery(result,context={}) {
-  const value=/** @type {any} */(result);
-  if(!value||typeof value!=='object'||typeof value.reason!=='string'||!validCode(value.reason)||typeof value.status!=='string'||value.status.startsWith('verified')||value.status==='completed')return result;
-  return {...value,clientRecovery:clientRecoveryFor(value.reason,{...context,...value.clientRecovery?.packet,taskId:value.taskId??context.taskId,episodeId:value.episodeId??context.episodeId,requestId:value.originalOperation?.requestId??value.recovery?.inspect?.arguments?.requestId??value.clientRecovery?.packet?.requestId??context.requestId})};
+  const original=/** @type {any} */(result),owner=context.ownerError;
+  const preserved=owner&&typeof owner==='object'?Object.fromEntries(['failure','occurrenceId','requestId','recoveryPlan','executableNextAction','clientRecovery'].filter(key=>owner[key]!==undefined).map(key=>[key,owner[key]])):{};
+  const value=original&&typeof original==='object'?{...preserved,...original}:original,reason=value?.reason??value?.reasonCode;
+  if(!value||typeof value!=='object'||!validCode(reason)||typeof value.status!=='string'||value.status.startsWith('verified')||value.status==='completed')return result;
+  const known=/** @type {Record<string,any>} */(CLIENT_RECOVERY_CODES)[reason];
+  const selected=known?reason:value.clientRecovery?.coverage==='registered'?value.clientRecovery.code:reason;
+  const recovery=clientRecoveryFor(selected,{...context,...value.clientRecovery?.packet,taskId:value.taskId??context.taskId,episodeId:value.episodeId??context.episodeId,requestId:value.originalOperation?.requestId??value.requestId??value.recovery?.inspect?.arguments?.requestId??value.clientRecovery?.packet?.requestId??context.requestId});
+  return {...value,clientRecovery:{...recovery,...(selected!==reason?{normalization:{ownerCode:reason,ownerCodeCoverage:'not_asserted'}}:{}),ownerRecoveryAvailable:!!(value.failure||value.clientRecovery?.ownerRecoveryAvailable)}};
+}
+
+/** Keep an owner error intact while adding separate local adapter recourse.
+ * @param {any} error @param {Record<string,any>} [context] @param {string} [localCode]
+ */
+export function withClientErrorRecovery(error,context={},localCode) {
+  const target=error&&typeof error==='object'?error:new Error('client_unclassified_failure');
+  if(target.clientRecovery)return target;
+  const code=localCode??(validCode(target.code)?target.code:'client_unclassified_failure');
+  const recovery=clientRecoveryFor(code,context);
+  if(validCode(target.code)&&target.code!==code)recovery.packet.ownerCode=target.code;
+  const addition={clientRecovery:{...recovery,ownerRecoveryAvailable:!!(target.failure||target.recoveryPlan||target.executableNextAction||target.nextAction)},...(!Object.prototype.hasOwnProperty.call(target,'source')?{source:context.source}:{}),...(!Object.prototype.hasOwnProperty.call(target,'owningFunction')?{owningFunction:context.owningFunction}:{}),...(!Object.prototype.hasOwnProperty.call(target,'code')?{code:recovery.code}:{})};
+  if(Object.isExtensible(target))return Object.assign(target,addition);
+  return Object.assign(Object.create(Object.getPrototypeOf(target),Object.getOwnPropertyDescriptors(target)),addition);
+}
+/** Call the same verified Auth client without substituting its object/identity.
+ * Only opaque original IDs and public operation names join local recourse.
+ * @param {{call:(operation:string,args:any)=>Promise<any>}} client
+ * @param {string} operation @param {any} args @param {Record<string,any>} context
+ */
+export async function callClientOwner(client,operation,args,context) {
+  try{return await client.call(operation,args)}catch(error){
+    throw withClientErrorRecovery(error,{...context,requestId:typeof args?.requestId==='string'?args.requestId:undefined},'client_auth_owner_failure');
+  }
 }

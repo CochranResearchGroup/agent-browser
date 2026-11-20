@@ -32,6 +32,7 @@ export interface Dependencies {
   helper(operation:'request_login'|'inspect_request'|'authenticate'|'begin_authentication'|'reconcile_authentication',args:Record<string, unknown>):Promise<Record<string, any>>;
   checkpoints:{load(key:string):Promise<Checkpoint|null>;save(key:string,value:Checkpoint):Promise<void>};
 }
+/** Legacy inspection/reconciliation only. New private use requires the current owner-authority SDK exports; guest timestamps cannot qualify grant expiry. */
 export function createLoginPlaybook(dependencies:Dependencies): {
   advance(options:LoginOptions):Promise<Record<string, any>>;
 };

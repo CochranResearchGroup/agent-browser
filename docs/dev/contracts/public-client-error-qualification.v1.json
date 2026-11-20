@@ -1437,5 +1437,1481 @@
       "classification": "unknown_codes_visible_with_safe_packet_and_original_owner_readback_recource",
       "automaticExecutionAllowed": false
     }
+  ],
+  "authOwnerForwarding": [
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownerAuthHelper",
+      "expression": "client.call('auth_capabilities',{})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownerAuthHelper.resumeLoginContinuation",
+      "expression": "client.call('inspect_credential_request',args)",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownerAuthHelper.inspectLoginProgress",
+      "expression": "client.call(operation,options)",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownerAuthHelper.requestLogin",
+      "expression": "client.call('request_credential',{...options,operation:'login',mode:'private'})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownerAuthHelper.advanceLogin",
+      "expression": "client.call('inspect_credential_request',{requestId})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownerAuthHelper.advanceLogin",
+      "expression": "client.call('receive_credential_approval',{requestId})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownerAuthHelper.advanceLogin",
+      "expression": "client.call('use_credential',{requestId})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownerAuthHelper",
+      "expression": "client.call(operation,args)",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-recovery.js",
+      "owningFunction": "createLoginRecovery",
+      "expression": "client.call('inspect_credential_request',{requestId})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-recovery.js",
+      "owningFunction": "createLoginRecovery.reconcile",
+      "expression": "client.call('reconcile_credential_request',{requestId})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-recovery.js",
+      "owningFunction": "createLoginRecovery.recordFailure",
+      "expression": "client.call('complete_authentication',{...options,outcome:'failed'})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-recovery.js",
+      "owningFunction": "createLoginRecovery.recordFailure",
+      "expression": "client.call('inspect_authentication_completion',{requestId:options.requestId})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-recovery.js",
+      "owningFunction": "createLoginRecovery.prepareFresh",
+      "expression": "client.call('inspect_authentication_completion',{requestId:previousRequestId})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-recovery.js",
+      "owningFunction": "createLoginRecovery.prepareFresh",
+      "expression": "client.call('prepare_credential_login',intent)",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-discovery.js",
+      "owningFunction": "createLoginDiscovery.inspect",
+      "expression": "client.call('auth_capabilities',{})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-discovery.js",
+      "owningFunction": "createLoginDiscovery.inspect",
+      "expression": "client.call('inspect_credential_request',{requestId:intent.requestId})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-discovery.js",
+      "owningFunction": "createLoginDiscovery.inspect",
+      "expression": "client.call('discover_credentials',{origin:intent.origin,accountHint:intent.accountHint,credentialType:'password'})",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-verification.js",
+      "owningFunction": "createLoginVerifier.verify",
+      "expression": "client.call('inspect_credential_request',args)",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-verification.js",
+      "owningFunction": "createLoginVerifier.verify",
+      "expression": "client.call('inspect_authentication_completion',args)",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-verification.js",
+      "owningFunction": "createLoginVerifier.verify",
+      "expression": "client.call('inspect_credential_request',args)",
+      "classification": "auth_owner_failure_forwarded_with_local_original_readback",
+      "normalizationCode": "client_auth_owner_failure",
+      "ownerFieldsPreserved": [
+        "code",
+        "failure",
+        "occurrenceId",
+        "recoveryPlan",
+        "executableNextAction",
+        "nextAction"
+      ]
+    }
+  ],
+  "authLocalErrorBoundaries": [
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownedInstallationArtifact",
+      "expression": "Object.assign(Error('Auth SDK installation is unsafe; rebuild the owner-controlled candidate'),{code:'auth_sdk_invalid'})",
+      "code": "auth_sdk_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "installedAuthSdk",
+      "expression": "Object.assign(Error('Install a compatible standalone Auth Receipts client SDK'),{code:'auth_sdk_incompatible'})",
+      "code": "auth_sdk_incompatible",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "installationFailure",
+      "expression": "Object.assign(Error('Standalone Auth Receipts client SDK is unavailable; install its verified client/current candidate before retrying'),{code:'auth_unavailable'})",
+      "code": "auth_unavailable",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "connectHostedAuthHelper",
+      "expression": "Object.assign(Error('A current Codex caller is required'),{code:'auth_live_task_required'})",
+      "code": "auth_live_task_required",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "connectHostedAuthHelper",
+      "expression": "Object.assign(Error('Installed Auth SDK lacks the supported client export'),{code:'auth_sdk_incompatible'})",
+      "code": "auth_sdk_incompatible",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "connectEnrolledAuthHelper",
+      "expression": "Object.assign(Error('Invalid enrolled Auth helper request'),{code:'auth_invalid_request'})",
+      "code": "auth_invalid_request",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "connectEnrolledAuthHelper",
+      "expression": "Object.assign(Error('Installed Auth SDK lacks enrolled consumer support'),{code:'auth_sdk_incompatible'})",
+      "code": "auth_sdk_incompatible",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "connectEnrolledAuthHelper",
+      "expression": "Object.assign(Error('Installed Auth SDK returned an incompatible enrolled client'),{code:'auth_sdk_incompatible'})",
+      "code": "auth_sdk_incompatible",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "migration",
+      "expression": "Object.assign(Error('Installed owner-authority login is unavailable'),{code:'auth_authority_migration_required'})",
+      "code": "auth_authority_migration_required",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "invalid",
+      "expression": "Object.assign(Error('Invalid owner login request'),{code:'auth_invalid_request'})",
+      "code": "auth_invalid_request",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownerAuthHelper.discoverLoginChannels",
+      "expression": "Object.assign(Error('Installed Auth SDK lacks channel discovery; use auth-receipts://guides/login-orchestration and repair the verified SDK installation'),{code:'auth_channel_discovery_unavailable'})",
+      "code": "auth_channel_discovery_unavailable",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-auth-helper.js",
+      "owningFunction": "ownerAuthHelper.followLogin",
+      "expression": "Object.assign(Error('Invalid login follow options'),{code:'auth_invalid_request'})",
+      "code": "auth_invalid_request",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/hosted-login-receiver.js",
+      "owningFunction": "refused",
+      "expression": "Object.assign(Error('Hosted login requires the current exact receiving request'),{code:'auth_not_authorized'})",
+      "code": "auth_not_authorized",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-continuation.js",
+      "owningFunction": "invalid",
+      "expression": "Object.assign(Error('Original login continuation is unverified'),{code:'login_continuation_unverified'})",
+      "code": "login_continuation_unverified",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-discovery.js",
+      "owningFunction": "invalid",
+      "expression": "Object.assign(Error('Invalid login discovery intent'),{code:'auth_invalid_request'})",
+      "code": "auth_invalid_request",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('login_caller_invalid')",
+      "code": "login_caller_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('login_reconciliation_invalid')",
+      "code": "login_reconciliation_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('hosted_caller_required_for_reconciliation')",
+      "code": "hosted_caller_required_for_reconciliation",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('login_playbook_busy')",
+      "code": "login_playbook_busy",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('login_scope_invalid')",
+      "code": "login_scope_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('checkpoint_binding_mismatch')",
+      "code": "checkpoint_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('checkpoint_required_for_reconciliation')",
+      "code": "checkpoint_required_for_reconciliation",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('receiving_binding_required')",
+      "code": "receiving_binding_required",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('helper_binding_mismatch')",
+      "code": "helper_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('helper_binding_mismatch')",
+      "code": "helper_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('helper_binding_mismatch')",
+      "code": "helper_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('prepared_plan_required')",
+      "code": "prepared_plan_required",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "Error('helper_binding_mismatch')",
+      "code": "helper_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "verifyReceiving",
+      "expression": "Error('receiving_binding_changed')",
+      "code": "receiving_binding_changed",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/login-recovery.js",
+      "owningFunction": "invalid",
+      "expression": "Object.assign(Error('Original login recovery is unverified'),{code:'login_recovery_unverified'})",
+      "code": "login_recovery_unverified",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/native-receiving-browser.js",
+      "owningFunction": "refused",
+      "expression": "Object.assign(Error('Native receiving controls or owner changed'),{code:'auth_receiving_changed'})",
+      "code": "auth_receiving_changed",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/native-receiving-browser.js",
+      "owningFunction": "unknown",
+      "expression": "Object.assign(Error('Native private input requires reconciliation'),{code:'auth_input_unknown'})",
+      "code": "auth_input_unknown",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_login_options_invalid')",
+      "code": "owner_login_options_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_login_options_invalid')",
+      "code": "owner_login_options_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_login_options_invalid')",
+      "code": "owner_login_options_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_login_origin_invalid')",
+      "code": "owner_login_origin_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_login_busy')",
+      "code": "owner_login_busy",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('checkpoint_binding_mismatch')",
+      "code": "checkpoint_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('checkpoint_binding_mismatch')",
+      "code": "checkpoint_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('checkpoint_binding_mismatch')",
+      "code": "checkpoint_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_request_binding_mismatch')",
+      "code": "owner_request_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_request_binding_mismatch')",
+      "code": "owner_request_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_request_binding_mismatch')",
+      "code": "owner_request_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_request_binding_mismatch')",
+      "code": "owner_request_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_request_binding_mismatch')",
+      "code": "owner_request_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_request_binding_mismatch')",
+      "code": "owner_request_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "Error('owner_request_binding_mismatch')",
+      "code": "owner_request_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "Error('owner_number_matching_options_invalid')",
+      "code": "owner_number_matching_options_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "Error('owner_number_matching_busy')",
+      "code": "owner_number_matching_busy",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "Error('checkpoint_binding_mismatch')",
+      "code": "checkpoint_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "Error('checkpoint_binding_mismatch')",
+      "code": "checkpoint_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "Error('owner_request_binding_mismatch')",
+      "code": "owner_request_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "Error('checkpoint_binding_mismatch')",
+      "code": "checkpoint_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "Error('owner_request_binding_mismatch')",
+      "code": "owner_request_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "Error('owner_request_binding_mismatch')",
+      "code": "owner_request_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('owner_totp_options_invalid')",
+      "code": "owner_totp_options_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('owner_totp_origin_invalid')",
+      "code": "owner_totp_origin_invalid",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('owner_totp_busy')",
+      "code": "owner_totp_busy",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('checkpoint_binding_mismatch')",
+      "code": "checkpoint_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('checkpoint_binding_mismatch')",
+      "code": "checkpoint_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('owner_factor_binding_mismatch')",
+      "code": "owner_factor_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('owner_factor_binding_mismatch')",
+      "code": "owner_factor_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('owner_factor_binding_mismatch')",
+      "code": "owner_factor_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('owner_factor_binding_mismatch')",
+      "code": "owner_factor_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('owner_factor_binding_mismatch')",
+      "code": "owner_factor_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "Error('owner_factor_binding_mismatch')",
+      "code": "owner_factor_binding_mismatch",
+      "classification": "exact_local_auth_error_with_preserved_class"
+    }
+  ],
+  "authResultBoundaries": [
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "observed",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','authentication_method_unsupported','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "observed",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "preparation",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','helper_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','helper_unavailable',checkpoint.attempted?'unknown':'no_effect',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','approval_required','no_effect',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('failed',`helper_${summary.state}`,checkpoint.attempted?'unknown':'no_effect',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('failed','helper_attempt_released',checkpoint.attempted?'unknown':'no_effect',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','helper_running_or_uncertain',checkpoint.attempted?'unknown':'no_effect',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','helper_reconciliation_unavailable','unknown',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('failed','helper_attempt_released','unknown',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','helper_running_or_uncertain','unknown',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','private_capture_held','unknown',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "await verifyReceiving(checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','password_source_unavailable','unknown',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "await verifyReceiving(checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','helper_running_or_uncertain','unknown',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('failed','helper_state_invalid','no_effect',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "{...replacement,routine:'login',requestId:checkpoint.requestId,actionId:checkpoint.requestId,effectState:'no_effect'}",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('adaptation_required','task_target_changed','no_effect',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "preparation",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('adaptation_required','task_target_changed','no_effect',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "{...validation,routine:'login',requestId:checkpoint.requestId,actionId:checkpoint.requestId,effectState:'no_effect'}",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook.advance",
+      "expression": "result('waiting','helper_grant_time_unqualified','no_effect',checkpoint)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "result",
+      "expression": "{schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId,guideId,\n            status,reasonCode,effectState,...(current?{requestId:current.requestId,\n              actionId:current.requestId,\n              profileId:current.profileId,browserId:current.browserId,tabId:current.tabId}:{})}",
+      "classification": "local_routine_result_factory_registered_or_visible_unknown_recourse"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "result",
+      "expression": "({schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(request?.browserActionEvidence?{browserActionEvidence:request.browserActionEvidence}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,...checkpoint.receiving}:{}),contract})",
+      "classification": "local_routine_result_factory_registered_or_visible_unknown_recourse"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','legacy_checkpoint_requires_reconciliation','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','checkpoint_required_for_reconciliation','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','receiving_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('adaptation_required','receiving_binding_required','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "{...observed,...result('completed',observed.reasonCode,'verified')}",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "{...observed,...result(observed.status,observed.reasonCode,'no_effect')}",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','receiving_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "{...preparation,...result(preparation.status,preparation.reasonCode,'no_effect')}",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting',errorCode(error)??'auth_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting',reason,'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','credential_recipient_mismatch','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','request_required_for_reconciliation','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting',errorCode(error)??'auth_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting',errorCode(error)??'auth_unavailable',checkpoint.advanceIntent?'unknown':'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('failed',`auth_${request.state}`,request.attemptId||checkpoint.advanceIntent||checkpoint.outcomeUnknown?'unknown':'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','auth_reconciliation_unavailable','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "request.authentication==='verified'?verify():result('waiting','authentication_required','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','auth_reconciliation_unavailable','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "verify()",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting',checkpoint.refusalCode?'auth_no_effect_proof_unavailable':options.reconcile?'auth_reconciliation_pending':'auth_outcome_uncertain','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','receiving_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('adaptation_required','task_target_changed','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','receiving_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('adaptation_required','task_target_changed','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','receiving_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('adaptation_required','task_target_changed','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "{...validation,...result(validation.status,validation.reasonCode,'no_effect')}",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting',errorCode(error)??'auth_review_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','auth_reconciliation_pending','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','approval_required','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('failed',`auth_${request.state}`,'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','auth_reconciliation_pending','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting','receiving_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('adaptation_required','task_target_changed','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result(approvedPlan.status,approvedPlan.reasonCode,'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting',code??'auth_outcome_uncertain','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "verify()",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('failed',`auth_${request.state}`,request.attemptId?'unknown':'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook.advance",
+      "expression": "result('waiting',request.state==='pending'?'approval_required':request.heldFor==='notification'?'notification_required':request.attemptId?'authentication_required':'auth_not_ready',request.attemptId?'unknown':'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "result",
+      "expression": "({schemaVersion:'agent-browser.routine-result.v1',routine:'login',method:'totp',contract,taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(options.originalRequestId?{originalRequestId:options.originalRequestId}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,continuationId:checkpoint.continuationId,...checkpoint.receiving}:{})})",
+      "classification": "local_routine_result_factory_registered_or_visible_unknown_recourse"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting',errorCode(error),checkpoint?.useIntent?'unknown':'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','original_request_binding_mismatch',checkpoint?.useIntent?'unknown':'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','original_account_unavailable',checkpoint?.useIntent?'unknown':'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','receiving_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('adaptation_required','receiving_binding_required','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('completed',observed.reasonCode,'verified')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','receiving_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result(preparation.status,preparation.reasonCode,'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting',errorCode(error),'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting',need.method?'authentication_method_unsupported':need.heldFor??'authentication_observation_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting',need.heldFor??'authentication_continuation_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','credential_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "{...result('waiting','factor_choice_required','no_effect'),candidates:checkpoint.candidates}",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','factor_choice_invalid','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting',errorCode(error),'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting',errorCode(error),checkpoint.useIntent?'unknown':'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('failed',`auth_${request.state}`,request.attemptId?'unknown':'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','auth_reconciliation_unavailable','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "request.authentication==='verified'?verify():result(request.authentication==='rejected'?'failed':'waiting',request.authentication==='rejected'?'authentication_rejected':'factor_outcome_unknown','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','factor_outcome_unknown','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting',errorCode(error),'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','approval_required','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('failed',`auth_${request.state}`,'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','receiving_unavailable','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('adaptation_required','task_target_changed','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result(validation.status,validation.reasonCode,'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting',errorCode(error),'unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('waiting','notification_required','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "result('failed',`auth_${request.state}`,request.attemptId?'unknown':'no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation.advance",
+      "expression": "request.authentication==='verified'?verify():result(request.authentication==='rejected'?'failed':'waiting',request.authentication==='rejected'?'authentication_rejected':'factor_outcome_unknown','unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "result",
+      "expression": "({schemaVersion:'agent-browser.routine-result.v1',routine:'login',contract,taskId:options.taskId,guideId:options.guideId,requestId:options.requestId,actionId:options.requestId,status,reasonCode,effectState,...(checkpoint?.receiving??{}),...(challenge?{challenge:publicChallenge(challenge)}:{})})",
+      "classification": "local_routine_result_factory_registered_or_visible_unknown_recourse"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting','owner_checkpoint_required')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting',code(error))",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting','private_attempt_required','no_effect')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting','receiving_unavailable')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('adaptation_required','task_target_changed')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting',code(error))",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting','challenge_reconciliation_unavailable')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting','number_matching_cancellation_required')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('failed',`auth_${request.state}`)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('failed','authentication_failed')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting',`number_matching_${follow.heldFor??challenge?.heldFor??'unavailable'}`)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('adaptation_required','challenge_account_mismatch')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting','number_matching_unsupported')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('failed',`number_matching_${challenge.status}`)",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting','number_matching_delivery_required')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting','receiving_unavailable')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('adaptation_required','task_target_changed')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result(observed.status,observed.reasonCode,observed.status==='completed'?'verified':'unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting','number_matching_response_unknown')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation.advance",
+      "expression": "result('waiting',challenge.responseState==='submitted'?'authentication_required':'number_matching_owner_required')",
+      "classification": "explicit_public_auth_async_result_boundary"
+    }
   ]
 }

@@ -1,3 +1,4 @@
+import {withClientErrorRecovery} from './client-recovery.js';
 // @ts-check
 import {createHash} from 'node:crypto';
 import {summarizeLoginProgress} from './login-progress.js';
@@ -9,7 +10,7 @@ import {summarizeLoginProgress} from './login-progress.js';
  * @returns {import('./login-continuation.d.ts').LoginContinuation}
  */
 export function createLoginContinuation({store,callerTaskId,inspectRequest,verify,readWake,onUpdate}) {
-  const invalid=()=>Object.assign(Error('Original login continuation is unverified'),{code:'login_continuation_unverified'});
+  const invalid=()=>withClientErrorRecovery(Object.assign(Error('Original login continuation is unverified'),{code:'login_continuation_unverified'}),{source:"packages/client/src/login-continuation.js",owningFunction:"invalid"},'login_continuation_unverified');
   if(!store||['load','save','withEpisode'].some(key=>typeof store[key]!=='function')||!reference(callerTaskId)||typeof inspectRequest!=='function'||typeof verify!=='function'||onUpdate!==undefined&&typeof onUpdate!=='function'||readWake!==undefined&&typeof readWake!=='function')throw invalid();
   return {async resume({episodeId}) {
     if(!reference(episodeId))throw invalid();
@@ -22,8 +23,10 @@ export function createLoginContinuation({store,callerTaskId,inspectRequest,verif
       if(request.state==='unknown'&&reference(request.attemptId)&&!unresolvedAttempts.some(attempt=>attempt.requestId===request.requestId&&attempt.attemptId===request.attemptId))unresolvedAttempts.push({requestId:request.requestId,attemptId:request.attemptId});
       /** @type {import('./login-progress.js').LoginProgress & Partial<Pick<import('./login-verification.js').LoginVerificationResult,'qualification'|'receivingSettlement'>>} */
       let progress=summarizeLoginProgress(request);
+      let verificationDiagnostic={};
       if(checkpoint.attemptId&&!['denied','revoked','cancelled','expired'].includes(request.state)) {
         const verified=await verify({requestId:checkpoint.requestId,attemptId:checkpoint.attemptId,binding:structuredClone(checkpoint.binding),applicationOrigin:checkpoint.requestedOutcome.applicationOrigin,expectedAccount:checkpoint.requestedOutcome.expectedAccount,...(checkpoint.requestedOutcome.expectedOrganization===undefined?{}:{expectedOrganization:checkpoint.requestedOutcome.expectedOrganization})});
+        if(verified?.requestId===checkpoint.requestId){verificationDiagnostic={...(verified.failure?{failure:verified.failure}:{}),...(verified.clientRecovery?{clientRecovery:verified.clientRecovery}:{}),...(verified.dependencyFailure?{dependencyFailure:verified.dependencyFailure}:{})};}
         if(verified?.requestId===checkpoint.requestId&&verified.outcome==='incomplete'&&['verification_incomplete','request_binding_unverified','completion_unverified','verification_unavailable'].includes(verified.category)&&(verified.category!=='verification_incomplete'||verified.qualification?.applicationAccess==='verified')&&Array.isArray(verified.evidenceReferences)&&verified.evidenceReferences.every(reference)) {
           const action=verified.nextAction;
           const nextAction=action&&['inspect_credential_request','inspect_authentication_completion'].includes(action.operation)&&action.args?.requestId===checkpoint.requestId&&Object.keys(action.args).length===1?{operation:action.operation,args:{requestId:checkpoint.requestId}}:progress.nextAction;
@@ -47,7 +50,7 @@ export function createLoginContinuation({store,callerTaskId,inspectRequest,verif
         catch {notification.state='unknown';}
         await store.save(next);
       }
-      return {...update,notification:{key,state:onUpdate?notification.state:'not_configured',emitted}};
+      return {...update,...verificationDiagnostic,notification:{key,state:onUpdate?notification.state:'not_configured',emitted}};
     });
   }};
 }

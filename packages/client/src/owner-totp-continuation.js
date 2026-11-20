@@ -1,3 +1,5 @@
+import {withClientResultRecovery} from './client-recovery.js';
+import {withClientErrorRecovery} from './client-recovery.js';
 import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 /** @typedef {import('./owner-totp-continuation.d.ts').OwnerTotpOptions} OwnerTotpOptions */
@@ -29,16 +31,16 @@ export function createOwnerTotpContinuation({auth,browser,checkpoints}){
    * @param {OwnerTotpOptions} options
    */
   async advance(options){
-   if(!options||intentFields.filter(field=>!['organizationRef','originalRequestId'].includes(field)).some(field=>field==='expiresAt'?!Number.isSafeInteger(options[field]):!nonempty(options[field]))||(/** @type {const} */ (['organizationRef','originalRequestId','recordId'])).some(field=>options[field]!==undefined&&!nonempty(options[field])))throw Error('owner_totp_options_invalid');
-   try{if(new URL(options.origin).origin!==options.origin||!options.origin.startsWith('https://'))throw 0;}catch{throw Error('owner_totp_origin_invalid');}
+   if(!options||intentFields.filter(field=>!['organizationRef','originalRequestId'].includes(field)).some(field=>field==='expiresAt'?!Number.isSafeInteger(options[field]):!nonempty(options[field]))||(/** @type {const} */ (['organizationRef','originalRequestId','recordId'])).some(field=>options[field]!==undefined&&!nonempty(options[field])))throw withClientErrorRecovery(Error('owner_totp_options_invalid'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'owner_totp_options_invalid');
+   try{if(new URL(options.origin).origin!==options.origin||!options.origin.startsWith('https://'))throw 0;}catch{throw withClientErrorRecovery(Error('owner_totp_origin_invalid'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'owner_totp_origin_invalid');}
    const key=`totp:${options.taskId}/${options.guideId}`;
-   if(busy.has(key))throw Error('owner_totp_busy');busy.add(key);
+   if(busy.has(key))throw withClientErrorRecovery(Error('owner_totp_busy'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'owner_totp_busy');busy.add(key);
    const intent=JSON.stringify({...Object.fromEntries(intentFields.map(field=>[field,options[field]])),callerTaskId:auth.callerTaskId});
    /** @type {OwnerTotpCheckpoint|null} */ let checkpoint=null;
    /** @type {Record<string,any>|undefined} */ let originalRequest;
    /** @type {number|undefined} */ let originalDeadline;
    /** @param {string} status @param {string} reasonCode @param {string} effectState */
-   const result=(status,reasonCode,effectState)=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',method:'totp',contract,taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(options.originalRequestId?{originalRequestId:options.originalRequestId}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,continuationId:checkpoint.continuationId,...checkpoint.receiving}:{})});
+   const result=(status,reasonCode,effectState)=>withClientResultRecovery(({schemaVersion:'agent-browser.routine-result.v1',routine:'login',method:'totp',contract,taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(options.originalRequestId?{originalRequestId:options.originalRequestId}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,continuationId:checkpoint.continuationId,...checkpoint.receiving}:{})}),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:'result'});
    /** @param {Record<string,any>} value */
    const sameTarget=value=>{const current=checkpoint;return !!current&&receivingFields.every(field=>value?.[field]===current.receiving[field]);};
    /** @param {Record<string,any>} value */
@@ -50,63 +52,63 @@ export function createOwnerTotpContinuation({auth,browser,checkpoints}){
    };
    try{
     checkpoint=await checkpoints.load(key);
-    if(checkpoint&&(checkpoint.contract!==contract||checkpoint.intent!==intent))throw Error('checkpoint_binding_mismatch');
-    if(checkpoint){const current=checkpoint;if(receivingFields.some(field=>options[field]!==undefined&&options[field]!==current.receiving[field])||options.recordId!==undefined&&current.recordId!==undefined&&options.recordId!==current.recordId)throw Error('checkpoint_binding_mismatch');}
+    if(checkpoint&&(checkpoint.contract!==contract||checkpoint.intent!==intent))throw withClientErrorRecovery(Error('checkpoint_binding_mismatch'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'checkpoint_binding_mismatch');
+    if(checkpoint){const current=checkpoint;if(receivingFields.some(field=>options[field]!==undefined&&options[field]!==current.receiving[field])||options.recordId!==undefined&&current.recordId!==undefined&&options.recordId!==current.recordId)throw withClientErrorRecovery(Error('checkpoint_binding_mismatch'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'checkpoint_binding_mismatch');}
     if(options.originalRequestId){
-     let original;try{original=await auth.helper('inspect_credential_request',{requestId:options.originalRequestId});}catch(error){return result('waiting',errorCode(error),checkpoint?.useIntent?'unknown':'no_effect');}
-     if(original.requestId!==options.originalRequestId||original.taskId!==auth.callerTaskId||original.origin!==options.origin||original.targetId!==options.targetId||original.operation!=='login'||original.mode!=='private'||!original.attemptId||['denied','revoked','cancelled','expired'].includes(original.state))return result('waiting','original_request_binding_mismatch',checkpoint?.useIntent?'unknown':'no_effect');
-     if(!nonempty(original.account)||!Number.isSafeInteger(original.expiresAt))return result('waiting','original_account_unavailable',checkpoint?.useIntent?'unknown':'no_effect');
+     let original;try{original=await auth.helper('inspect_credential_request',{requestId:options.originalRequestId});}catch(error){return withClientResultRecovery(await (result('waiting',errorCode(error),checkpoint?.useIntent?'unknown':'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance",ownerError:error});}
+     if(original.requestId!==options.originalRequestId||original.taskId!==auth.callerTaskId||original.origin!==options.origin||original.targetId!==options.targetId||original.operation!=='login'||original.mode!=='private'||!original.attemptId||['denied','revoked','cancelled','expired'].includes(original.state))return withClientResultRecovery(await (result('waiting','original_request_binding_mismatch',checkpoint?.useIntent?'unknown':'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+     if(!nonempty(original.account)||!Number.isSafeInteger(original.expiresAt))return withClientResultRecovery(await (result('waiting','original_account_unavailable',checkpoint?.useIntent?'unknown':'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
      originalRequest=original;originalDeadline=original.expiresAt;
     }
     if(!checkpoint){
-     let observed;try{observed=await browser.verifyLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
-     if(receivingFields.some(field=>!nonempty(observed[field])||options[field]!==undefined&&options[field]!==observed[field]))return result('adaptation_required','receiving_binding_required','no_effect');
-     if(observed.status==='completed')return result('completed',observed.reasonCode,'verified');
-     let preparation;try{preparation=await browser.prepareLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
-     if(!preparation.plan)return result(preparation.status,preparation.reasonCode,'no_effect');
-     let need;try{need=await auth.helper('observe_authentication',{origin:options.origin,targetId:options.targetId,...(originalRequest?{originalRequestId:originalRequest.requestId}:{})});}catch(error){return result('waiting',errorCode(error),'no_effect');}
-     if(need.method!=='totp')return result('waiting',need.method?'authentication_method_unsupported':need.heldFor??'authentication_observation_unavailable','no_effect');
-     if(need.state!=='authentication_required'||need.nextAction?.operation!=='continue_authentication'||!nonempty(need.continuationId)||need.nextAction.args?.continuationId!==need.continuationId||!Number.isSafeInteger(need.expiresAt)||need.expiresAt>Math.min(options.expiresAt,originalDeadline??options.expiresAt))return result('waiting',need.heldFor??'authentication_continuation_unavailable','no_effect');
+     let observed;try{observed=await browser.verifyLogin(options);}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});}
+     if(receivingFields.some(field=>!nonempty(observed[field])||options[field]!==undefined&&options[field]!==observed[field]))return withClientResultRecovery(await (result('adaptation_required','receiving_binding_required','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+     if(observed.status==='completed')return withClientResultRecovery(await (result('completed',observed.reasonCode,'verified')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+     let preparation;try{preparation=await browser.prepareLogin(options);}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});}
+     if(!preparation.plan)return withClientResultRecovery(await (result(preparation.status,preparation.reasonCode,'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+     let need;try{need=await auth.helper('observe_authentication',{origin:options.origin,targetId:options.targetId,...(originalRequest?{originalRequestId:originalRequest.requestId}:{})});}catch(error){return withClientResultRecovery(await (result('waiting',errorCode(error),'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance",ownerError:error});}
+     if(need.method!=='totp')return withClientResultRecovery(await (result('waiting',need.method?'authentication_method_unsupported':need.heldFor??'authentication_observation_unavailable','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+     if(need.state!=='authentication_required'||need.nextAction?.operation!=='continue_authentication'||!nonempty(need.continuationId)||need.nextAction.args?.continuationId!==need.continuationId||!Number.isSafeInteger(need.expiresAt)||need.expiresAt>Math.min(options.expiresAt,originalDeadline??options.expiresAt))return withClientResultRecovery(await (result('waiting',need.heldFor??'authentication_continuation_unavailable','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
      const candidates=Array.isArray(need.candidates)?need.candidates.filter(candidate=>nonempty(candidate.recordId)).map(candidate=>({recordId:candidate.recordId,
       // Preserve only bounded choice labels, never arbitrary producer fields.
       ...Object.fromEntries(['sourceId','issuer','account','name'].filter(field=>typeof candidate[field]==='string'&&candidate[field].length<=512&&!/[\x00-\x1f\x7f]/.test(candidate[field])).map(field=>[field,candidate[field]])),
       ...(['totp','hotp'].includes(candidate.method)?{method:candidate.method}:{}),...(candidate.staged===true?{staged:true}:{})})):[];
-     if(!candidates.length)return result('waiting','credential_unavailable','no_effect');
+     if(!candidates.length)return withClientResultRecovery(await (result('waiting','credential_unavailable','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
      checkpoint={contract,intent,receiving:Object.fromEntries(receivingFields.map(field=>[field,observed[field]])),preparedPlan:preparation.plan,continuationId:need.continuationId,expiresAt:need.expiresAt,candidates};
      await checkpoints.save(key,checkpoint);
     }
     if(!checkpoint.recordId){
      const selected=options.recordId??(checkpoint.candidates.length===1?checkpoint.candidates[0].recordId:undefined);
-     if(!selected)return {...result('waiting','factor_choice_required','no_effect'),candidates:checkpoint.candidates};
-     if(!checkpoint.candidates.some(candidate=>candidate.recordId===selected))return result('waiting','factor_choice_invalid','no_effect');
+     if(!selected)return withClientResultRecovery(await ({...result('waiting','factor_choice_required','no_effect'),candidates:checkpoint.candidates}),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+     if(!checkpoint.candidates.some(candidate=>candidate.recordId===selected))return withClientResultRecovery(await (result('waiting','factor_choice_invalid','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
      checkpoint={...checkpoint,recordId:selected};await checkpoints.save(key,checkpoint);
     }
     if(!checkpoint.requestId){
-     let requested;try{requested=await auth.helper('continue_authentication',{continuationId:checkpoint.continuationId,idempotencyKey:options.idempotencyKey,purpose:options.purpose,recordId:checkpoint.recordId});}catch(error){return result('waiting',errorCode(error),'no_effect');}
-     checkpoint={...checkpoint,requestId:requested.requestId};if(!bound(requested))throw Error('owner_factor_binding_mismatch');
+     let requested;try{requested=await auth.helper('continue_authentication',{continuationId:checkpoint.continuationId,idempotencyKey:options.idempotencyKey,purpose:options.purpose,recordId:checkpoint.recordId});}catch(error){return withClientResultRecovery(await (result('waiting',errorCode(error),'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance",ownerError:error});}
+     checkpoint={...checkpoint,requestId:requested.requestId};if(!bound(requested))throw withClientErrorRecovery(Error('owner_factor_binding_mismatch'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'owner_factor_binding_mismatch');
      checkpoint={...checkpoint,...(requested.authenticationBinding?{authenticationBinding:structuredClone(requested.authenticationBinding)}:{})};await checkpoints.save(key,checkpoint);
     }
-    const requestId=checkpoint.requestId;if(!requestId)throw Error('owner_factor_binding_mismatch');
-    let request;try{request=await auth.helper('inspect_credential_request',{requestId});}catch(error){return result('waiting',errorCode(error),checkpoint.useIntent?'unknown':'no_effect');}
-    if(!bound(request))throw Error('owner_factor_binding_mismatch');
-    if(['denied','revoked','cancelled','expired','unavailable'].includes(request.state))return result('failed',`auth_${request.state}`,request.attemptId?'unknown':'no_effect');
+    const requestId=checkpoint.requestId;if(!requestId)throw withClientErrorRecovery(Error('owner_factor_binding_mismatch'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'owner_factor_binding_mismatch');
+    let request;try{request=await auth.helper('inspect_credential_request',{requestId});}catch(error){return withClientResultRecovery(await (result('waiting',errorCode(error),checkpoint.useIntent?'unknown':'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance",ownerError:error});}
+    if(!bound(request))throw withClientErrorRecovery(Error('owner_factor_binding_mismatch'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'owner_factor_binding_mismatch');
+    if(['denied','revoked','cancelled','expired','unavailable'].includes(request.state))return withClientResultRecovery(await (result('failed',`auth_${request.state}`,request.attemptId?'unknown':'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
     if(request.attemptId||request.state==='unknown'||request.authentication!==undefined){
-     if(request.authentication!=='verified'){try{request=await auth.helper('reconcile_credential_request',{requestId});}catch{return result('waiting','auth_reconciliation_unavailable','unknown');}if(!bound(request))throw Error('owner_factor_binding_mismatch');}
-     return request.authentication==='verified'?verify():result(request.authentication==='rejected'?'failed':'waiting',request.authentication==='rejected'?'authentication_rejected':'factor_outcome_unknown','unknown');
+     if(request.authentication!=='verified'){try{request=await auth.helper('reconcile_credential_request',{requestId});}catch{return withClientResultRecovery(await (result('waiting','auth_reconciliation_unavailable','unknown')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});}if(!bound(request))throw withClientErrorRecovery(Error('owner_factor_binding_mismatch'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'owner_factor_binding_mismatch');}
+     return withClientResultRecovery(await (request.authentication==='verified'?verify():result(request.authentication==='rejected'?'failed':'waiting',request.authentication==='rejected'?'authentication_rejected':'factor_outcome_unknown','unknown')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
     }
-    if(checkpoint.useIntent||checkpoint.outcomeUnknown)return result('waiting','factor_outcome_unknown','unknown');
-    if(request.state==='pending'){try{request=await auth.helper('receive_credential_approval',{requestId});}catch(error){return result('waiting',errorCode(error),'no_effect');}if(!bound(request))throw Error('owner_factor_binding_mismatch');}
-    if(request.state==='pending')return result('waiting','approval_required','no_effect');
-    if(request.state!=='approved')return result('failed',`auth_${request.state}`,'no_effect');
-    let validation;try{validation=await browser.validatePlan({...options,plan:checkpoint.preparedPlan});}catch{return result('waiting','receiving_unavailable','no_effect');}
-    if(!sameTarget(validation))return result('adaptation_required','task_target_changed','no_effect');
-    if(validation.status!=='completed')return result(validation.status,validation.reasonCode,'no_effect');
+    if(checkpoint.useIntent||checkpoint.outcomeUnknown)return withClientResultRecovery(await (result('waiting','factor_outcome_unknown','unknown')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+    if(request.state==='pending'){try{request=await auth.helper('receive_credential_approval',{requestId});}catch(error){return withClientResultRecovery(await (result('waiting',errorCode(error),'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance",ownerError:error});}if(!bound(request))throw withClientErrorRecovery(Error('owner_factor_binding_mismatch'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'owner_factor_binding_mismatch');}
+    if(request.state==='pending')return withClientResultRecovery(await (result('waiting','approval_required','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+    if(request.state!=='approved')return withClientResultRecovery(await (result('failed',`auth_${request.state}`,'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+    let validation;try{validation=await browser.validatePlan({...options,plan:checkpoint.preparedPlan});}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});}
+    if(!sameTarget(validation))return withClientResultRecovery(await (result('adaptation_required','task_target_changed','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+    if(validation.status!=='completed')return withClientResultRecovery(await (result(validation.status,validation.reasonCode,'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
     checkpoint={...checkpoint,useIntent:true};await checkpoints.save(key,checkpoint);
-    try{request=await auth.helper('use_credential',{requestId});}catch(error){checkpoint={...checkpoint,outcomeUnknown:true};await checkpoints.save(key,checkpoint);return result('waiting',errorCode(error),'unknown');}
-    if(!bound(request))throw Error('owner_factor_binding_mismatch');
-    if(request.heldFor==='notification'&&!request.attemptId){checkpoint={...checkpoint,useIntent:false};await checkpoints.save(key,checkpoint);return result('waiting','notification_required','no_effect');}
-    if(['denied','revoked','cancelled','expired','unavailable'].includes(request.state))return result('failed',`auth_${request.state}`,request.attemptId?'unknown':'no_effect');
-    return request.authentication==='verified'?verify():result(request.authentication==='rejected'?'failed':'waiting',request.authentication==='rejected'?'authentication_rejected':'factor_outcome_unknown','unknown');
+    try{request=await auth.helper('use_credential',{requestId});}catch(error){checkpoint={...checkpoint,outcomeUnknown:true};await checkpoints.save(key,checkpoint);return withClientResultRecovery(await (result('waiting',errorCode(error),'unknown')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance",ownerError:error});}
+    if(!bound(request))throw withClientErrorRecovery(Error('owner_factor_binding_mismatch'),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"},'owner_factor_binding_mismatch');
+    if(request.heldFor==='notification'&&!request.attemptId){checkpoint={...checkpoint,useIntent:false};await checkpoints.save(key,checkpoint);return withClientResultRecovery(await (result('waiting','notification_required','no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});}
+    if(['denied','revoked','cancelled','expired','unavailable'].includes(request.state))return withClientResultRecovery(await (result('failed',`auth_${request.state}`,request.attemptId?'unknown':'no_effect')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
+    return withClientResultRecovery(await (request.authentication==='verified'?verify():result(request.authentication==='rejected'?'failed':'waiting',request.authentication==='rejected'?'authentication_rejected':'factor_outcome_unknown','unknown')),{source:"packages/client/src/owner-totp-continuation.js",owningFunction:"createOwnerTotpContinuation.advance"});
    }finally{busy.delete(key);}
   }
  };

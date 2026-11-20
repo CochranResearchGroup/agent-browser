@@ -100,7 +100,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     try {
       const observed=await sourceStatus(request);
       if(observed.recordingId!==request.recordingId||observed.videoSha256!==request.videoSha256||observed.sourceTaskId!==request.sourceTaskId)return {...scope,state:'unavailable',replayable:false,reason:'source_binding_changed'};
-      if(observed.state==='unchecked')return {...scope,state:'unchecked',replayable:false,reason:'source_not_checked'};
+      if(observed.state==='unchecked')return {...scope,state:'unchecked',replayable:false,reason:observed.reason==='teaching_source_expiry_unqualified'?observed.reason:'source_not_checked',...(observed.clientRecovery?{clientRecovery:observed.clientRecovery}:{})};
       if(!['available','unavailable'].includes(observed.state))return {...scope,state:'unchecked',replayable:false,reason:'source_state_unverified'};
       const available=observed.state==='available';
       if(observed.gaps!==undefined&&(!Array.isArray(observed.gaps)||observed.gaps.length>256||observed.gaps.some(gap=>!Number.isFinite(gap.tMs)||gap.tMs<0||!id(gap.reason)||!id(gap.scope))))return {...scope,state:'unchecked',replayable:false,reason:'source_gap_metadata_unverified'};

@@ -1,3 +1,5 @@
+import {withClientResultRecovery} from './client-recovery.js';
+import {withClientErrorRecovery} from './client-recovery.js';
 import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 /** @typedef {import('./owner-number-matching.d.ts').OwnerNumberMatchingOptions} Options */
@@ -31,52 +33,52 @@ export function createOwnerNumberMatchingContinuation({auth,browser,checkpoints}
    * @param {Options} options
    */
   async advance(options){
-   if(!options||Object.keys(options).some(key=>!optionFields.has(key))||!text(options.requestId)||intentFields.filter(key=>key!=='organizationRef').some(key=>key==='expiresAt'?!Number.isSafeInteger(options[key]):!text(options[key])))throw Error('owner_number_matching_options_invalid');
+   if(!options||Object.keys(options).some(key=>!optionFields.has(key))||!text(options.requestId)||intentFields.filter(key=>key!=='organizationRef').some(key=>key==='expiresAt'?!Number.isSafeInteger(options[key]):!text(options[key])))throw withClientErrorRecovery(Error('owner_number_matching_options_invalid'),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"},'owner_number_matching_options_invalid');
    const key=`number-matching:${options.taskId}/${options.guideId}`;
-   if(busy.has(key))throw Error('owner_number_matching_busy');busy.add(key);
+   if(busy.has(key))throw withClientErrorRecovery(Error('owner_number_matching_busy'),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"},'owner_number_matching_busy');busy.add(key);
    /** @type {Checkpoint|null} */ let checkpoint=null;
    /** @type {Record<string,any>|undefined} */ let challenge;
    /** @param {string} status @param {string} reasonCode @param {string} [effectState] */
-   const result=(status,reasonCode,effectState='unknown')=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',contract,taskId:options.taskId,guideId:options.guideId,requestId:options.requestId,actionId:options.requestId,status,reasonCode,effectState,...(checkpoint?.receiving??{}),...(challenge?{challenge:publicChallenge(challenge)}:{})});
+   const result=(status,reasonCode,effectState='unknown')=>withClientResultRecovery(({schemaVersion:'agent-browser.routine-result.v1',routine:'login',contract,taskId:options.taskId,guideId:options.guideId,requestId:options.requestId,actionId:options.requestId,status,reasonCode,effectState,...(checkpoint?.receiving??{}),...(challenge?{challenge:publicChallenge(challenge)}:{})}),{source:"packages/client/src/owner-number-matching.js",owningFunction:'result'});
    try{
     const owner=await checkpoints.load(`owner:${options.taskId}/${options.guideId}`);
-    if(!owner||owner.contract!=='auth-receipts-owner-v1'||owner.requestId!==options.requestId)return result('waiting','owner_checkpoint_required');
-    let intent;try{intent=JSON.parse(owner.intent);}catch{throw Error('checkpoint_binding_mismatch');}
-    if(intent.callerTaskId!==auth.callerTaskId||intentFields.some(key=>intent[key]!==options[key])||receivingFields.some(key=>!text(owner.receiving[key])||options[key]!==undefined&&options[key]!==owner.receiving[key]))throw Error('checkpoint_binding_mismatch');
+    if(!owner||owner.contract!=='auth-receipts-owner-v1'||owner.requestId!==options.requestId)return withClientResultRecovery(await (result('waiting','owner_checkpoint_required')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+    let intent;try{intent=JSON.parse(owner.intent);}catch{throw withClientErrorRecovery(Error('checkpoint_binding_mismatch'),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"},'checkpoint_binding_mismatch');}
+    if(intent.callerTaskId!==auth.callerTaskId||intentFields.some(key=>intent[key]!==options[key])||receivingFields.some(key=>!text(owner.receiving[key])||options[key]!==undefined&&options[key]!==owner.receiving[key]))throw withClientErrorRecovery(Error('checkpoint_binding_mismatch'),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"},'checkpoint_binding_mismatch');
     const bound=/** @param {Record<string,any>} value */ value=>value?.requestId===options.requestId&&value.taskId===auth.callerTaskId&&value.sourceId===owner.selected.sourceId&&value.recordId===owner.selected.recordId&&value.origin===options.origin&&value.targetId===options.targetId&&value.expiresAt===options.expiresAt&&value.operation==='login'&&value.mode==='private';
-    let request;try{request=await auth.helper('inspect_credential_request',{requestId:options.requestId});}catch(error){return result('waiting',code(error));}
-    if(!bound(request))throw Error('owner_request_binding_mismatch');
-    if(!request.attemptId)return result('waiting','private_attempt_required','no_effect');
+    let request;try{request=await auth.helper('inspect_credential_request',{requestId:options.requestId});}catch(error){return withClientResultRecovery(await (result('waiting',code(error))),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance",ownerError:error});}
+    if(!bound(request))throw withClientErrorRecovery(Error('owner_request_binding_mismatch'),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"},'owner_request_binding_mismatch');
+    if(!request.attemptId)return withClientResultRecovery(await (result('waiting','private_attempt_required','no_effect')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
     const saved=await checkpoints.load(key);
-    if(saved&&(saved.contract!==contract||saved.requestId!==options.requestId||saved.attemptId!==request.attemptId||saved.ownerIntent!==owner.intent||receivingFields.some(field=>saved.receiving[field]!==owner.receiving[field])))throw Error('checkpoint_binding_mismatch');
+    if(saved&&(saved.contract!==contract||saved.requestId!==options.requestId||saved.attemptId!==request.attemptId||saved.ownerIntent!==owner.intent||receivingFields.some(field=>saved.receiving[field]!==owner.receiving[field])))throw withClientErrorRecovery(Error('checkpoint_binding_mismatch'),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"},'checkpoint_binding_mismatch');
     checkpoint={contract,ownerIntent:owner.intent,requestId:options.requestId,attemptId:request.attemptId,receiving:{...owner.receiving}};
     await checkpoints.save(key,checkpoint);
     const sameTarget=/** @param {Record<string,any>} value */ value=>receivingFields.every(field=>value?.[field]===owner.receiving[field]);
-    let observed;try{observed=await browser.verifyLogin(options);}catch{return result('waiting','receiving_unavailable');}
-    if(!sameTarget(observed))return result('adaptation_required','task_target_changed');
-    let follow;try{follow=await auth.followLogin({requestId:options.requestId,intervalMs:1,maxObservations:1});}catch(error){return result('waiting',code(error));}
-    request=follow.request;if(!bound(request)||request.attemptId!==checkpoint.attemptId)throw Error('owner_request_binding_mismatch');
+    let observed;try{observed=await browser.verifyLogin(options);}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});}
+    if(!sameTarget(observed))return withClientResultRecovery(await (result('adaptation_required','task_target_changed')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+    let follow;try{follow=await auth.followLogin({requestId:options.requestId,intervalMs:1,maxObservations:1});}catch(error){return withClientResultRecovery(await (result('waiting',code(error))),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance",ownerError:error});}
+    request=follow.request;if(!bound(request)||request.attemptId!==checkpoint.attemptId)throw withClientErrorRecovery(Error('owner_request_binding_mismatch'),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"},'owner_request_binding_mismatch');
     challenge=follow.challenge;
     if(!challenge&&['denied','revoked','cancelled','expired'].includes(request.state)){
-     try{challenge=await auth.helper('refresh_credential_challenge',{requestId:options.requestId});}catch{return result('waiting','challenge_reconciliation_unavailable');}
+     try{challenge=await auth.helper('refresh_credential_challenge',{requestId:options.requestId});}catch{return withClientResultRecovery(await (result('waiting','challenge_reconciliation_unavailable')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});}
     }
-    if(challenge?.requestId!==undefined&&challenge.requestId!==options.requestId)throw Error('owner_request_binding_mismatch');
+    if(challenge?.requestId!==undefined&&challenge.requestId!==options.requestId)throw withClientErrorRecovery(Error('owner_request_binding_mismatch'),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"},'owner_request_binding_mismatch');
     if(challenge?.challengeId){checkpoint={...checkpoint,challengeId:challenge.challengeId};await checkpoints.save(key,checkpoint);}
-    if(challenge?.heldFor==='cancellation')return result('waiting','number_matching_cancellation_required');
-    if(['denied','revoked','cancelled','expired'].includes(request.state))return result('failed',`auth_${request.state}`);
-    if(request.authentication!==undefined&&request.authentication!=='verified')return result('failed','authentication_failed');
-    if(!challenge?.challengeId)return result('waiting',`number_matching_${follow.heldFor??challenge?.heldFor??'unavailable'}`);
-    if(challenge.account!==options.accountHint)return result('adaptation_required','challenge_account_mismatch');
-    if(!['browser_to_device','device_to_browser'].includes(challenge.direction))return result('waiting','number_matching_unsupported');
-    if(['cancelled','expired','revoked','navigated','unavailable','superseded'].includes(challenge.status))return result('failed',`number_matching_${challenge.status}`);
-    if(challenge.textDelivered!==true||challenge.screenshotDelivered!==true)return result('waiting','number_matching_delivery_required');
+    if(challenge?.heldFor==='cancellation')return withClientResultRecovery(await (result('waiting','number_matching_cancellation_required')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+    if(['denied','revoked','cancelled','expired'].includes(request.state))return withClientResultRecovery(await (result('failed',`auth_${request.state}`)),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+    if(request.authentication!==undefined&&request.authentication!=='verified')return withClientResultRecovery(await (result('failed','authentication_failed')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+    if(!challenge?.challengeId)return withClientResultRecovery(await (result('waiting',`number_matching_${follow.heldFor??challenge?.heldFor??'unavailable'}`)),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+    if(challenge.account!==options.accountHint)return withClientResultRecovery(await (result('adaptation_required','challenge_account_mismatch')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+    if(!['browser_to_device','device_to_browser'].includes(challenge.direction))return withClientResultRecovery(await (result('waiting','number_matching_unsupported')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+    if(['cancelled','expired','revoked','navigated','unavailable','superseded'].includes(challenge.status))return withClientResultRecovery(await (result('failed',`number_matching_${challenge.status}`)),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+    if(challenge.textDelivered!==true||challenge.screenshotDelivered!==true)return withClientResultRecovery(await (result('waiting','number_matching_delivery_required')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
     if(request.authentication==='verified'){
-     try{observed=await browser.verifyLogin(options);}catch{return result('waiting','receiving_unavailable');}
-     if(!sameTarget(observed))return result('adaptation_required','task_target_changed');
-     return result(observed.status,observed.reasonCode,observed.status==='completed'?'verified':'unknown');
+     try{observed=await browser.verifyLogin(options);}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});}
+     if(!sameTarget(observed))return withClientResultRecovery(await (result('adaptation_required','task_target_changed')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+     return withClientResultRecovery(await (result(observed.status,observed.reasonCode,observed.status==='completed'?'verified':'unknown')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
     }
-    if(challenge.responseState==='unknown')return result('waiting','number_matching_response_unknown');
-    return result('waiting',challenge.responseState==='submitted'?'authentication_required':'number_matching_owner_required');
+    if(challenge.responseState==='unknown')return withClientResultRecovery(await (result('waiting','number_matching_response_unknown')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
+    return withClientResultRecovery(await (result('waiting',challenge.responseState==='submitted'?'authentication_required':'number_matching_owner_required')),{source:"packages/client/src/owner-number-matching.js",owningFunction:"createOwnerNumberMatchingContinuation.advance"});
    }finally{busy.delete(key);}
   }
  };

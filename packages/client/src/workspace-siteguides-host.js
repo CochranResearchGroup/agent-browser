@@ -62,7 +62,7 @@ export function createTeachingSourceStatus({evidence,readOperation,resolveSelect
    await evidence.readVideoSlice(current,{offset:0,length:1});
    const proofs=original.response.guide.teaching.evidence;
    return {...scope,state:'available',gaps:current.gaps,evidence:request.evidence.map(reference=>({id:reference.id,artifact:reference.artifact,sha256:reference.sha256,state:proofs.some(proof=>['id','kind','artifact','startMs','endMs','sha256'].every(key=>proof[key]===reference[key]))?'available':'unchecked',reason:'scoped_read'}))};
-  }catch{return {...scope,state:'unavailable',reason:'source_unavailable'};}
+  }catch(error){return error?.code==='teaching_source_expiry_unqualified'?{...scope,state:'unchecked',reason:error.code,...(error.clientRecovery?{clientRecovery:error.clientRecovery}:{})}:{...scope,state:'unavailable',reason:'source_unavailable',...(error?.failure?{failure:error.failure}:{})};}
  };
 }
 

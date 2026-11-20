@@ -23,7 +23,7 @@ function transport({url,token,fetch:fetcher=globalThis.fetch,maximumResponseByte
       let payload;
       try{payload=JSON.parse(Buffer.concat(chunks).toString('utf8'));}
       catch{throw new Error('teaching_owner_response_invalid');}
-      if(!response.ok||isResponseFailure(payload))throw responseFailureError(payload,`teaching_owner_rejected_${response.status}`);
+      if(!response.ok||isResponseFailure(payload))throw Object.assign(responseFailureError(payload,`teaching_owner_rejected_${response.status}`,{source:'packages/client/src/teaching-evidence-http.js',owningFunction:'transport',localRecoveryCode:'client_teaching_owner_http_failure'}),{status:response.status});
       return payload;
     } finally {for(const chunk of chunks)chunk.fill(0);}
   };

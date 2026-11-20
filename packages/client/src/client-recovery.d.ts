@@ -5,8 +5,9 @@ export interface ClientRecoveryRead {
 /** Local adapter guidance. The original owner's failure and plan are authoritative. */
 export interface ClientRecovery {
   schemaVersion:'agent-browser.client-recovery.v1';coverage:'registered'|'unknown';code:string;
-  packet:{code:string;source?:string;owningFunction?:string;taskId?:string;requestId?:string;episodeId?:string};
+  packet:{code:string;source?:string;owningFunction?:string;taskId?:string;requestId?:string;episodeId?:string;ownerCode?:string};
   requiredActor:string;automaticExecutionAllowed:false;recipe?:string;registrySourceSha256?:string;
+  normalization?:{ownerCode:string;ownerCodeCoverage:'not_asserted'};
   evidenceClass?:string;evidenceRequirement?:string;rationale?:string;
   inspect?:ClientRecoveryRead;verification?:ClientRecoveryRead;
   remediation?:string|Array<{instruction:string;precondition:string;interface?:string;call?:ClientRecoveryRead}>;
@@ -16,3 +17,6 @@ export interface ClientRecovery {
 export function clientRecoveryFor(code:string,context?:Record<string,unknown>):ClientRecovery;
 export function clientFailureError(code:string,context?:Record<string,unknown>):Error&{code:string;source?:string;owningFunction?:string;clientRecovery:ClientRecovery};
 export function withClientResultRecovery<T>(result:T,context?:Record<string,unknown>):T&{clientRecovery?:ClientRecovery};
+
+export function withClientErrorRecovery<T>(error:T,context?:Record<string,unknown>,localCode?:string):T&{clientRecovery:ClientRecovery};
+export function callClientOwner(client:{call:(operation:string,args:any)=>Promise<any>},operation:string,args:any,context:Record<string,unknown>):Promise<any>;

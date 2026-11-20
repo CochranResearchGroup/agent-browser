@@ -1,3 +1,5 @@
+import {withClientErrorRecovery} from './client-recovery.js';
+import { callClientOwner } from './client-recovery.js';
 // @ts-check
 import {summarizeLoginProgress} from './login-progress.js';
 
@@ -22,18 +24,18 @@ export function createLoginDiscovery({client,readPermission}) {
       });
       let discovery;
       try {
-        const capabilities=await client.call('auth_capabilities',{});
+        const capabilities=await callClientOwner(client,'auth_capabilities',{},{source:"packages/client/src/login-discovery.js",owningFunction:"createLoginDiscovery.inspect"});
         if(capabilities?.contractVersion!==1 || capabilities.credentialOperations!==true || capabilities.sharedOwnerAuthority!==true || capabilities.legacyCredentialEffects!==false)return {...base(),category:'capability_unavailable'};
         if(intent.requestId) {
-          request=await client.call('inspect_credential_request',{requestId:intent.requestId});
+          request=await callClientOwner(client,'inspect_credential_request',{requestId:intent.requestId},{source:"packages/client/src/login-discovery.js",owningFunction:"createLoginDiscovery.inspect"});
           if(request?.requestId!==intent.requestId || request.origin!==intent.origin || typeof (request.recipientAccount??request.account)!=='string' || (request.recipientAccount??request.account).trim().toLowerCase()!==intent.accountHint.trim().toLowerCase()) {
             request={requestId:intent.requestId};return {...base(),category:'request_binding_mismatch'};
           }
           if(['denied','revoked','cancelled'].includes(request.state))return base();
         }
-        discovery=await client.call('discover_credentials',{origin:intent.origin,accountHint:intent.accountHint,credentialType:'password'});
+        discovery=await callClientOwner(client,'discover_credentials',{origin:intent.origin,accountHint:intent.accountHint,credentialType:'password'},{source:"packages/client/src/login-discovery.js",owningFunction:"createLoginDiscovery.inspect"});
       } catch(error) {
-        return {...base(),category:error?.code==='auth_not_authorized'?'authority_denied':'capability_unavailable'};
+        return {...base(),category:error?.code==='auth_not_authorized'?'authority_denied':'capability_unavailable',...(error?.failure?{failure:error.failure}:{}),...(error?.clientRecovery?{clientRecovery:error.clientRecovery}:{}),dependencyFailure:{component:'auth_owner',code:typeof error?.code==='string'&&/^auth_[a-z0-9_]+$/.test(error.code)?error.code:'client_auth_owner_failure'}};
       }
       if(!discovery || !Array.isArray(discovery.candidates) || !Array.isArray(discovery.sources) || discovery.unavailable!==undefined && !Array.isArray(discovery.unavailable))return {...base(),category:'capability_unavailable'};
       const selected=discovery.state==='unique' && discovery.selected
@@ -73,7 +75,7 @@ export function createLoginDiscovery({client,readPermission}) {
   };
 }
 
-function invalid() {return Object.assign(Error('Invalid login discovery intent'),{code:'auth_invalid_request'});}
+function invalid() {return withClientErrorRecovery(Object.assign(Error('Invalid login discovery intent'),{code:'auth_invalid_request'}),{source:"packages/client/src/login-discovery.js",owningFunction:"invalid"},'auth_invalid_request');}
 /** @param {unknown} value */
 function reference(value) {return typeof value==='string' && /^[A-Za-z0-9][A-Za-z0-9:._-]{0,199}$/.test(value);}
 /** @param {import('./login-discovery.d.ts').LoginDiscoveryIntent} intent */

@@ -1,11 +1,13 @@
+import {withClientErrorRecovery} from './client-recovery.js';
+import {clientWaitBudget} from './client-wait-budget.js';
 import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 /** @typedef {import('./native-receiving-browser.js').NativeOptions} NativeOptions */
 /** @typedef {import('./native-receiving-browser.js').NativeAction} NativeAction */
 import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
-const refused=()=>Object.assign(Error('Native receiving controls or owner changed'),{code:'auth_receiving_changed'});
-const unknown=()=>Object.assign(Error('Native private input requires reconciliation'),{code:'auth_input_unknown'});
+const refused=()=>withClientErrorRecovery(Object.assign(Error('Native receiving controls or owner changed'),{code:'auth_receiving_changed'}),{source:"packages/client/src/native-receiving-browser.js",owningFunction:"refused"},'auth_receiving_changed');
+const unknown=()=>withClientErrorRecovery(Object.assign(Error('Native private input requires reconciliation'),{code:'auth_input_unknown'}),{source:"packages/client/src/native-receiving-browser.js",owningFunction:"unknown"},'auth_input_unknown');
 const keys=['provider','taskId','profileId','browserId','tabId'];
 const desktopKeys=['assignmentId','desktopId','generation','viewingGeneration'];
 const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -94,9 +96,8 @@ export function createNativeReceivingBrowser({readObservation,inputMatches,remot
    }else await dispatch(input);
   },
   async waitForChange({binding,observation,guard}){
-   const end=Date.now()+timeoutMs;
-   do{await guard();const current=await observe(binding);if(['identifier_required','password_required','mfa_required','authenticated'].includes(current.state)&&current.state!==observation.state)return;await delay(100);}while(Date.now()<end);
-   throw unknown();
+   const budget=clientWaitBudget(timeoutMs,'auth_input_unknown');
+   try{for(;;){await budget.run(guard);const current=await budget.run(()=>observe(binding));if(['identifier_required','password_required','mfa_required','authenticated'].includes(current.state)&&current.state!==observation.state)return;await budget.run(()=>delay(100));}}finally{budget.close()}
   },
  };
 }

@@ -1,9 +1,10 @@
+import {withClientErrorRecovery} from './client-recovery.js';
 import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 /** @typedef {import('./hosted-login-receiver.d.ts').ReceiverOptions} ReceiverOptions */
 /** @typedef {import('./hosted-login-receiver.d.ts').Scope} Scope */
 /** @typedef {import('./hosted-login-receiver.d.ts').Guard} Guard */
-const refused=()=>Object.assign(Error('Hosted login requires the current exact receiving request'),{code:'auth_not_authorized'});
+const refused=()=>withClientErrorRecovery(Object.assign(Error('Hosted login requires the current exact receiving request'),{code:'auth_not_authorized'}),{source:"packages/client/src/hosted-login-receiver.js",owningFunction:"refused"},'auth_not_authorized');
 const targetKeys=['provider','taskId','profileId','browserId','tabId'];
 const scopeKeys=['person','tenant','account','origin','source'];
 const canonicalOrigin=value=>{try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)&&url.origin===value&&!url.username&&!url.password;}catch{return false;}};
@@ -68,7 +69,7 @@ export function createHostedLoginReceiver({binding,scope,expectedUsername,browse
     const next=await observe(requested,guard);if(next.state===current.state)throw refused();current=next;
    }
    if(current.state==='authenticated'){submitted=true;return;}
-   throw refused();
+   throw withClientErrorRecovery(Object.assign(Error('Hosted receiving transition budget exhausted; reconcile the original request'),{code:'auth_input_unknown',reason:'transition_budget_exhausted'}),{source:'packages/client/src/hosted-login-receiver.js',owningFunction:'createHostedLoginReceiver.apply'},'auth_input_unknown');
   },
   /** @param {Scope} requested @param {Guard} [guard] */
   async verify(requested,guard=async()=>{}){
