@@ -9,21 +9,26 @@ fn registry() -> &'static Value {
             "../../../../docs/dev/contracts/public-error-recovery-registry.v1.json"
         ))
         .expect("validated recovery registry must parse");
-        let fragment: Value = serde_json::from_str(include_str!(
-            "../../../../docs/dev/contracts/public-error-recovery-client-dashboard.v1.json"
-        ))
-        .expect("validated client recovery fragment must parse");
-        for key in ["recipes", "codes", "interfaces"] {
-            if let Some(additions) = fragment[key].as_object() {
-                if registry[key].is_null() {
-                    registry[key] = json!({});
-                }
-                let destination = registry[key].as_object_mut().expect("registry map");
-                for (name, value) in additions {
-                    assert!(
-                        destination.insert(name.clone(), value.clone()).is_none(),
-                        "duplicate recovery contract"
-                    );
+        for source in [
+            include_str!(
+                "../../../../docs/dev/contracts/public-error-recovery-client-dashboard.v1.json"
+            ),
+            include_str!("../../../../docs/dev/contracts/public-error-recovery-service.v1.json"),
+        ] {
+            let fragment: Value =
+                serde_json::from_str(source).expect("validated recovery fragment must parse");
+            for key in ["recipes", "codes", "interfaces"] {
+                if let Some(additions) = fragment[key].as_object() {
+                    if registry[key].is_null() {
+                        registry[key] = json!({});
+                    }
+                    let destination = registry[key].as_object_mut().expect("registry map");
+                    for (name, value) in additions {
+                        assert!(
+                            destination.insert(name.clone(), value.clone()).is_none(),
+                            "duplicate recovery contract"
+                        );
+                    }
                 }
             }
         }

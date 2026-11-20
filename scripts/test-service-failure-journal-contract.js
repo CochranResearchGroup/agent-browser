@@ -105,6 +105,7 @@ const recoveryRegistry = JSON.parse(readFileSync('docs/dev/contracts/public-erro
 for (const path of recoveryRegistry.fragments ?? []) {
   const fragment = JSON.parse(readFileSync(path, 'utf8'));
   assert.equal(fragment.schemaVersion, recoveryRegistry.schemaVersion);
+  for (const key of ['exclusions', 'enforcedProducerCodePrefixes', 'enforcedProducerSources', 'enforcedProducerSourceFamilies']) recoveryRegistry[key] = [...(recoveryRegistry[key] ?? []), ...(fragment[key] ?? [])];
   for (const key of ['recipes', 'codes', 'interfaces']) {
     recoveryRegistry[key] ??= {};
     for (const [name, entry] of Object.entries(fragment[key] ?? {})) {
@@ -204,6 +205,14 @@ function validateRecoveryCall(call) {
       const operations = toolSchemas.browser_discover.match(/const DIAGNOSTIC_OPERATIONS:[\s\S]*?= &\[([\s\S]*?)\];/)[1];
       assert(operations.includes(`"${call.arguments.operation}"`), `Unavailable diagnostic operation ${call.arguments.operation}`);
     }
+    return;
+  }
+  if (call.tool === 'browser_command' && call.arguments.action === 'failure_recovery') {
+    const operation = call.arguments.params?.operation;
+    assert(['inspect', 'packet', 'history', 'configure', 'run', 'reconcile', 'record_resume'].includes(operation), 'Unavailable recovery journal operation');
+    if (operation !== 'configure') assert.equal(call.arguments.params.occurrenceId, '$occurrenceId', 'Recovery must retain original occurrence');
+    const schema = readFileSync('cli/src/mcp/failure_recovery.rs', 'utf8');
+    assert(schema.includes(`"${operation}"`), 'Recovery operation must be advertised by owner schema');
     return;
   }
   if (call.tool === 'browser_command' && call.arguments.action === 'browser_build') {
