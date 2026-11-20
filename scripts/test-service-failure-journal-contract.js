@@ -121,6 +121,10 @@ for (const path of recoveryRegistry.fragments ?? []) {
   for (const key of ['recipes', 'codes', 'interfaces']) {
     recoveryRegistry[key] ??= {};
     for (const [name, entry] of Object.entries(fragment[key] ?? {})) {
+      if (key === 'interfaces' && Object.hasOwn(recoveryRegistry[key], name)) {
+        assert.deepEqual(recoveryRegistry[key][name], entry, `Conflicting recovery interface ${name}`);
+        continue;
+      }
       assert(!Object.hasOwn(recoveryRegistry[key], name), `Duplicate recovery ${key} ${name}`);
       recoveryRegistry[key][name] = entry;
     }

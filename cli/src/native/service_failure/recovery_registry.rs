@@ -25,6 +25,12 @@ fn registry() -> &'static Value {
                     }
                     let destination = registry[key].as_object_mut().expect("registry map");
                     for (name, value) in additions {
+                        if key == "interfaces" {
+                            if let Some(existing) = destination.get(name) {
+                                assert_eq!(existing, value, "conflicting recovery interface");
+                                continue;
+                            }
+                        }
                         assert!(
                             destination.insert(name.clone(), value.clone()).is_none(),
                             "duplicate recovery contract"
