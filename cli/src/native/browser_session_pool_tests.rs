@@ -4547,6 +4547,40 @@ fn finite_pending_human_deadline_expires_exact_target_after_restart() {
 }
 
 #[test]
+fn finite_handoff_lifetime_uses_service_origin_instead_of_guest_activity_time() {
+    use crate::connection::stable_time::{fixture_stamp, Fixture as TimeFixture};
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/alice", "profileId":"profile-a", "activityAtMs":100,
+        "humanHandoff":true, "pendingHumanRetentionMs":0
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let before = consumer.state().clone();
+    let operations = provider.borrow().operations.clone();
+    let _time = TimeFixture::set(Ok(fixture_stamp(5_000)));
+    let finite = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_link_lifetime", "ttlMs":20, "activityAtMs":100
+    }));
+    assert_eq!(finite["success"], true, "{finite}");
+    assert_eq!(consumer.state().tabs, before.tabs);
+    assert_eq!(consumer.state().browsers, before.browsers);
+    assert_eq!(consumer.state().sessions, before.sessions);
+    assert_eq!(provider.borrow().operations, operations);
+    assert_eq!(
+        calls.get(),
+        1,
+        "Changing link retention never launches another browser"
+    );
+    assert_eq!(finite["data"]["handoffId"], id);
+    assert_eq!(finite["data"]["expiresAtMs"], 5_020,
+        "Finite retention starts at the qualified service observation; caller guest activity time cannot mint its deadline");
+}
+
+#[test]
 fn existing_link_lifetime_switches_finite_and_perpetual_without_target_effects() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
