@@ -526,9 +526,12 @@ pub(super) fn call(
             };
             if let Err(cause)=time_admission { result["timeBudget"]=json!({"status":"unqualified","cause":cause,"inspectionRemainsAvailable":true}); }
             result["verification"]=verified.summary;
+            let settled_no_effect = last_data.pointer("/operation/state") == Some(&json!("owner_refused_no_effect"));
+            // The remedy's acknowledgement cannot qualify a prerequisite that
+            // changed before verification. Only the latest successful read can.
+            if verified.success { last_data=verified.data; }
             let ready = prerequisite(record["code"].as_str().unwrap_or_default(),&last_data)
                 && verified.success;
-            let settled_no_effect = last_data.pointer("/operation/state") == Some(&json!("owner_refused_no_effect"));
             result["status"]=json!(if settled_no_effect {"original_no_effect_settled"}else if ready {"ready_for_explicit_resume"}else if operation=="reconcile"{"interrupted_outcome_not_reconstructed"}else{"unresolved"});
             if settled_no_effect {
                 result["freshObservationRequiredBeforeNewIntent"] = json!(true);
