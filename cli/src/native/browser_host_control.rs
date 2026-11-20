@@ -1095,6 +1095,43 @@ mod integration_tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
     #[test]
+    fn returned_control_requires_successful_current_epoch_page_observation() {
+        fixture(|| {
+            let location = path("browser").unwrap();
+            transaction(&location, |control| {
+                control.awaiting_observation = true;
+                Ok(())
+            })
+            .unwrap();
+            assert!(admit("browser", "browser_pid", "status").unwrap().is_none());
+            assert!(read("browser").unwrap().awaiting_observation);
+            admit("browser", "url", "failed-observation")
+                .unwrap()
+                .unwrap()
+                .finish(false)
+                .unwrap();
+            assert!(check("browser", "click").is_err());
+            let stale = admit("browser", "native_capture", "stale-observation")
+                .unwrap()
+                .unwrap();
+            transaction(&location, |control| {
+                control.epoch += 1;
+                Ok(())
+            })
+            .unwrap();
+            stale.finish(true).unwrap();
+            assert!(check("browser", "click").is_err());
+            admit("browser", "native_capture", "fresh-observation")
+                .unwrap()
+                .unwrap()
+                .finish(true)
+                .unwrap();
+            assert!(!read("browser").unwrap().awaiting_observation);
+            assert!(check("browser", "click").is_ok());
+        });
+    }
+
+    #[test]
     fn host_control_atomic_takeover_retains_dispatch_and_requires_fresh_return() {
         fixture(|| {
             let flight = admit("browser", "click", "effect").unwrap().unwrap();
