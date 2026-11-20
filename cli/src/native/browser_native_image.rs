@@ -444,12 +444,6 @@ impl NativeImageObservation {
     pub fn validate_current(&self) -> Result<(), String> {
         self.validate_at(&NativeImageClockReading::read()?)
     }
-    #[cfg(test)]
-    pub fn current_time_ms(&self) -> Result<u64, String> {
-        let current = NativeImageClockReading::read()?;
-        self.validate_at(&current)?;
-        Ok(current.service_time.unwrap().latest_ms())
-    }
     pub fn validate_structure(&self) -> Result<(), String> {
         if let Some(stamp) = &self.service_time {
             stamp.validate()?;

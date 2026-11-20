@@ -1439,11 +1439,17 @@ async fn acquire_profile_command(
     if retry_daemon_session_route != daemon_state.session_id {
         return Err("profile_acquisition_daemon_route_mismatch".to_string());
     }
-    let created_at = service_now_timestamp();
-    let expires_at = optional_command_string(command, "expiresAt").unwrap_or_else(|| {
-        (chrono::Utc::now() + chrono::Duration::minutes(5))
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-    });
+    let time = profile_authority_time("profile_acquisition_time_unavailable")?;
+    let created_at = profile_time_created(&time);
+    let default_expiry = ephemeral_profile_claim_expiry(&created_at)?;
+    profile_deadline_admission(
+        &time,
+        &default_expiry,
+        "profile_acquisition_authority_time_invalid",
+        "profile_acquisition_time_uncertain",
+        "profile_acquisition_time_uncertain",
+    )?;
+    let expires_at = optional_command_string(command, "expiresAt").unwrap_or(default_expiry);
     let idempotency_key = optional_command_string(command, "idempotencyKey")
         .unwrap_or_else(|| format!("profile-acquisition-{}", uuid::Uuid::new_v4()));
     let policy = if command
@@ -1665,8 +1671,9 @@ fn issue_profile_effect_authorization<R: ServiceStateRepository>(
         return Ok(None);
     };
     let state = repository.load_snapshot()?;
-    let issued_at = service_now_timestamp();
-    let issued = chrono::DateTime::parse_from_rfc3339(&issued_at)
+    let time = profile_authority_time("lease_authority_time_unavailable")?;
+    let created = profile_time_created(&time);
+    let issued = chrono::DateTime::parse_from_rfc3339(&created)
         .map_err(|_| "lease_authority_time_invalid".to_string())?;
     let claim_expires_at = chrono::DateTime::parse_from_rfc3339(claim.expires_at())
         .map_err(|_| "lease_authority_claim_expiry_invalid".to_string())?;
@@ -1674,6 +1681,13 @@ fn issue_profile_effect_authorization<R: ServiceStateRepository>(
         std::cmp::min(issued + chrono::Duration::minutes(2), claim_expires_at)
             .with_timezone(&chrono::Utc)
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let issued_at = profile_deadline_admission(
+        &time,
+        &authorization_expires_at,
+        "lease_authority_claim_expiry_invalid",
+        "lease_authority_claim_expired",
+        "lease_authority_time_uncertain",
+    )?;
     let intent = agent_browser_lease_authority::LeaseEffectIntent {
         action_class: "browser_launch".to_string(),
         audience: daemon_session_route.to_string(),
@@ -1696,6 +1710,39 @@ fn ephemeral_profile_claim_expiry(now: &str) -> Result<String, String> {
         .map_err(|_| "profile_acquisition_authority_time_invalid".to_string())
 }
 
+/// Sample the supported authority before entering any Service State writer.
+/// The response bounds qualify admission, not delivery or completion time.
+fn profile_authority_time(code: &str) -> Result<crate::connection::stable_time::Stamp, String> {
+    crate::connection::stable_time::authority_now().map_err(|cause| {
+        format!("{code}: cause={cause}; inspect the original plan/receipt and repair the supported time client; independent diagnosis remains available")
+    })
+}
+
+fn profile_time_created(time: &crate::connection::stable_time::Stamp) -> String {
+    chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(time.earliest_utc_ns).to_rfc3339()
+}
+
+/// A straddling interval is unknown, never proof that a sealed plan expired.
+fn profile_deadline_admission(
+    time: &crate::connection::stable_time::Stamp,
+    expires_at: &str,
+    invalid: &str,
+    expired: &str,
+    uncertain: &str,
+) -> Result<String, String> {
+    let expires =
+        chrono::DateTime::parse_from_rfc3339(expires_at).map_err(|_| invalid.to_string())?;
+    let earliest = chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(time.earliest_utc_ns);
+    let latest = chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(time.latest_utc_ns);
+    if earliest >= expires {
+        return Err(expired.to_string());
+    }
+    if latest >= expires {
+        return Err(uncertain.to_string());
+    }
+    Ok(latest.to_rfc3339())
+}
+
 fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
     let state = load_service_state_for_maintenance(command)?;
     let profile_id = required_command_string(command, "profileId")?;
@@ -1711,7 +1758,8 @@ fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
         task_name: optional_command_string(command, "taskName").unwrap_or_default(),
         target_service_ids: optional_command_string_array(command, "targetServiceIds")?,
     };
-    let created_at = service_now_timestamp();
+    let time = profile_authority_time("profile_recovery_time_unavailable")?;
+    let created_at = profile_time_created(&time);
     let expires_at = optional_command_string(command, "expiresAt")
         .map(Ok)
         .unwrap_or_else(|| {
@@ -1723,6 +1771,13 @@ fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
                 })
                 .map_err(|_| "profile_recovery_now_invalid".to_string())
         })?;
+    profile_deadline_admission(
+        &time,
+        &expires_at,
+        "profile_recovery_expiry_invalid",
+        "profile_recovery_plan_expired",
+        "profile_recovery_time_uncertain",
+    )?;
     let idempotency_key = optional_command_string(command, "idempotencyKey")
         .unwrap_or_else(|| format!("profile-recovery-{}", uuid::Uuid::new_v4()));
     let outcome = plan_terminal_owner_recovery(
@@ -1806,6 +1861,17 @@ async fn apply_profile_recovery_command(
     {
         return Err("profile_recovery_principal_mismatch".to_string());
     }
+    verify_plan_integrity(&plan, raw_capability.as_bytes())?;
+    if let Some(receipt) = snapshot
+        .replay_profile_recovery(profile_recovery_receipt_identity(&plan))
+        .map_err(profile_recovery_receipt_replay_error)?
+    {
+        let outcome = replay_outcome(receipt);
+        return Ok(json!({
+            "outcome":outcome.acquisition,"receipt":outcome.receipt,"replayed":true,
+            "trace":profile_lifecycle_trace(command, &plan.identities.profile_id),
+        }));
+    }
     if daemon_state.session_id != plan.identities.daemon_session_route {
         return Err("profile_recovery_daemon_route_mismatch".to_string());
     }
@@ -1817,7 +1883,14 @@ async fn apply_profile_recovery_command(
         .get(&plan.identities.profile_id)
         .and_then(|profile| profile.user_data_dir.clone())
         .ok_or_else(|| "profile_recovery_profile_identity_unavailable".to_string())?;
-    let now = service_now_timestamp();
+    let time = profile_authority_time("profile_recovery_time_unavailable")?;
+    let now = profile_deadline_admission(
+        &time,
+        &plan.expires_at,
+        "profile_recovery_expiry_invalid",
+        "profile_recovery_plan_expired",
+        "profile_recovery_time_uncertain",
+    )?;
     let recovery_identities = plan.identities.clone();
     let recovery_repository = repository.clone();
     let recovery_authority = authority.clone();
@@ -1878,13 +1951,18 @@ fn plan_profile_reset_command(command: &Value) -> Result<Value, String> {
             "trace": profile_lifecycle_trace(command, profile_id),
         }));
     }
-    let time = crate::connection::stable_time::authority_now().map_err(|cause|
-        format!("profile_reset_time_unavailable: cause={cause}; inspect the original plan/receipt and repair the supported time client; independent diagnosis remains available"))?;
-    let created_at =
-        chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(time.earliest_utc_ns).to_rfc3339();
+    let time = profile_authority_time("profile_reset_time_unavailable")?;
+    let created_at = profile_time_created(&time);
     let expires_at = optional_command_string(command, "expiresAt")
         .map(Ok)
         .unwrap_or_else(|| profile_reset_default_expiry(&created_at))?;
+    profile_deadline_admission(
+        &time,
+        &expires_at,
+        "profile_reset_expiry_invalid",
+        "profile_reset_plan_expired",
+        "profile_reset_time_uncertain",
+    )?;
     let idempotency_key = optional_command_string(command, "idempotencyKey")
         .unwrap_or_else(|| format!("profile-reset-{}", uuid::Uuid::new_v4()));
     let plan = plan_profile_reset(
@@ -1920,12 +1998,23 @@ fn apply_profile_reset_command(command: &Value) -> Result<Value, String> {
     if authority.principal_id != plan.principal_id {
         return Err("profile_reset_principal_mismatch".to_string());
     }
-    let (receipt, replayed) = apply_profile_reset(
-        &repository,
-        &plan,
-        &service_now_timestamp(),
-        raw_capability.as_bytes(),
-    )?;
+    verify_profile_reset_plan(&plan, raw_capability.as_bytes())?;
+    let original = snapshot
+        .replay_profile_reset(profile_reset_receipt_identity(&plan))
+        .map_err(profile_reset_receipt_replay_error)?;
+    let (receipt, replayed) = if let Some(receipt) = original {
+        (receipt, true)
+    } else {
+        let time = profile_authority_time("profile_reset_time_unavailable")?;
+        let now = profile_deadline_admission(
+            &time,
+            &plan.expires_at,
+            "profile_reset_expiry_invalid",
+            "profile_reset_plan_expired",
+            "profile_reset_time_uncertain",
+        )?;
+        apply_profile_reset(&repository, &plan, &now, raw_capability.as_bytes())?
+    };
     Ok(json!({
         "receipt": receipt,
         "replayed": replayed,
@@ -5198,10 +5287,29 @@ mod tests {
             "expiresAt":"2026-01-01T00:05:00Z", "idempotencyKey":"qualified-apply",
         }))
         .unwrap();
-        let applied = apply_profile_reset_command(&json!({
+        let apply = json!({
             "action":"service_profile_reset_apply", "profileId":"last30days-facebook",
             "profileCapability":capability, "plan":planned["plan"],
-        }));
+        });
+        {
+            let mut overlap = crate::connection::stable_time::fixture_stamp(1_767_225_900_000);
+            overlap.earliest_utc_ns -= 1_000_000;
+            overlap.latest_utc_ns += 1_000_000;
+            let _overlap = crate::connection::stable_time::Fixture::set(Ok(overlap));
+            assert_eq!(
+                apply_profile_reset_command(&apply).unwrap_err(),
+                "profile_reset_time_uncertain"
+            );
+        }
+        let applied = apply_profile_reset_command(&apply);
+        let replay = if applied.is_ok() {
+            let _outage = crate::connection::stable_time::Fixture::set(Err(
+                "stable_time_client_start_failed".into(),
+            ));
+            Some(apply_profile_reset_command(&apply))
+        } else {
+            None
+        };
         drop(repository);
         crate::test_utils::remove_owned_fixture_dir(&directory).unwrap();
         assert!(
@@ -5209,6 +5317,9 @@ mod tests {
             "qualified admission is before expiry regardless of guest UTC: {:?}",
             applied.as_ref().err()
         );
+        let replay = replay.unwrap().unwrap();
+        assert_eq!(replay["replayed"], true);
+        assert_eq!(replay["receipt"], applied.unwrap()["receipt"]);
     }
 
     #[test]

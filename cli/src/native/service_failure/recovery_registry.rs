@@ -79,6 +79,9 @@ fn bind(value: &Value, command: &Value) -> (Value, bool) {
                 "$poolId" => command
                     .get("poolId")
                     .or_else(|| command.pointer("/params/poolId")),
+                "$handoffId" => command
+                    .get("handoffId")
+                    .or_else(|| command.pointer("/params/handoffId")),
                 "$recordingId" => command
                     .get("recordingId")
                     .or_else(|| command.pointer("/params/recordingId")),
