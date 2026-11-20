@@ -1825,6 +1825,127 @@
       },
       "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
       "maximumAutomaticAttempts": 1
+    },
+    "desktop_input_custody": {
+      "rationale": "Desktop input effect custody or focus cannot currently establish a safe next physical action.",
+      "requiredActor": "current_task_and_native_input_owner",
+      "evidenceRequirement": "Current exact task/browser/profile binding and original outcome; any process/target observation must come from its existing owner, not inferred from an error label.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original task/input outcome and existing provider owner journal. Reconcile the original before any fresh capture or input; a fresh image or a cleared fence alone never settles uncertain input.",
+          "precondition": "Exact original task/input and provider ownership are known; no unresolved physical input is replayed.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "desktop_input_installation": {
+      "rationale": "The installed desktop input provider, generation manifest, display or observation helper is unavailable or does not match the current executable.",
+      "requiredActor": "installation_and_remote_view_owner",
+      "evidenceRequirement": "Current exact task/browser/profile binding and original outcome; any process/target observation must come from its existing owner, not inferred from an error label.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Run the independent install doctor, then have the existing installation/Remote View owner repair the reported provider generation, dependency or display binding. Preserve original input identity and verify current provider admission; do not alter generation digests or spoof display authority.",
+          "precondition": "Exact original task/input and provider ownership are known; no unresolved physical input is replayed.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "desktop_input_request": {
+      "rationale": "The input is outside the registered key/coordinate/route or execution contract.",
+      "requiredActor": "current_task_and_native_input_owner",
+      "evidenceRequirement": "Current exact task/browser/profile binding and original outcome; any process/target observation must come from its existing owner, not inferred from an error label.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Correct the specific requested key, bounds or owner-minted route identity using the advertised input contract and a fresh supported capture. Do not forge display credentials or run the provider as root. Inspect any earlier original before new input.",
+          "precondition": "Exact original task/input and provider ownership are known; no unresolved physical input is replayed.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "desktop_input_contention": {
+      "rationale": "Another owner currently holds the exact desktop effect fence.",
+      "requiredActor": "current_desktop_effect_owner",
+      "evidenceRequirement": "Current exact task/browser/profile binding and original outcome; any process/target observation must come from its existing owner, not inferred from an error label.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect current task and original effect. Let the owning action finish or use its supported owner cancellation; then verify custody before one new admitted action. Never delete lock/journal files or bypass the route fence.",
+          "precondition": "Exact original task/input and provider ownership are known; no unresolved physical input is replayed.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -8708,6 +8829,295 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "invalid"
+    },
+    "desktop_input_effect_journal_identity_invalid": {
+      "recipe": "desktop_input_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "desktop_input_effect_journal_conflict": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_input_route_fence_unavailable": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_effect_journal_transition_invalid": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_input_provider_unsupported": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        },
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_effect_uncertain": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_input_effect_journal_save_failed": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_input_effect_journal_unavailable": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_input_route_fence_contended": {
+      "recipe": "desktop_input_contention",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "desktop_input_route_fence_identity_invalid": {
+      "recipe": "desktop_input_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "desktop_input_effect_journal_invalid": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_input_xdotool_provider_unavailable": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_focus_probe_unavailable": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_event_out_of_bounds": {
+      "recipe": "desktop_input_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "desktop_input_display_unavailable": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_key_not_registered": {
+      "recipe": "desktop_input_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "desktop_input_xdotool_effect_uncertain": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_input_root_execution_forbidden": {
+      "recipe": "desktop_input_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "desktop_input_display_authority_invalid": {
+      "recipe": "desktop_input_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "desktop_input_xtest_effect_uncertain": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_input_xtest_provider_unavailable": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider/x11.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_provider_generation_changed": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider_admission.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_provider_generation_invalid": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider_admission.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_provider_unavailable": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider_admission.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_provider_generation_mismatch": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider_admission.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_provider_generation_unavailable": {
+      "recipe": "desktop_input_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider_admission.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -8810,6 +9220,21 @@
     {
       "path": "cli/src/native/browser_session_runtime.rs",
       "codePattern": "(?:browser_|runtime_)[a-z0-9_]+",
+      "beforeTestModule": true
+    },
+    {
+      "path": "cli/src/native/desktop_input_provider.rs",
+      "codePattern": "desktop_input_[a-z0-9_]+",
+      "beforeTestModule": true
+    },
+    {
+      "path": "cli/src/native/desktop_input_provider/x11.rs",
+      "codePattern": "desktop_input_[a-z0-9_]+",
+      "beforeTestModule": true
+    },
+    {
+      "path": "cli/src/native/desktop_input_provider_admission.rs",
+      "codePattern": "desktop_input_[a-z0-9_]+",
       "beforeTestModule": true
     }
   ]
