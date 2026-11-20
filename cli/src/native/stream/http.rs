@@ -1483,6 +1483,11 @@ pub(super) async fn handle_http_request(
         return;
     }
 
+    if method == "GET" && path == "/api/service/failures" {
+        super::dashboard::write_failure_journal_response(&mut stream, query, false).await;
+        return;
+    }
+
     if method == "GET" && path == "/api/service/events" {
         let cmd = match service_events_command(query) {
             Ok(cmd) => cmd,

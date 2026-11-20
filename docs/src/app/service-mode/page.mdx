@@ -2261,3 +2261,9 @@ For an operator-requested restart, inspect the task with `browser_command` actio
 
 
 If the task has no tab (`mode_operation_tab_missing`), create one through `browser_tab` with `operation: "new"` and a stable `tabKey`, using `about:blank` or an explicitly requested read-only URL. This rejoins the verified browser without removing profile data. Then prepare the restart with the same operation ID. A recovery tab is a new action; it does not resolve or replay the original uncertain action.
+
+## Optional latency phase diagnostics
+
+Set `AGENT_BROWSER_LATENCY_PHASE` to one of `routing`, `state_read`, `readiness`, `startup_lock`, `cdp`, `persistence` or `queue` to collect optional `latencyPhases` in operation data. Configure an absolute supported StableTime MCP client path through `AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT`; `AGENT_BROWSER_LATENCY_STABLE_TIME_BINARY` optionally selects its executable (default `stable-time`). Unset phase selection makes no added timing request. Diagnostics do not enter command fingerprints. Supported failure envelopes retain collected samples.
+
+Each helper exchange is bounded to five seconds. Missing client configuration, helper failures, unavailable service or unqualified observations produce unavailable samples while preserving the browser result. Sampling adds overhead. Service-observation brackets include clock delivery; actual operation elapsed time is bounded only from zero to the bracket upper bound. Compare persistent addressed MCP with direct CDP on the same managed target, and keep cold launch and fresh CLI startup separate.

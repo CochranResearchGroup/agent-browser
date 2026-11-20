@@ -8420,6 +8420,11 @@ Environment:
   AGENT_BROWSER_JSON             JSON output
   AGENT_BROWSER_ANNOTATE         Annotated screenshot with numbered labels and legend
   AGENT_BROWSER_DEBUG            Debug output
+  AGENT_BROWSER_LATENCY_PHASE    Optional StableTime phase: routing, state_read, readiness, startup_lock, cdp, persistence, queue
+  AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT
+                                 Absolute supported StableTime MCP client config; selected samples only, no guest-time fallback
+  AGENT_BROWSER_LATENCY_STABLE_TIME_BINARY
+                                 Supported timing client executable (default: stable-time); bounded helper failure preserves browser result
   AGENT_BROWSER_IGNORE_HTTPS_ERRORS Ignore HTTPS certificate errors
   AGENT_BROWSER_PROVIDER         Browser provider (ios, browserbase, kernel, browseruse, browserless, agentcore)
   AGENT_BROWSER_AUTO_CONNECT     Auto-discover and connect to running Chrome

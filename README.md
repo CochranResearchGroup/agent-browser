@@ -3100,6 +3100,9 @@ On macOS, `AGENT_BROWSER_KEYCHAIN_PASSWORD` unlocks the login keychain before Ch
 | `AGENT_BROWSER_CONFIRM_ACTIONS`     | Action categories requiring confirmation |
 | `AGENT_BROWSER_CONFIRM_INTERACTIVE` | Enable interactive confirmation prompts  |
 | `AGENT_BROWSER_RUNTIME_HOST`        | Enable guarded single-host admission for named runtime lanes |
+| `AGENT_BROWSER_LATENCY_PHASE` | Opt-in StableTime sampling: routing, state_read, readiness, startup_lock, cdp, persistence or queue; unset means no sampling |
+| `AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT` | Absolute supported StableTime MCP client configuration path for selected sampling |
+| `AGENT_BROWSER_LATENCY_STABLE_TIME_BINARY` | Optional supported StableTime executable, default stable-time |
 | `AGENT_BROWSER_ENV_FILE`            | Optional dotenv file for agent-browser secrets |
 | `AGENT_BROWSER_USE_REAL_KEYCHAIN`   | Use the real OS keychain for Chrome profile launches |
 | `AGENT_BROWSER_KEYCHAIN_PASSWORD`   | Password used to unlock the macOS login keychain or Linux GNOME Keyring |
@@ -7938,3 +7941,7 @@ The local pre-push gate uses the existing validation selector to run the public 
 
 
 For a Native control observation, pass the addressed browser task ID rather than the Auth caller ID: the progress summary returns a read-only `browser_command` / `task_briefing` action. Missing binding is explicit as `addressed_browser_task_required`. Continuation preserves sanitized incomplete verifier categories, evidence, qualification and supported next reads. Broad executable, dependency and selector changes select the workflow and gate checks as well; the gate is not duplicated inside the tooling aggregate.
+
+### Optional command latency diagnostics
+
+Select one phase with `AGENT_BROWSER_LATENCY_PHASE` and configure the supported StableTime client with `AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT`. Returned `latencyPhases` stay outside command fingerprints and appear in operation data, including supported failure envelopes. Sampling adds clock-client overhead and cannot qualify ordinary command speed. Missing configuration, helper failure or unqualified time produces an unavailable sample without replacing the browser result; each helper exchange is bounded to five seconds. No selected phase means no added time-service call. Service-observation brackets include delivery overhead and bound actual operation elapsed time only from zero to their upper bound.

@@ -261,6 +261,81 @@ pub(crate) async fn run_native_handoff_http_fixture(listener: TcpListener) {
     }
 }
 
+/// Reuse the same private journal projection on both HTTP adapters. The
+/// authenticated dashboard can browse recent records; the service port can
+/// only resolve a caller-provided occurrence ID from its own refusal response.
+pub(super) async fn write_failure_journal_response(
+    stream: &mut TcpStream,
+    query: Option<&str>,
+    allow_recent: bool,
+) {
+    let limit = query
+        .and_then(|query| {
+            query.split('&').find_map(|part| {
+                let (key, value) = part.split_once('=')?;
+                (key == "limit")
+                    .then(|| value.parse::<usize>().ok())
+                    .flatten()
+            })
+        })
+        .unwrap_or(100);
+    // Disk reads and bounded writer-lock admission must not stall the
+    // dashboard's asynchronous request workers.
+    let occurrence = query.and_then(|query| {
+        url::form_urlencoded::parse(query.as_bytes())
+            .find(|(key, _)| key == "occurrenceId")
+            .map(|(_, value)| value.into_owned())
+    });
+    let readback = tokio::task::spawn_blocking(move || match occurrence {
+        Some(id) => crate::native::service_failure_journal::read_failure_occurrence(&id),
+        None if allow_recent => read_service_failures(limit),
+        None => Err("failure_occurrence_id_required".to_string()),
+    })
+    .await
+    .unwrap_or_else(|_| Err("failure_journal_reader_task_failed".to_string()));
+    match readback {
+        Ok(readback) => {
+            write_json_value(
+                stream,
+                "200 OK",
+                json!({
+                    "success": true,
+                    "data": readback,
+                }),
+            )
+            .await
+        }
+        Err(error) => {
+            let invalid = matches!(
+                error.as_str(),
+                "failure_occurrence_id_invalid" | "failure_occurrence_id_required"
+            );
+            let code = if invalid {
+                error.as_str()
+            } else {
+                "failure_journal_read_failed"
+            };
+            let request_id = uuid::Uuid::new_v4().to_string();
+            let mut response = json!({"success":false,"id":request_id,"error":error,"code":code,"failure":{"code":code}});
+            crate::native::service_failure::attach_public_failure(
+                &mut response,
+                &json!({"action":"failure_log","id":request_id}),
+                "http_failure_journal",
+            );
+            write_json_value(
+                stream,
+                if invalid {
+                    "400 Bad Request"
+                } else {
+                    "500 Internal Server Error"
+                },
+                response,
+            )
+            .await
+        }
+    }
+}
+
 pub(crate) async fn ensure_dashboard_service_backend() {
     if let Err(err) = ensure_dashboard_service_backend_with_retry(
         || super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION, None),
@@ -1033,68 +1108,7 @@ async fn handle_service_api_request(
         return;
     }
     if method == "GET" && split_path_query(path).0 == "/api/service/failures" {
-        let limit = split_path_query(path)
-            .1
-            .and_then(|query| {
-                query.split('&').find_map(|part| {
-                    let (key, value) = part.split_once('=')?;
-                    (key == "limit")
-                        .then(|| value.parse::<usize>().ok())
-                        .flatten()
-                })
-            })
-            .unwrap_or(100);
-        // Disk reads and bounded writer-lock admission must not stall the
-        // dashboard's asynchronous request workers.
-        let occurrence = split_path_query(path).1.and_then(|query| {
-            url::form_urlencoded::parse(query.as_bytes())
-                .find(|(key, _)| key == "occurrenceId")
-                .map(|(_, value)| value.into_owned())
-        });
-        let readback = tokio::task::spawn_blocking(move || match occurrence {
-            Some(id) => crate::native::service_failure_journal::read_failure_occurrence(&id),
-            None => read_service_failures(limit),
-        })
-        .await
-        .unwrap_or_else(|_| Err("failure_journal_reader_task_failed".to_string()));
-        match readback {
-            Ok(readback) => {
-                write_json_value(
-                    stream,
-                    "200 OK",
-                    json!({
-                        "success": true,
-                        "data": readback,
-                    }),
-                )
-                .await
-            }
-            Err(error) => {
-                let invalid = error == "failure_occurrence_id_invalid";
-                let code = if invalid {
-                    "failure_occurrence_id_invalid"
-                } else {
-                    "failure_journal_read_failed"
-                };
-                let request_id = uuid::Uuid::new_v4().to_string();
-                let mut response = json!({"success":false,"id":request_id,"error":error,"code":code,"failure":{"code":code}});
-                crate::native::service_failure::attach_public_failure(
-                    &mut response,
-                    &json!({"action":"failure_log","id":request_id}),
-                    "http_failure_journal",
-                );
-                write_json_value(
-                    stream,
-                    if invalid {
-                        "400 Bad Request"
-                    } else {
-                        "500 Internal Server Error"
-                    },
-                    response,
-                )
-                .await
-            }
-        }
+        write_failure_journal_response(stream, split_path_query(path).1, true).await;
         return;
     }
     if method == "POST" && split_path_query(path).0 == "/api/service/failure-observation" {

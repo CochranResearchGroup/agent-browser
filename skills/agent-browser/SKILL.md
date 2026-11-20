@@ -127,3 +127,5 @@ If the task has no tab (`mode_operation_tab_missing`), create one through `brows
 ## Evidence-backed login progress
 
 Read [evidence-backed login progress](references/cli-and-service.md#evidence-backed-login-progress) for Auth progress, recovery, independent verification and continuation. Native ownership metadata never proves human activity.
+
+Latency diagnostics: [opt-in phases](references/cli-and-service.md#optional-command-latency-diagnostics).

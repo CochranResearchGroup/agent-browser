@@ -4927,3 +4927,7 @@ never reset the profile as a workaround.
 CLI fallback: use installed help, exact profile and named session; preserve peers.
 
 Read [CLI commands](references/commands.md) for examples.
+
+## Optional command latency diagnostics
+
+Ordinary commands do not request timing observations. For diagnosis, select one of routing, state_read, readiness, startup_lock, cdp, persistence or queue through `AGENT_BROWSER_LATENCY_PHASE`. Supply an absolute supported client config in `AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT` and optionally its executable in `AGENT_BROWSER_LATENCY_STABLE_TIME_BINARY` (default stable-time). Response operation data retains `latencyPhases`, including supported failed operations; timing never enters request fingerprints. Each helper exchange is bounded to five seconds. Unavailable configuration/helper/service observations are diagnostic failures and preserve the browser result. Sampling adds overhead. Compare equivalent persistent addressed MCP and direct CDP reads on the same target; report cold opening and fresh CLI startup separately. StableTime service brackets include delivery and give operation elapsed only a zero-to-upper-bound interval.
