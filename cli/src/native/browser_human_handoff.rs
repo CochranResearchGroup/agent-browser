@@ -186,7 +186,17 @@ pub(crate) fn return_activity(
         {
             return Err("browser_activity_claim_promoted_or_changed".into());
         }
-        relinquish(control, id, digest, request)
+        relinquish(control, id, digest, request)?;
+        // Quiet activity returns automation, but does not revoke this viewer's
+        // interactive capability. A later real event starts a new soft pause.
+        if let Some(mut handoff) = invitation(control, id) {
+            handoff.returned_by = None;
+            control.audit.push(
+                json!({"epoch":control.epoch,"operation":"human_activity_quiet",
+                "humanHandoff":handoff}),
+            );
+        }
+        Ok(())
     })
 }
 
