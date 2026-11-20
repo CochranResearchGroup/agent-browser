@@ -1420,6 +1420,51 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn aged_startup_marker_cannot_reclaim_a_live_owner() {
+        use std::os::unix::fs::MetadataExt;
+
+        let root = std::env::temp_dir().join(format!("ab-live-startup-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let environment = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        environment.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        environment.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let path = root.join("runtime-host.startup.lock");
+        let token = format!("{}:1", std::process::id());
+        let mut owner = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        owner.write_all(token.as_bytes()).unwrap();
+        owner.try_lock().unwrap();
+        // This is deliberately old fixture metadata, not elapsed-time evidence.
+        owner
+            .set_modified(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap();
+        let original = owner.metadata().unwrap();
+
+        let result = acquire_runtime_host_startup_lock("live-owner");
+        let refused = result.is_err();
+        let retained = fs::read_to_string(&path).ok().as_deref() == Some(token.as_str());
+        let same_entry = fs::metadata(&path)
+            .map(|current| (current.dev(), current.ino()) == (original.dev(), original.ino()))
+            .unwrap_or(false);
+        drop(result);
+        drop(owner);
+        fs::remove_dir_all(&root).unwrap();
+
+        assert!(
+            refused && retained && same_entry,
+            "old marker metadata must not authorize reclaiming live startup ownership"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn warm_shared_runtime_reuse_does_not_wait_for_another_lanes_startup_lock() {
         let root = std::env::temp_dir().join(format!("ab-warm-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
