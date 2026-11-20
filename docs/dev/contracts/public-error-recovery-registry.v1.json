@@ -1976,6 +1976,126 @@
       },
       "resumeCondition": "Current owner readback confirms the same durable handoff and exact task route; physical input still independently checks activity, focus and original outcome.",
       "maximumAutomaticAttempts": 1
+    },
+    "desktop_observation": {
+      "rationale": "The requested desktop observation is stale, mismatched, oversized or cannot identify the exact current page/scene binding.",
+      "requiredActor": "current_task_owner",
+      "evidenceRequirement": "Exact current task, capture/scene identity and original input or staging outcome; no freshness or effect evidence is inferred by this projection.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect current task and collect a fresh supported Native capture with the correct bounded region and declared profile. Use current page-owned evidence when the surface exists in the DOM; never treat a new capture as settlement of earlier input.",
+          "precondition": "Current task and original observation/operation are known; existing owner authority remains required and unresolved physical input is never replayed.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "desktop_observation_provider": {
+      "rationale": "The configured desktop capture, OCR/detector, paired CDP or presentation-stage owner could not supply the requested observation.",
+      "requiredActor": "existing_remote_view_and_perception_owner",
+      "evidenceRequirement": "Exact current task, capture/scene identity and original input or staging outcome; no freshness or effect evidence is inferred by this projection.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect current task and provider status. Have the existing Remote View/presentation owner repair the named display, detector, route or paired-page configuration; retain acknowledged reads and independently reconcile any partial staging/restoration. Helper failure does not prove the whole provider is down.",
+          "precondition": "Current task and original observation/operation are known; existing owner authority remains required and unresolved physical input is never replayed.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "desktop_observation_request": {
+      "rationale": "The requested image, profile, selector or region does not satisfy the declared observation contract.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Exact current task, capture/scene identity and original input or staging outcome; no freshness or effect evidence is inferred by this projection.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Correct the named bounded observation argument using the supported Native capture contract and current task; choose the registered profile or a page-owned inspection appropriate to the actual surface. Do not manufacture target or authority evidence.",
+          "precondition": "Current task and original observation/operation are known; existing owner authority remains required and unresolved physical input is never replayed.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "desktop_scene_custody": {
+      "rationale": "Presentation stage, rollback, route or focus custody is unresolved; a partial scene operation is not a fresh clean start.",
+      "requiredActor": "existing_presentation_operation_owner",
+      "evidenceRequirement": "Exact current task, capture/scene identity and original input or staging outcome; no freshness or effect evidence is inferred by this projection.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the current task and existing presentation operation. Ask its owner to reconcile the retained stage/rollback/native-restoration outcome before further scene effects. Preserve the same route and original operation; do not stage on a shared display or repeat an uncertain trigger.",
+          "precondition": "Current task and original observation/operation are known; existing owner authority remains required and unresolved physical input is never replayed.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -10193,6 +10313,1131 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
+    },
+    "desktop_locator_detector_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_interaction_target_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        },
+        {
+          "path": "cli/src/native/controlled_x11_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_locator_invalid_image": {
+      "recipe": "desktop_observation_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "desktop_locator_visualization_failed": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_locator_frame_mismatch": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_locator_detector_failed": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_locator_unsupported": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_locator_not_found": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_locator.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_input_provider_receipt_invalid": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_interaction.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_input_provider_failed": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_interaction.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_interaction_operation_ledger_load_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_interaction.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_interaction_operation_ledger_save_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_interaction.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_interaction_operation_ledger_unavailable": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_interaction.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_interaction_handoff_invalid": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_interaction.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_interaction_unsupported": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_interaction.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_workspace_not_found": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_capture.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_identity_mismatch": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_capture.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_workspace_ambiguous": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_capture.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_display_not_ready": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_capture.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_capture_provider_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_capture.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_frame_too_large": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_capture.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_route_not_ready": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_capture.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_geometry_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_capture.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_capture_failed": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_capture.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_geometry_changed": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_capture.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_prompt_profile_not_found": {
+      "recipe": "desktop_observation_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_prompt_perception.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "desktop_prompt_provider_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_prompt_perception.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_prompt_detector_failed": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_prompt_perception.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_prompt_page_evidence_invalid": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_prompt_perception.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_prompt_visualization_failed": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_prompt_perception.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_prompt_stale_evidence": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_prompt_perception.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_prompt_invalid_image": {
+      "recipe": "desktop_observation_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_prompt_perception.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "desktop_prompt_binding_mismatch": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_prompt_perception.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_target_inventory_oversized": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_process_identity_missing": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_absence_evidence_invalid": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_process_identity_drift": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_browser_not_ready": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_cdp_screenshot_oversized": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_client_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_cdp_tab_binding_drift": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_runtime_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_cdp_dom_evidence_oversized": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_handle_identity_mismatch": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_handle_stale": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_target_endpoint_drift": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_page_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_cdp_evaluation_failed": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_evaluation_invalid": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_handle_invalid": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_page_contains_matching_surface": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_endpoint_invalid": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_target_binding_drift": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_evaluation_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_cdp_browser_missing": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_trigger_selector_invalid": {
+      "recipe": "desktop_observation_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "desktop_cdp_tab_missing": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_external_trigger_no_effect": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_target_inventory_invalid": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_target_missing": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_screenshot_invalid": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_session_binding_drift": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_target_endpoint_invalid": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_endpoint_missing": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_screenshot_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_external_trigger_outcome_unknown": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_cdp_target_unattachable": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_cdp_target_inventory_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_cdp.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_transition_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_scene_display_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_authority_drift": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_scene_route_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_cdp_page_collection_not_configured": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_state_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_cdp_browser_binding_drift": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_external_trigger_provider_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_native_snapshot_failed": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_probe_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_binding_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_binding_drift": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_scene_staging_requires_private_display": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_stage_and_rollback_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_scene_native_restoration_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_scene_capture_ready_transition_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_scene_reservation_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_frame_binding_drift": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_scene_stage_commit_and_rollback_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_scene_prior_slot_state_missing": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_snapshot_missing": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_paired_cdp_provider_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_slot_not_stageable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_scene_native_stage_failed": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_trigger_browser_binding_drift": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_scene_native_snapshot_missing": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_evidence_configured.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_provider_observation_reused": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/controlled_x11_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_interaction_verification_unavailable": {
+      "recipe": "desktop_observation_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/controlled_x11_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_interaction_authority_changed": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/controlled_x11_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_input_provider_identity_unavailable": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/controlled_x11_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_input_provider_frame_invalid": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/controlled_x11_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_interaction_target_ambiguous": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/controlled_x11_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "desktop_input_provider_state_unavailable": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/controlled_x11_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "desktop_interaction_focus_changed": {
+      "recipe": "desktop_observation",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/controlled_x11_provider.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -10394,6 +11639,30 @@
       "source": "cli/src/native/browser_session_host.rs",
       "sourceEvidence": "\"remote_view_open\"",
       "reason": "Owner command dispatch selector or successful disposition vocabulary; this token is not emitted as a failure code. Its command failures are qualified separately at their actual checks."
+    },
+    {
+      "code": "desktop_physical_pixels",
+      "source": "cli/src/native/desktop_locator.rs",
+      "sourceEvidence": "\"desktop_physical_pixels\"",
+      "reason": "Coordinate-space, command selector or adapter phase vocabulary; the actual failure is emitted separately from this descriptive token."
+    },
+    {
+      "code": "desktop_locate",
+      "source": "cli/src/native/desktop_locator.rs",
+      "sourceEvidence": "\"desktop_locate\"",
+      "reason": "Coordinate-space, command selector or adapter phase vocabulary; the actual failure is emitted separately from this descriptive token."
+    },
+    {
+      "code": "desktop_capture",
+      "source": "cli/src/native/desktop_capture.rs",
+      "sourceEvidence": "\"desktop_capture\"",
+      "reason": "Coordinate-space, command selector or adapter phase vocabulary; the actual failure is emitted separately from this descriptive token."
+    },
+    {
+      "code": "desktop_frame_capture",
+      "source": "cli/src/native/desktop_evidence_configured.rs",
+      "sourceEvidence": "\"desktop_frame_capture\"",
+      "reason": "Coordinate-space, command selector or adapter phase vocabulary; the actual failure is emitted separately from this descriptive token."
     }
   ],
   "fragments": [
@@ -10430,6 +11699,41 @@
     {
       "path": "cli/src/native/browser_session_host.rs",
       "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/desktop_locator.rs",
+      "codePattern": "(?:desktop_|browser_native_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/desktop_interaction.rs",
+      "codePattern": "(?:desktop_|browser_native_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/desktop_capture.rs",
+      "codePattern": "(?:desktop_|browser_native_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/desktop_prompt_perception.rs",
+      "codePattern": "(?:desktop_|browser_native_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/desktop_evidence_cdp.rs",
+      "codePattern": "(?:desktop_|browser_native_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/desktop_evidence_configured.rs",
+      "codePattern": "(?:desktop_|browser_native_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/controlled_x11_provider.rs",
+      "codePattern": "(?:desktop_|browser_native_)[a-z0-9_]+",
       "beforeNamedTestModule": true
     }
   ]
