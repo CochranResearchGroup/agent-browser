@@ -405,9 +405,7 @@ fn qualified_timestamp(
 }
 
 fn require_live_run(record: &ServiceAuthenticationRunRecord) -> Result<(), String> {
-    qualified_run_time(record)
-        .map(|_| ())
-        .map_err(|error| error.cli_message())
+    qualified_run_time(record).map(|_| ())
 }
 
 fn exact_current_handle(
