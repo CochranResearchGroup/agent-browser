@@ -1,3 +1,4 @@
+import { clientRecoveryFor } from './client-recovery.js';
 // @ts-check
 /** True for an explicit application refusal, including a nested owner result.
  * Absence of a success flag alone is not a refusal.
@@ -19,6 +20,7 @@ export function responseFailureError(response, fallback) {
   const code = typeof candidate === 'string' && /^[a-z][a-z0-9_]{0,127}$/.test(candidate) ? candidate : fallback;
   return Object.assign(new Error(code), {
     code, failure,
+    clientRecovery: {...clientRecoveryFor(fallback),ownerRecoveryAvailable:failure!==null},
     occurrenceId: failure?.occurrenceId ?? response?.data?.occurrenceId ?? response?.occurrenceId ?? null,
     requestId: response?.id ?? response?.error?.data?.requestId ?? null,
     response,

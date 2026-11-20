@@ -552,6 +552,246 @@
       },
       "resumeCondition": "The original remains failed-no-effect and immutable. A separately explicit new intent uses fresh owner-qualified observation and current authorization; pending/uncertain originals remain unresolved.",
       "maximumAutomaticAttempts": 1
+    },
+    "clientNativeOriginalOutcome": {
+      "rationale": "Read the exact original task operation. Preserve unknown/pending state and every original ID; no blind retry or checkpoint-to-ACK edit is allowed. Use the actual owner-provided reconciliation path when available. Restore the original configured checkpoint namespace if a host store was misselected; never fabricate history. A verified terminal no-effect result permits only a separately explicit fresh intent under current policy.",
+      "requiredActor": "caller_with_original_operation_scope",
+      "evidenceRequirement": "Exact original task/context and original operation identity where input may have occurred; source code/function and current owner observations. No guest timestamp or missing record proves no-effect.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "requestId": "$requestId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read the exact original task operation. Preserve unknown/pending state and every original ID; no blind retry or checkpoint-to-ACK edit is allowed. Use the actual owner-provided reconciliation path when available. Restore the original configured checkpoint namespace if a host store was misselected; never fabricate history. A verified terminal no-effect result permits only a separately explicit fresh intent under current policy.",
+          "precondition": "Original IDs come from retained checkpoint/owner records, not guesses. Any previous input must be reconciled before a new input.",
+          "interface": "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "requestId": "$requestId"
+          }
+        }
+      },
+      "resumeCondition": "Original owner outcome is verified; ACK remains ACK, failed-no-effect remains failed, and uncertain remains non-replayable.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientNativeTaskContext": {
+      "rationale": "Re-read the same task/control state and actual recent human activity. If another actor controls the desktop, use the existing owner handoff/return process and resume only after actual agent control is observed. If task/profile/tab/process identity changed, restore the original context or choose a separately explicit intent under its existing authority; never adopt a different identity merely to silence this check.",
+      "requiredActor": "agent_for_reads_or_actual_current_control_owner",
+      "evidenceRequirement": "Exact original task/context and original operation identity where input may have occurred; source code/function and current owner observations. No guest timestamp or missing record proves no-effect.",
+      "inspect": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Re-read the same task/control state and actual recent human activity. If another actor controls the desktop, use the existing owner handoff/return process and resume only after actual agent control is observed. If task/profile/tab/process identity changed, restore the original context or choose a separately explicit intent under its existing authority; never adopt a different identity merely to silence this check.",
+          "precondition": "Preserve task/profile/account scope. Interactive viewer mode alone is not proof of human input; current owner control is authoritative.",
+          "interface": "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Same task and physical/logical context are verified and the actual owner permits agent control.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientNativeObservation": {
+      "rationale": "Obtain a fresh owner native_capture for the same task/window and re-observe the exact target through the existing client. Preserve frame/geometry/hash/context checks and original input IDs. Owner service-time admission qualifies freshness; guest wall/boot clocks and model proposals do not. If the fresh response is still malformed or the target ambiguous, use the existing Native owner view/repair pathway rather than guessed coordinates or a new browser.",
+      "requiredActor": "agent_with_original_task_observation_scope",
+      "evidenceRequirement": "Exact original task/context and original operation identity where input may have occurred; source code/function and current owner observations. No guest timestamp or missing record proves no-effect.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Obtain a fresh owner native_capture for the same task/window and re-observe the exact target through the existing client. Preserve frame/geometry/hash/context checks and original input IDs. Owner service-time admission qualifies freshness; guest wall/boot clocks and model proposals do not. If the fresh response is still malformed or the target ambiguous, use the existing Native owner view/repair pathway rather than guessed coordinates or a new browser.",
+          "precondition": "Only observation may be repeated before original input outcome is known. A new observation is not permission to repeat an input.",
+          "interface": "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Fresh owner-qualified evidence matches the original task/window and an unambiguous supported target; original outcomes remain reconciled.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientNativePolicy": {
+      "rationale": "Read effective current site/provider/profile/task policy and source provenance. Refresh stale configured policy through the existing trusted resolvePolicy port. If policy actually denies the operation, preserve denial; use an already-authorized human workflow or ask the actual policy owner for a scoped decision. Do not edit observed records, substitute another account/provider or expand permissions to bypass this refusal.",
+      "requiredActor": "authorized_policy_owner_or_original_agent_for_reads",
+      "evidenceRequirement": "Exact original task/context and original operation identity where input may have occurred; source code/function and current owner observations. No guest timestamp or missing record proves no-effect.",
+      "inspect": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read effective current site/provider/profile/task policy and source provenance. Refresh stale configured policy through the existing trusted resolvePolicy port. If policy actually denies the operation, preserve denial; use an already-authorized human workflow or ask the actual policy owner for a scoped decision. Do not edit observed records, substitute another account/provider or expand permissions to bypass this refusal.",
+          "precondition": "Current policy and actor authority must be observed. Missing policy visibility is not permission and policy denial is not missing configuration.",
+          "interface": "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient"
+        }
+      ],
+      "verification": {
+        "tool": "browser_policy",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "Current authoritative policy permits the precise requested action within unchanged scope; otherwise that action stays denied while independent work may continue.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientNativeIndependentAccess": {
+      "rationale": "Re-read the intended account/organization and protected application through the existing independent verifyAccess/verifyClearance ports. If another account is signed in or access is denied, follow the current owner Auth workflow for the original intended identity. Filled controls, a model success marker or a changed expected-account setting cannot establish access.",
+      "requiredActor": "caller_with_independent_application_verification",
+      "evidenceRequirement": "Exact original task/context and original operation identity where input may have occurred; source code/function and current owner observations. No guest timestamp or missing record proves no-effect.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Re-read the intended account/organization and protected application through the existing independent verifyAccess/verifyClearance ports. If another account is signed in or access is denied, follow the current owner Auth workflow for the original intended identity. Filled controls, a model success marker or a changed expected-account setting cannot establish access.",
+          "precondition": "Keep the original intended account/organization and task binding; do not replace expected identity with whatever is visible.",
+          "interface": "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Independent same-context account/access evidence is verified and differs from mere provider/clearance success.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientNativeHumanReturn": {
+      "rationale": "Read actual control ownership. An actual operator takeover/return uses the existing native viewer Take control and view-only return flow. Record only observed epochs; do not fabricate a takeover receipt. If no person ever took control, keep normal agent ownership and use ordinary task observation/continuation after independent access verification rather than claiming human interference. Reconnect only the same durable handoff URL.",
+      "requiredActor": "agent_for_reads_or_authenticated_native_viewer",
+      "evidenceRequirement": "Exact original task/context and original operation identity where input may have occurred; source code/function and current owner observations. No guest timestamp or missing record proves no-effect.",
+      "inspect": {
+        "tool": "browser_control",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read actual control ownership. An actual operator takeover/return uses the existing native viewer Take control and view-only return flow. Record only observed epochs; do not fabricate a takeover receipt. If no person ever took control, keep normal agent ownership and use ordinary task observation/continuation after independent access verification rather than claiming human interference. Reconnect only the same durable handoff URL.",
+          "precondition": "Current task and actual owner are retained; viewer interactivity alone never establishes human activity.",
+          "interface": "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Agent control and independent application access are observed in the same context; no fake human epoch or provider URL is introduced.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientNativeSupportedCapability": {
+      "rationale": "Read current task and supported registered capability. An unsupported scene or exhausted registered image-round model does not authorize guessed input or a different registration. Continue through the existing authorized native human-assistance workflow or another explicitly supported task operation, retaining original IDs and browser context.",
+      "requiredActor": "agent_for_reads_or_authorized_native_operator",
+      "evidenceRequirement": "Exact original task/context and original operation identity where input may have occurred; source code/function and current owner observations. No guest timestamp or missing record proves no-effect.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read current task and supported registered capability. An unsupported scene or exhausted registered image-round model does not authorize guessed input or a different registration. Continue through the existing authorized native human-assistance workflow or another explicitly supported task operation, retaining original IDs and browser context.",
+          "precondition": "Existing owner policy must permit the alternate human or supported operation; no new credential/provider authority is granted.",
+          "interface": "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "The same browser task can continue through a supported, authorized workflow and original input history remains intact.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientNativeInputContract": {
+      "rationale": "Supply the named original task/request identity or trusted receiving-policy port through the existing advertised client constructor/method. Keep original IDs and owner-provided scope; do not mint an ID to disguise a previous attempt or fabricate a policy record.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Exact original task/context and original operation identity where input may have occurred; source code/function and current owner observations. No guest timestamp or missing record proves no-effect.",
+      "inspect": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "kind": "source_reference",
+        "precondition": "Inspect already-returned local code/source/function and the advertised caller argument contract; no file-read or installed-source tool availability is claimed."
+      },
+      "remediation": [
+        {
+          "instruction": "Supply the named original task/request identity or trusted receiving-policy port through the existing advertised client constructor/method. Keep original IDs and owner-provided scope; do not mint an ID to disguise a previous attempt or fabricate a policy record.",
+          "precondition": "This is a source-qualified local identity/configuration check. Any existing original operation still requires readback before input.",
+          "interface": "@agent-browser/client/challenge-assistance#createChallengeAssistanceClient"
+        }
+      ],
+      "verification": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "kind": "source_reference",
+        "precondition": "Inspect already-returned local code/source/function and the advertised caller argument contract; no file-read or installed-source tool availability is claimed."
+      },
+      "resumeCondition": "The advertised local argument contract passes within existing authorization.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -593,6 +833,10 @@
       "owningChecks": [
         {
           "path": "packages/client/src/native-saved-login.js"
+        },
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "call"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -604,6 +848,10 @@
       "owningChecks": [
         {
           "path": "packages/client/src/native-image-challenge.js"
+        },
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "call"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -963,6 +1211,14 @@
       "owningChecks": [
         {
           "path": "packages/client/src/native-saved-login.js"
+        },
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "remaining"
+        },
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "bounded"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -977,6 +1233,10 @@
         },
         {
           "path": "packages/client/src/client-wait-budget.js"
+        },
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -991,6 +1251,10 @@
         },
         {
           "path": "packages/client/src/client-wait-budget.js"
+        },
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -1002,6 +1266,14 @@
       "owningChecks": [
         {
           "path": "packages/client/src/native-saved-login.js"
+        },
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "original"
+        },
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -1013,6 +1285,10 @@
       "owningChecks": [
         {
           "path": "packages/client/src/native-image-challenge.js"
+        },
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -1024,11 +1300,951 @@
       "owningChecks": [
         {
           "path": "packages/client/src/challenge-assistance.js"
+        },
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "denied"
+    },
+    "native_saved_login_unverified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_saved_login_acknowledged_resume_unverified": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        },
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "call"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_saved_login_retained_identity_changed": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_saved_login_original_uncertain": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        },
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "original"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_saved_login_response_unverified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "call"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_saved_login_task_control_changed": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "briefing"
+        },
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_saved_login_task_binding_changed": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "briefing"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_saved_login_original_unverified": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "original"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_saved_login_retained_episode_required": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_saved_login_frame_unverified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "capture"
+        },
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_saved_login_native_binding_changed": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "capture"
+        },
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_saved_login_surface_unsupported": {
+      "recipe": "clientNativeSupportedCapability",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "native_saved_login_target_ambiguous": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_saved_login_filled_account_unverified": {
+      "recipe": "clientNativeIndependentAccess",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "native_saved_login_input_unknown": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_saved_login_input_requires_reconciliation": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_saved_login_access_unverified": {
+      "recipe": "clientNativeIndependentAccess",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "native_saved_login_observation_unavailable": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js",
+          "owningFunction": "createNativeSavedLoginClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_image_workflow_response_invalid": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "call"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_image_task_control_unverified": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "briefing"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_image_original_unverified": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "original"
+        },
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_image_frame_unverified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "image"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_image_policy_unverified": {
+      "recipe": "clientNativePolicy",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "sourcePolicy"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "native_image_stable_request_id_required": {
+      "recipe": "clientNativeInputContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "native_image_original_exists_do_not_replay": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_image_context_changed": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_image_observation_unqualified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_image_round_changed": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_image_selection_timeout": {
+      "recipe": "imageInvocationWait",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "native_image_selection_unqualified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_image_input_uncertain_or_refused": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_image_after_state_unverified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_image_clearance_unverified": {
+      "recipe": "clientNativeIndependentAccess",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "native_image_site_access_unverified": {
+      "recipe": "clientNativeIndependentAccess",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "native_image_continuation_changed": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_image_round_budget_exhausted": {
+      "recipe": "clientNativeSupportedCapability",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "native_image_workflow_unavailable_observe_original": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js",
+          "owningFunction": "createImageClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_workflow_response_invalid": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "call"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_task_required": {
+      "recipe": "clientNativeInputContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "observe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "challenge_task_identity_changed": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "observe"
+        },
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.recordTakeover"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_context_changed": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "observe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_native_evidence_unverified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "observe"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_original_operation_unverified": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "original"
+        },
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "challenge_receiving_policy_required": {
+      "recipe": "clientNativeInputContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "policy"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "challenge_policy_origin_unverified": {
+      "recipe": "clientNativePolicy",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "policy"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "challenge_policy_does_not_authorize_attempt": {
+      "recipe": "clientNativePolicy",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "policy"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "challenge_current_observation_unverified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "verifyCurrent"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_clearance_unverified": {
+      "recipe": "clientNativeIndependentAccess",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "verifyCurrent"
+        },
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.continueAfterReturn"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "site_access_unverified": {
+      "recipe": "clientNativeIndependentAccess",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "verifyCurrent"
+        },
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.continueAfterReturn"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "challenge_control_changed_during_verification": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "verifyCurrent"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_continuation_identity_changed": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "verifyCurrent"
+        },
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.continueAfterReturn"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_stable_request_id_required": {
+      "recipe": "clientNativeInputContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "original_attempt_retained_do_not_retry": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "challenge_control_not_agent": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        },
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.prepare"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_context_changed_during_passive_wait": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "passive_wait_budget_exhausted": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_policy_changed": {
+      "recipe": "clientNativePolicy",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "challenge_not_registered_checkbox": {
+      "recipe": "clientNativeSupportedCapability",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "registered_target_unqualified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_control_changed": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_input_uncertain_or_refused": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_input_not_acknowledged": {
+      "recipe": "clientNativeOriginalOutcome",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_owner_policy_unverified": {
+      "recipe": "clientNativePolicy",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "native_owner_policy_changed": {
+      "recipe": "clientNativePolicy",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "native_context_changed_after_dispatch": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_handoff_invalid": {
+      "recipe": "clientNativeHumanReturn",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.prepare"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_explicit_takeover_not_observed": {
+      "recipe": "clientNativeHumanReturn",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.recordTakeover"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_takeover_receipt_required": {
+      "recipe": "clientNativeHumanReturn",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.continueAfterReturn"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "explicit_return_not_observed": {
+      "recipe": "clientNativeHumanReturn",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.continueAfterReturn"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "native_target_changed": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.continueAfterReturn"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "observation_unverified": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.continueAfterReturn"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "control_changed_during_verification": {
+      "recipe": "clientNativeTaskContext",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.continueAfterReturn"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "challenge_intervention_required": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "createChallengeAssistanceClient.resolve"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "challenge_workflow_refused_observe_before_retry": {
+      "recipe": "clientNativeObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/challenge-assistance.js",
+          "owningFunction": "call"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
     }
   }
 }

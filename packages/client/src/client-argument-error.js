@@ -1,3 +1,4 @@
+import { clientRecoveryFor } from './client-recovery.js';
 // @ts-check
 /** Local validation refused before this helper dispatched an owner request.
  * This constructor is used only by reviewed input/configuration checks. Owner,
@@ -7,6 +8,7 @@
 export function clientArgumentError(message, source, owningFunction, checkedFields = []) {
   return Object.assign(new TypeError(message), {
     code: 'client_argument_invalid',
+    clientRecovery: clientRecoveryFor('client_argument_invalid',{source,owningFunction}),
     source, owningFunction,
     logging: { state: 'local_only', ownerOccurrenceId: null, reason: 'No owner request was dispatched by this validation. Use an existing caller observer if available; record only code, source and owningFunction, never arguments or credentials.' },
     recovery: {

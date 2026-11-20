@@ -1,3 +1,4 @@
+import { clientRecoveryFor } from './client-recovery.js';
 // @ts-check
 import { responseFailureError } from './response-failure.js';
 
@@ -12,6 +13,7 @@ export function clientOwnerFailure(error, code, response, source, owningFunction
   return Object.assign(error, {
     code: owner.code, failure: owner.failure, occurrenceId: owner.occurrenceId,
     source, owningFunction,
+    clientRecovery: {...clientRecoveryFor(code,{source,owningFunction}),ownerRecoveryAvailable:owner.failure!==null},
     logging: {state: owner.occurrenceId ? 'owner_occurrence_preserved' : 'local_only', ownerOccurrenceId: owner.occurrenceId},
     recovery: {
       schemaVersion: 'agent-browser.client-owner-recovery.v1', recipe,

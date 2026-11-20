@@ -48,7 +48,7 @@ assert.equal(lost.inputs.length,3);
 const unknown=fixture(),unknownBase=unknown.callTool;
 unknown.callTool=async(name,args)=>{if(args.action==='native_input'){unknown.inputs.push(args);throw Error('transport outcome unknown')}return unknownBase(name,args)};
 const unknownClient=createNativeSavedLoginClient({...unknown,expectedAccount:'configured@example.test',timeoutMs:60000});
-assert.equal((await unknownClient.resolve({taskId:'task',episodeId:'episode'})).status,'uncertain');
+const unknownFirst760=await unknownClient.resolve({taskId:'task',episodeId:'episode'});assert.equal(unknownFirst760.status,'uncertain');assert.equal(unknownFirst760.clientRecovery.coverage,'registered');assert.equal(unknownFirst760.clientRecovery.inspect.arguments.taskId,'task');assert.equal(unknownFirst760.clientRecovery.inspect.arguments.params.requestId,'episode:input1');
 assert.equal((await unknownClient.resolve({taskId:'task',episodeId:'episode'})).status,'uncertain');
 assert.equal(unknown.inputs.length,1);
 // Guest clock movement neither expires evidence nor authorizes uncertain replay.

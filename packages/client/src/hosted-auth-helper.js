@@ -37,8 +37,10 @@ async function installedAuthSdk(installationRoot){
   const installation={product:verified.product,contractVersion:verified.contractVersion,identity:verified.identity,sourceRevision:verified.sourceRevision};
   return{sdk,installation};
 }
-function installationFailure(error,producerErrors=[]){
-  if(['auth_sdk_incompatible','auth_sdk_invalid',...producerErrors].includes(error?.code))throw error;
+function installationFailure(error){
+  // A verified producer's typed context/policy refusal is not proof that its
+  // SDK installation is missing. Preserve its complete owner recovery object.
+  if(typeof error?.code==='string'&&/^auth_[a-z0-9_]{1,122}$/.test(error.code))throw error;
   throw Object.assign(Error('Standalone Auth Receipts client SDK is unavailable; install its verified client/current candidate before retrying'),{code:'auth_unavailable'});
 }
 
@@ -70,7 +72,7 @@ export async function connectEnrolledAuthHelper(options){
     const client=await sdk.createEnrolledAuthClient({discoveryFile,operationContext});
     if(typeof client?.call!=='function'||typeof client.callerTaskId!=='string'||!client.callerTaskId)throw Object.assign(Error('Installed Auth SDK returned an incompatible enrolled client'),{code:'auth_sdk_incompatible'});
     return ownerAuthHelper(client,installation,client.callerTaskId,sdk.followCredentialLogin,sdk.discoverLoginChannels);
-  }catch(error){return installationFailure(error,['auth_invalid_request','auth_unavailable','auth_not_authorized']);}
+  }catch(error){return installationFailure(error);}
 }
 
 /** Keep private login policy and uncertain-attempt handling identical for both

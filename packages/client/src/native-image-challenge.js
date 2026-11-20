@@ -1,3 +1,4 @@
+import { clientFailureError, withClientResultRecovery } from './client-recovery.js';
 import { clientWaitBudget } from './client-wait-budget.js';
 import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
@@ -26,7 +27,7 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
   if(captureRegion && (!['x','y','width','height'].every(key=>Number.isSafeInteger(captureRegion[key])) || captureRegion.width<=0 || captureRegion.height<=0 || captureRegion.x<0 || captureRegion.y<0))throw clientArgumentError('native_image_capture_region_invalid', "packages/client/src/native-image-challenge.js", "createImageClient", ["captureRegion"]);
   const regionRequest=captureRegion?structuredClone(captureRegion):null;
   const human=createChallengeAssistanceClient({callTool,resolvePolicy,verifyClearance,verifyAccess,now});
-  const fail=code=>{throw Error(code)};
+  const fail=(code,extra={})=>{throw clientFailureError(code,{...extra,source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient'})};
 
   const identity=value=>({taskId:value.taskId,profileId:value.profileId,browserId:value.browserId,tabId:value.tabId,targetId:value.targetId});
   const same=(a,b)=>fields.every(key=>typeof a?.[key]==='string'&&a[key]===b?.[key]);
@@ -45,8 +46,8 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
     try{
       const reply=/** @type {any} */(await callTool('browser_command',{taskId,action:'task_operation',params:{requestId}}));
       const text=reply?.content?.find(block=>block.type==='text')?.text;
-      if(typeof text!=='string'||text.length>8*1024*1024)fail('native_image_original_unverified');
-      let envelope;try{envelope=JSON.parse(text)}catch{fail('native_image_original_unverified')}
+      if(typeof text!=='string'||text.length>8*1024*1024)fail('native_image_original_unverified',{taskId,requestId});
+      let envelope;try{envelope=JSON.parse(text)}catch{fail('native_image_original_unverified',{taskId,requestId})}
       if(reply?.isError||envelope.success!==true||isResponseFailure(envelope)){if(missing(envelope.error)||missing(envelope.failure)||missing(envelope.data?.failure))return null;throw responseFailureError(envelope,'native_image_original_unverified')}
       response={data:envelope.data};
     }catch(error){
@@ -55,7 +56,7 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
       throw error;
     }
     const operation=response.data?.operation;
-    if(operation?.taskId!==taskId||operation.requestId!==requestId||operation.action!=='native_input')fail('native_image_original_unverified');return operation;
+    if(operation?.taskId!==taskId||operation.requestId!==requestId||operation.action!=='native_input')fail('native_image_original_unverified',{taskId,requestId});return operation;
   }
   function physical(frame){const c=frame.capture;return {desktopId:c?.desktopId,generation:c?.generation,windowId:c?.windowId,processIdentity:c?.processIdentity};}
   function image(frame,images) {
@@ -81,9 +82,9 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
       /** @type {Array<Record<string,unknown>>} */
       const roundOperations=[];
       /** @type {(reason:string)=>Promise<import("./native-image-challenge.d.ts").NativeImageResult>} */
-      const assist=async reason=>{try{const {verification:_previousVerification,...capsule}=await budget.run(()=>human.prepare({taskId}));return {...capsule,status:capsule.status==='awaiting_operator'?'awaiting_operator':'intervention',reason,originalOperation:retained,...(rounds?{roundOperations}:{}),retryAllowed:false}}catch{return {taskId,status:'intervention',reason,originalOperation:retained,...(rounds?{roundOperations}:{}),retryAllowed:false}}};
+      const assist=async reason=>{try{const {verification:_previousVerification,...capsule}=await budget.run(()=>human.prepare({taskId}));return withClientResultRecovery({...capsule,status:capsule.status==='awaiting_operator'?'awaiting_operator':'intervention',reason,originalOperation:retained,...(rounds?{roundOperations}:{}),retryAllowed:false},{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'})}catch{return withClientResultRecovery({taskId,status:'intervention',reason,originalOperation:retained,...(rounds?{roundOperations}:{}),retryAllowed:false},{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'})}};
       try {
-        retained=await budget.run(()=>original(taskId,requestId));if(retained?.state==='owner_refused_no_effect'){if(!fields.every(key=>typeof retained[key]==='string'&&retained[key]))fail('native_image_original_unverified');return {taskId,status:'failed_no_effect',reason:'native_image_original_refused_no_effect',originalOperation:retained,retryAllowed:false,recovery:{inspect:{interface:'@agent-browser/client/task-briefing#getTaskOperation',arguments:{taskId,requestId}},newIntent:{method:'resolve',requiredArguments:['newRequestId'],instruction:'After fresh owner task/capture observation, explicitly choose a new request ID within the same original profile and permission scope. The failed original remains non-replayable.'},resumeCondition:'Owner original readback remains failed-no-effect and the fresh owner context permits the newly explicit intent.'}};}if(retained){if(rounds){roundOperations.push(retained);const second=await budget.run(()=>original(taskId,requestId+':round2'));if(second)roundOperations.push(second)}return await assist('native_image_original_exists_do_not_replay');}
+        retained=await budget.run(()=>original(taskId,requestId));if(retained?.state==='owner_refused_no_effect'){if(!fields.every(key=>typeof retained[key]==='string'&&retained[key]))fail('native_image_original_unverified');return withClientResultRecovery({taskId,status:'failed_no_effect',reason:'native_image_original_refused_no_effect',originalOperation:retained,retryAllowed:false,recovery:{inspect:{interface:'@agent-browser/client/task-briefing#getTaskOperation',arguments:{taskId,requestId}},newIntent:{method:'resolve',requiredArguments:['newRequestId'],instruction:'After fresh owner task/capture observation, explicitly choose a new request ID within the same original profile and permission scope. The failed original remains non-replayable.'},resumeCondition:'Owner original readback remains failed-no-effect and the fresh owner context permits the newly explicit intent.'}},{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});}if(retained){if(rounds){roundOperations.push(retained);const second=await budget.run(()=>original(taskId,requestId+':round2'));if(second)roundOperations.push(second)}return withClientResultRecovery(await assist('native_image_original_exists_do_not_replay'),{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});}
         let previous=null, nextCapture=null, originalBinding=null;
         for(let roundIndex=1;roundIndex<=(rounds?2:1);roundIndex++) {
         const roundRequestId=roundIndex===1?requestId:requestId+':round2';
@@ -113,7 +114,7 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
         const input=await budget.run(()=>call('browser_command',{taskId,action:'native_input',requestId:roundRequestId,params:{imageAttempt:{observationRequestId,selectedCandidateIds:selected,...(rounds?{originalRequestId:requestId}:{})}}}));
         retained=await budget.run(()=>original(taskId,requestId));
         const delivered=await budget.run(()=>original(taskId,roundRequestId));if(delivered)roundOperations.push(delivered);
-        if(input.data?.source!=='remote_view_native'||input.data.delivery!=='dispatched'||delivered?.state!=='owner_acknowledged')return await assist('native_image_input_uncertain_or_refused');
+        if(input.data?.source!=='remote_view_native'||input.data.delivery!=='dispatched'||delivered?.state!=='owner_acknowledged')return withClientResultRecovery(await assist('native_image_input_uncertain_or_refused'),{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});
         const observed=await budget.run(()=>call('browser_command',{taskId,action:'native_capture',...(rounds&&roundIndex===1?{requestId:requestId+':observation2'}:{}),params:{classifyChallenges:true,...(rounds&&roundIndex===1?{registeredActionId:PROFILE,...(regionRequest?{imageCaptureScope:'complete_puzzle_region'}:{})}:{}),...(regionRequest?{region:regionRequest}:{})}})),fresh=observed.data,freshSha=image(fresh,observed.images);
         if(rounds && roundIndex===1 && fresh.challenge?.kind==='image_puzzle') {
           if(!isDeepStrictEqual(physical(frame),physical(fresh))||!isDeepStrictEqual(frame.windowBounds,fresh.windowBounds)||fresh.nativeControlEpoch!==observation.nativeControlEpoch)fail('native_image_round_changed');
@@ -125,10 +126,10 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
         const access=await budget.run(()=>verifyAccess(context));if(!verified(access,context)||access.evidenceRef===clearance.evidenceRef)fail('native_image_site_access_unverified');
         const latest=await budget.run(()=>briefing(taskId));if(!same(after,latest)||latest.control.epoch!==after.control.epoch)fail('native_image_context_changed');
         const continued=(await budget.run(()=>call('browser_continue',{taskId}))).data;if(!same(after,continued))fail('native_image_continuation_changed');
-        return {taskId,status:'verified_access_after_native_image',binding:identity(after),originalOperation:retained,...(rounds?{roundOperations}:{}),verification:{clearance:clearance.evidenceRef,access:access.evidenceRef,frameSha256:freshSha},continuation:continued,retryAllowed:false};
+        return withClientResultRecovery({taskId,status:'verified_access_after_native_image',binding:identity(after),originalOperation:retained,...(rounds?{roundOperations}:{}),verification:{clearance:clearance.evidenceRef,access:access.evidenceRef,frameSha256:freshSha},continuation:continued,retryAllowed:false},{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});
         }
-        return await assist('native_image_round_budget_exhausted');
-      }catch(error){try{retained=await budget.run(()=>original(taskId,requestId));const uncertain=await budget.run(()=>original(taskId,attemptedRequestId));if(uncertain&&!roundOperations.some(operation=>operation.requestId===attemptedRequestId))roundOperations.push(uncertain)}catch{}const message=String(error?.message??'');return {...await assist(/^native_image_[a-z_]+$/.test(message)?message:'native_image_workflow_unavailable_observe_original'),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{}),recovery:{inspect:{interface:'@agent-browser/client/task-briefing#getTaskOperation',arguments:{taskId,requestId:attemptedRequestId}},resumeCondition:'Inspect the exact original operation before another attempt; unknown input never replays. Caller wait expiry is not owner evidence expiry.'}};}finally{budget.close()}
+        return withClientResultRecovery(await assist('native_image_round_budget_exhausted'),{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});
+      }catch(error){try{retained=await budget.run(()=>original(taskId,requestId));const uncertain=await budget.run(()=>original(taskId,attemptedRequestId));if(uncertain&&!roundOperations.some(operation=>operation.requestId===attemptedRequestId))roundOperations.push(uncertain)}catch{}const message=String(error?.message??'');return withClientResultRecovery({...await assist(/^native_image_[a-z_]+$/.test(message)?message:'native_image_workflow_unavailable_observe_original'),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{}),...(error?.clientRecovery?{clientRecovery:error.clientRecovery}:{}),recovery:{inspect:{interface:'@agent-browser/client/task-briefing#getTaskOperation',arguments:{taskId,requestId:attemptedRequestId}},resumeCondition:'Inspect the exact original operation before another attempt; unknown input never replays. Caller wait expiry is not owner evidence expiry.'}},{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});}finally{budget.close()}
     },
   };
 }

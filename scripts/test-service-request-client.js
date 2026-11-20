@@ -3902,3 +3902,9 @@ assert.throws(()=>requireServiceTabHandle({success:true,data:{}}),error=>error i
 
 assert.throws(()=>requireServiceTabHandle({success:true,data:{},failure:nestedFailure760}),error=>error instanceof TypeError&&error.code===nestedFailure760.code&&error.failure===nestedFailure760&&error.occurrenceId==='failure-original-760'&&error.recovery.recipe==='serviceTabHandleReadback');
 assert.throws(()=>requireServiceRemoteViewHandoffUrl({success:true,data:{}}),error=>error.code==='client_service_handoff_url_missing'&&error.recovery.recipe==='serviceDurableHandoffReadback');
+
+const {clientRecoveryFor}=await import('../packages/client/src/client-recovery.js');
+const knownLocal760=clientRecoveryFor('client_argument_invalid',{source:'packages/client/src/service-request.js',owningFunction:'createServiceRequest'});
+assert.equal(knownLocal760.coverage,'registered');assert.equal(knownLocal760.inspect.interface,'caller_error');assert.equal(knownLocal760.automaticExecutionAllowed,false);
+const unknownLocal760=clientRecoveryFor('future_client_failure',{source:'client.js',owningFunction:'run',password:'private-canary-760',response:{secret:'private-canary-760'}});
+assert.equal(unknownLocal760.coverage,'unknown');assert.equal(unknownLocal760.automaticExecutionAllowed,false);assert.ok(!JSON.stringify(unknownLocal760).includes('private-canary-760'));assert.equal(unknownLocal760.packet.code,'future_client_failure');
