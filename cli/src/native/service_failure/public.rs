@@ -27,21 +27,35 @@ fn raw_producer_code(value: &str) -> Option<&str> {
 /// arbitrary provider prose is never promoted into a journal classification.
 fn registered_producer_code(error: &str) -> Option<&str> {
     let mut remaining = error;
+    let mut registered_wrapper = None;
     for _ in 0..4 {
-        let (wrapper, rest) = remaining.split_once(':')?;
+        let Some((wrapper, rest)) = remaining.split_once(':') else {
+            return registered_wrapper;
+        };
         if !matches!(
             wrapper,
             "workflow_transport_failed" | "workflow_transport_start_failed" | "workflow_cli_failed"
         ) {
-            return None;
+            return registered_wrapper;
         }
         let candidate = rest.split(':').next().unwrap_or_default();
         if super::recovery_registry::contains(candidate) {
-            return Some(candidate);
+            if matches!(
+                candidate,
+                "workflow_transport_failed"
+                    | "workflow_transport_start_failed"
+                    | "workflow_cli_failed"
+            ) {
+                // A newly registered transparent wrapper is fallback context,
+                // not a reason to hide a more specific registered owner cause.
+                registered_wrapper = Some(candidate);
+            } else {
+                return Some(candidate);
+            }
         }
         remaining = rest;
     }
-    None
+    registered_wrapper
 }
 
 /// Job readback is not a new refusal. Enrich retained failure contracts without
@@ -475,6 +489,7 @@ mod registry_projection_tests {
             Some("browser_task_operation_capacity_reached")
         );
         assert_eq!(registered_producer_code("workflow_transport_failed:workflow_transport_start_failed:browser_control_lock_unavailable:private details"), Some("browser_control_lock_unavailable"));
+        assert_eq!(registered_producer_code("workflow_transport_failed:workflow_transport_start_failed:unregistered_private_cause"), Some("workflow_transport_start_failed"));
         assert_eq!(
             registered_producer_code(
                 "workflow_transport_failed:SELECT private_value FROM private_table"
