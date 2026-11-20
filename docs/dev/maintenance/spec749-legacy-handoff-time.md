@@ -1,6 +1,6 @@
 # Legacy handoff retention time finding
 
-Product lane: platform
+Product lane: PL-PLATFORM
 
 Source finding for the single spec749 final review. This note is not runtime acceptance or authority to extend a retained link.
 
@@ -9,3 +9,8 @@ Source finding for the single spec749 final review. This note is not runtime acc
 Link retention is separate from viewer authentication, browser idle expiry and process custody. Disabling finite expiry or treating legacy guest starts as StableTime evidence would broaden policy. Merely substituting current service UTC cannot qualify a legacy start. `set_link_lifetime` and `extend_link_retention` currently check existing expiry first, so an explicit current-owner repair must be considered together with qualified mint/check semantics. Preserve the same durable handoff identity and independent authentication; do not issue a new provider URL or silently rewrite old expiry.
 
 The bounded final remediation should distinguish qualified future link evidence, unqualified legacy finite retention, an explicitly authorized same-link owner renewal, and unrelated perpetual-link/read operations. StableTime helper failure is not proof of Remote View service outage. Native input freshness repair in ticket761 does not qualify these link timestamps. The profile-recovery expiry finding belongs in the same final clock review. No fix for these link-retention boundaries is claimed by this note.
+
+
+## Resolved in bounded remediation767
+
+This historical finding is repaired by qualified immutable retentionTime origin/lifetime, current service bounds, explicit same-link set_link_lifetime renewal, independent authenticated return and typed read-only timeRecovery. Legacy finite time remains unqualified, not invented expiry. Atomic schema8 protects older readers and no-effect settlement cannot downgrade it. Failed-write/enclosing-rollback, retained projection and finite-link public cases pass in final source acceptance. See [closeout](spec749-closeout.md); no deployed-runtime claim is made.
