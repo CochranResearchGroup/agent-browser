@@ -15,6 +15,13 @@ fn code_token(value: &str) -> Option<&str> {
     .then_some(value)
 }
 
+// Raw prose is not a code namespace. Only reviewed producer identities may
+// become classifications from an untyped string; explicit typed owner codes
+// remain preserved independently by the public boundary.
+fn raw_producer_code(value: &str) -> Option<&str> {
+    code_token(value).filter(|code| super::recovery_registry::contains(code))
+}
+
 /// Known transparent transport wrappers must not mask an exact registered
 /// producer code. Unknown payloads keep the wrapper and its uncovered contract;
 /// arbitrary provider prose is never promoted into a journal classification.
@@ -64,7 +71,7 @@ fn project_job_recovery(job: &mut Value) {
             let mut failure = serde_json::to_value(classify_service_failure(error))
                 .expect("failure recourse serializes");
             if failure["code"] == "service_operation_failed" {
-                if let Some(code) = code_token(error.split(':').next().unwrap_or_default()) {
+                if let Some(code) = raw_producer_code(error.split(':').next().unwrap_or_default()) {
                     failure["code"] = json!(code);
                 }
             }
@@ -207,8 +214,10 @@ fn project_owner_operation_recovery(response: &mut Value, command: &Value, sourc
             serde_json::to_value(classify_service_failure(&error)).expect("recourse serializes")
         });
     if failure["code"] == "service_operation_failed" {
-        failure["code"] = json!(code_token(error.split(':').next().unwrap_or_default())
-            .unwrap_or("service_operation_failed"));
+        failure["code"] = json!(
+            raw_producer_code(error.split(':').next().unwrap_or_default())
+                .unwrap_or("service_operation_failed")
+        );
     }
     if busy {
         failure["effectState"] = json!("no_effect");
@@ -264,7 +273,7 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
         .to_owned();
     let candidate = registered_producer_code(&error)
         .unwrap_or_else(|| error.split(':').next().unwrap_or_default());
-    let code = code_token(candidate)
+    let code = raw_producer_code(candidate)
         .unwrap_or("service_operation_failed")
         .to_owned();
     if had_failure {
@@ -441,6 +450,22 @@ mod registry_projection_tests {
         assert_eq!(response, before);
     }
 
+    #[test]
+    fn unknown_lowercase_prose_is_not_promoted_into_public_log_codes() {
+        assert_eq!(raw_producer_code("privateword_canary"), None);
+        assert_eq!(
+            raw_producer_code("browser_task_operation_capacity_reached"),
+            Some("browser_task_operation_capacity_reached")
+        );
+        let mut job = json!({"id":"original", "state":"failed", "error":"privateword_canary"});
+        project_job_recovery(&mut job);
+        assert_eq!(job["failure"]["code"], "service_operation_failed");
+        assert!(!job["failure"].to_string().contains("privateword_canary"));
+        let mut typed = json!({"id":"typed", "state":"failed", "failure":{"code":"typed_owner_future_code", "effectState":"effect_uncertain"}});
+        project_job_recovery(&mut typed);
+        assert_eq!(typed["failure"]["code"], "typed_owner_future_code");
+        assert_eq!(typed["failure"]["effectState"], "effect_uncertain");
+    }
     #[test]
     fn transparent_wrapper_retains_registered_capacity_cause_only() {
         assert_eq!(
