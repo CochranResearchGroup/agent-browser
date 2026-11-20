@@ -658,6 +658,42 @@ mod tests {
     }
 
     #[test]
+    fn newer_soft_viewer_activity_supersedes_only_soft_claims() {
+        let mut state = Control::default();
+        begin(&mut state, "invitation", "target").unwrap();
+        claim(
+            &mut state,
+            "invitation",
+            "target",
+            "viewer-a:activity-a",
+            false,
+        )
+        .unwrap();
+        claim(
+            &mut state,
+            "invitation",
+            "target",
+            "viewer-b:activity-b",
+            false,
+        )
+        .unwrap();
+        assert_eq!(viewer_claims(&state).len(), 1);
+        assert_eq!(coordination_metadata(&state)["activityViewerCount"], 1);
+        claim(&mut state, "invitation", "target", "viewer-a:take-a", true).unwrap();
+        claim(
+            &mut state,
+            "invitation",
+            "target",
+            "viewer-b:activity-c",
+            false,
+        )
+        .unwrap();
+        assert_eq!(coordination_metadata(&state)["explicitViewerCount"], 1);
+        assert_eq!(coordination_metadata(&state)["activityViewerCount"], 1);
+        assert!(state.human);
+    }
+
+    #[test]
     fn explicit_reopen_rebinds_its_own_hold_without_taking_another_hold() {
         let mut state = Control::default();
         begin(&mut state, "same-link", "closed-target").unwrap();
