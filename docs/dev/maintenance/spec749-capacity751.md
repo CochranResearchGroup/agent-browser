@@ -71,3 +71,36 @@ git diff --check pass. The coordinator will run combined source validation,
 including strict Clippy and the two focused tests, after integration. Archive
 failure/concurrency behavior is transactionally implemented but not yet qualified
 by executed Rust tests in this packet.
+
+## Headless launch-proof acceptance blocker
+
+The coordinator's public disposable workflow reached browser_open and capacity
+configuration but refused its first tracked page operation. Public mode readback
+reported original_identity_unavailable. The retained synthetic runtime had no
+Native launch-custody document or qualified adoption record. Source inspection
+confirmed that the ordinary launcher already captured immutable process identity
+while holding its original unreaped child, but ordinary unassigned launches did
+not retain that observation for task-operation mode inspection. This is distinct
+from a changed process or a human-control refusal.
+
+The launch adapter now retains that exact captured observation as a per-launch
+identity document through the existing launch-custody SQLite adapter. There is
+no second registry service, no inferred Native assignment and no later OS read
+substituted for the missing original. Document keys bind browser ID, PID and CDP
+endpoint; readback also binds profile and checks the current browser record.
+Conflicting immutable records are not overwritten. Existing Native launch-ledger
+and qualified-adoption guards remain intact. A missing original on an existing
+task remains unverified and needs supported explicit recovery.
+
+The source test headless_original_identity_survives_restart_without_accepting_replacement_or_native_custody
+uses the existing real SQLite test seam. It covers positive retained identity,
+read-only reopening, profile/PID/endpoint/desktop replacement rejection, immutable
+conflict rejection and missing-evidence preservation. This packet adds no test
+harness or browser-launch fixture. Source rustfmt and patch hygiene pass; the
+coordinator owns combined compile, focused regression and public workflow rerun.
+
+The producer also retains its existing bounded mode.reason in the refusal,
+reports that no new effect was dispatched and names supported mode inspection,
+task briefing and explicit mode-conversion recovery. It reuses the already
+obtained observation rather than performing another process scan. Raw synthetic
+runtime receipts remain outside Git.

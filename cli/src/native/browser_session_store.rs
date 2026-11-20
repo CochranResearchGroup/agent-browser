@@ -1859,6 +1859,97 @@ mod tests {
     }
 
     #[test]
+    fn headless_original_identity_survives_restart_without_accepting_replacement_or_native_custody()
+    {
+        let directory = TempDirectory::new("headless-original-identity");
+        let database = directory.0.join("runtime.sqlite3");
+        let connection = Connection::open(&database).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let mut store = BrowserSessionSqliteStore { connection };
+        let mut state = BrowserSessionState::default();
+        let browser = ManagedBrowserInstance {
+            id: "headless".into(),
+            profile_id: "profile".into(),
+            pid: 42,
+            cdp_endpoint: "ws://127.0.0.1:9/devtools/browser/original".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        state.browsers.insert(browser.id.clone(), browser.clone());
+        store.save_session_state(&state).unwrap();
+        assert_eq!(store.original_browser_identity(&state, &browser), None);
+        let mut launch = agent_browser_service_model::BrowserLaunch {
+            browser_id: browser.id.clone(),
+            pid: browser.pid,
+            cdp_endpoint: browser.cdp_endpoint.clone(),
+            desktop: None,
+            process_identity: Some(agent_browser_service_model::RecordedProcessIdentity {
+                pid: 42,
+                start_token: "boot:original".into(),
+                executable_path: Some("/fixture/chrome".into()),
+                browser_family: Some("chrome".into()),
+            }),
+        };
+        store
+            .retain_headless_launch_process("profile", &launch)
+            .unwrap();
+        drop(store);
+        let reader = BrowserSessionSqliteStore::open_read_only(&database).unwrap();
+        let original = reader.original_browser_identity(&state, &browser).unwrap();
+        assert_eq!(original.start_token, "boot:original");
+        drop(reader);
+        let mut writer = BrowserSessionSqliteStore::open(&directory.0).unwrap();
+        for changed in ["profile", "pid", "endpoint", "desktop"] {
+            let mut replacement = browser.clone();
+            match changed {
+                "profile" => replacement.profile_id = "peer".into(),
+                "pid" => replacement.pid += 1,
+                "endpoint" => replacement.cdp_endpoint.push_str("-replacement"),
+                _ => {
+                    replacement.desktop =
+                        Some(agent_browser_service_model::RemoteViewFixedDesktop {
+                            desktop_id: "native".into(),
+                            generation: 1,
+                            friendly_route_label: String::new(),
+                        })
+                }
+            }
+            state
+                .browsers
+                .insert(browser.id.clone(), replacement.clone());
+            writer.save_session_state(&state).unwrap();
+            assert_eq!(
+                writer.original_browser_identity(&state, &replacement),
+                None,
+                "{changed}"
+            );
+        }
+        state.browsers.insert(browser.id.clone(), browser.clone());
+        writer.save_session_state(&state).unwrap();
+        launch.process_identity.as_mut().unwrap().start_token = "boot:reused".into();
+        assert!(writer
+            .retain_headless_launch_process("profile", &launch)
+            .unwrap_err()
+            .contains("identity_conflict"));
+        assert_eq!(
+            writer.original_browser_identity(&state, &browser).unwrap(),
+            original
+        );
+        launch.browser_id = "missing-original".into();
+        launch.process_identity = None;
+        writer
+            .retain_headless_launch_process("profile", &launch)
+            .unwrap();
+        let missing = ManagedBrowserInstance {
+            id: launch.browser_id.clone(),
+            ..browser
+        };
+        state.browsers.insert(missing.id.clone(), missing.clone());
+        writer.save_session_state(&state).unwrap();
+        assert_eq!(writer.original_browser_identity(&state, &missing), None);
+    }
+
+    #[test]
     fn existing_profile_original_identity_requires_exact_retained_adoption_provenance() {
         let directory = TempDirectory::new("adoption-original-identity");
         let connection = Connection::open(directory.0.join("runtime.sqlite3")).unwrap();

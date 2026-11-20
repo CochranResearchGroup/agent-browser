@@ -412,7 +412,18 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
     let expected = context(&state, task_id)?;
     let mode = reader.inspect_task_mode(task_id)?;
     if mode["mode"] == "unverified" {
-        return Err("browser_task_operation_process_unverified: inspect current task; do not relaunch to discover an outcome".into());
+        let reason = match mode["reason"].as_str() {
+            Some("original_identity_unavailable") => "original_identity_unavailable",
+            Some("process_unavailable") => "process_unavailable",
+            Some("process_identity_changed") => "process_identity_changed",
+            Some("command_line_unavailable") => "command_line_unavailable",
+            Some("not_browser_root") => "not_browser_root",
+            Some("process_changed_during_observation") => "process_changed_during_observation",
+            Some("owner_changed_during_observation") => "owner_changed_during_observation",
+            Some("retained_debugger_endpoint") => "retained_debugger_endpoint",
+            _ => "observation_unavailable",
+        };
+        return Err(format!("browser_task_operation_process_unverified: reason={reason}; no new effect dispatched; inspect browser_command action=mode for this task, then inspect task_briefing and original operations; missing original proof requires supported explicit mode_convert prepare/confirm recovery, never implicit adoption or replay"));
     }
     let key = key(has_history)?;
     let fingerprint = hex::encode(mac(&key, command)?.finalize().into_bytes());
