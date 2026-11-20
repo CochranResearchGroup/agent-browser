@@ -7533,6 +7533,18 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "stale"
+    },
+    "service_tab_handle_unavailable": {
+      "recipe": "serviceTabHandleReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-request.js",
+          "owningFunction": "classifyServiceControlPlaneAuthority"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     }
   },
   "externalToolContract": "docs/dev/contracts/client-external-owner-tools.v1.json"

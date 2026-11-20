@@ -1,6 +1,6 @@
 import { clientOwnerFailure } from './client-owner-failure.js';
 import { clientArgumentError } from './client-argument-error.js';
-import { isResponseFailure } from './response-failure.js';
+import { isResponseFailure, responseFailureError } from './response-failure.js';
 // @ts-check
 
 import {
@@ -460,12 +460,26 @@ export function deriveServiceRemoteViewHandoffResumeIntent(response) {
  *   missingProofs: string[],
  *   reason: string | null,
  *   serviceTabHandle: ServiceTabHandle | null,
+ *   clientRecovery?: Record<string, any>,
+ *   failure?: unknown,
+ *   occurrenceId?: string | null,
+ *   logging?: unknown,
  * }}
  */
 export function classifyServiceControlPlaneAuthority(response) {
   const handle = getServiceTabHandle(response);
   if (!handle || handle.valid === false) {
+    // This is a local authority projection, not proof of an operation outcome.
+    // Keep owner evidence separate from the original stale-reason diagnostic.
+    const owner = responseFailureError(response, 'service_tab_handle_unavailable', {
+      source: 'packages/client/src/service-request.js',
+      owningFunction: 'classifyServiceControlPlaneAuthority',
+    });
     return {
+      ...Object.fromEntries(['failure', 'occurrenceId', 'logging', 'loggingReceipt',
+        'recoveryPlan', 'executableNextAction', 'recoveryRegistry', 'uncertainty', 'requestId']
+        .filter(key => Object.hasOwn(owner, key)).map(key => [key, owner[key]])),
+      clientRecovery: owner.clientRecovery,
       mode: 'unavailable',
       observationCapable: false,
       effectCapable: false,

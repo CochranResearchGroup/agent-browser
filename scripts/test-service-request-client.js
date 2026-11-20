@@ -2044,14 +2044,28 @@ async function main() {
       serviceTabHandle: tabHandle,
     },
   );
-  assert.deepEqual(classifyServiceControlPlaneAuthority({ success: true, data: {} }), {
-    mode: 'unavailable',
-    observationCapable: false,
-    effectCapable: false,
-    missingProofs: [],
-    reason: 'service_tab_handle_unavailable',
-    serviceTabHandle: null,
-  });
+  const unavailableAuthority = classifyServiceControlPlaneAuthority({ success: true, data: {} });
+  assert.equal(unavailableAuthority.mode, 'unavailable');
+  assert.equal(unavailableAuthority.reason, 'service_tab_handle_unavailable');
+  assert.equal(unavailableAuthority.effectCapable, false);
+  assert.equal(unavailableAuthority.clientRecovery.coverage, 'registered');
+  assert.equal(unavailableAuthority.clientRecovery.recipe, 'serviceTabHandleReadback');
+  assert.equal(unavailableAuthority.clientRecovery.automaticExecutionAllowed, false);
+  assert.equal(unavailableAuthority.occurrenceId, null);
+  assert.equal(unavailableAuthority.clientRecovery.logging.state, 'not_attempted');
+  const staleOwnerFailure = {code: 'owner_scope_refused', occurrenceId: 'original-occurrence', logging: {state: 'recorded'}};
+  const staleOwnerPlan = {originalRequestId: 'original-request'};
+  const staleAuthority = classifyServiceControlPlaneAuthority({success: true, data: {
+    serviceTabHandle: {...tabHandle, valid: false, staleReason: 'tab_closed'},
+    failure: staleOwnerFailure, recoveryPlan: staleOwnerPlan, uncertainty: 'retained',
+  }});
+  assert.equal(staleAuthority.reason, 'service_tab_handle_unavailable:tab_closed');
+  assert.equal(staleAuthority.failure, staleOwnerFailure);
+  assert.equal(staleAuthority.occurrenceId, staleOwnerFailure.occurrenceId);
+  assert.equal(staleAuthority.logging, staleOwnerFailure.logging);
+  assert.equal(staleAuthority.recoveryPlan, staleOwnerPlan);
+  assert.equal(staleAuthority.uncertainty, 'retained');
+  assert.equal(staleAuthority.clientRecovery.code, 'service_tab_handle_unavailable');
   const diagnosticsAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
   await getServiceTabDiagnostics({
     baseUrl: 'http://127.0.0.1:4849',

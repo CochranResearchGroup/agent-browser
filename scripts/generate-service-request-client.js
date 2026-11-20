@@ -1000,6 +1000,17 @@ export interface ServiceRemoteViewHandoffResumeIntent {
 }
 
 export interface ServiceControlPlaneAuthoritySummary {
+  /** Local guidance is separate from any retained authoritative owner failure. */
+  clientRecovery?: Record<string, unknown>;
+  failure?: unknown;
+  occurrenceId?: string | null;
+  logging?: unknown;
+  loggingReceipt?: unknown;
+  recoveryPlan?: unknown;
+  executableNextAction?: unknown;
+  recoveryRegistry?: unknown;
+  uncertainty?: unknown;
+  requestId?: string | null;
   mode: "unavailable" | "observation_only" | "effect_capable";
   observationCapable: boolean;
   effectCapable: boolean;
