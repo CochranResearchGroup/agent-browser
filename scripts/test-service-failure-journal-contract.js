@@ -459,7 +459,15 @@ function validateRecoveryCall(call) {
   }
   if (call.interface === 'cli') {
     assert.equal(call.command, 'agent-browser', 'Recovery command must use the current Agent Browser executable');
-    assert(['["--help"]', '["--json","install","doctor"]', '["install","workstation","--dry-run","--runtime-replacement-policy","preserve","--json"]'].includes(JSON.stringify(call.arguments)), `Unavailable recovery CLI arguments ${JSON.stringify(call.arguments)}`);
+    const stateValidate = JSON.stringify(call.arguments) === '["--json","service","state","validate","--path","$statePath"]';
+    assert(stateValidate || ['["--help"]', '["--json","install","doctor"]', '["install","workstation","--dry-run","--runtime-replacement-policy","preserve","--json"]'].includes(JSON.stringify(call.arguments)), `Unavailable recovery CLI arguments ${JSON.stringify(call.arguments)}`);
+    if(stateValidate) {
+      assert(call.precondition?.length > 10,'State validation requires a reviewed original absolute path binding');
+      const commands = readFileSync('cli/src/commands.rs','utf8');
+      assert(commands.includes('service state validate --path <absolute-path> [--json]') && commands.includes('"action": "service_state_validate"'),'Missing advertised state validation grammar');
+      assert(readFileSync('cli/src/main.rs','utf8').includes('native::service_state_validation::dispatch_service_state_validation(&cmd)'),'State validator must remain public local dispatch');
+      assert(readFileSync('cli/src/native/service_state_validation.rs','utf8').includes('Some(validate_service_state_path(&PathBuf::from(path)))'),'State validator must inspect only the provided path');
+    }
     assert(readFileSync('cli/src/output.rs', 'utf8').includes('agent-browser install doctor'), 'Independent no-launch doctor must remain advertised');
     if (call.arguments[0] === 'install' && call.arguments[1] === 'workstation') assert(readFileSync('cli/src/connection.rs','utf8').includes(`agent-browser ${call.arguments.join(' ')}`), 'Preserve-mode read must match the existing advertised runtime recovery command');
     return;
