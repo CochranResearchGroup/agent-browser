@@ -2134,7 +2134,7 @@ fn close_all_scope_issue(flags: &Flags) -> Option<CloseScopeIssue> {
 fn print_close_scope_issue(issue: &CloseScopeIssue, json_mode: bool) {
     // This exact scope parser rejects before any close dispatch; it says
     // nothing about a previous close or any other retained operation.
-    let mut response = cli_failure_payload(&issue.message, Some("usage_error"));
+    let mut response = cli_failure_payload(issue.message, Some("usage_error"));
     response["code"] = json!(issue.code);
     response["suggestion"] = json!(issue.suggestion);
     response["failure"] = json!({"code":issue.code,"axis":"request","phase":"ingress_validation",
