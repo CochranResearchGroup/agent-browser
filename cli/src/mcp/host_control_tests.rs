@@ -366,7 +366,14 @@ fn terminal_control611_public_target_process_epoch_races_preserve_original() {
 
 #[test]
 fn terminal_request619_public_completed_ordinary_request_with_live_supervisor_reconciles() {
-    for action in ["click", "evaluate"] {
+    for (action, created, completed) in [
+        ("click", 1_u64, 2_u64),
+        ("evaluate", 1, 2),
+        // A guest UTC correction changes diagnostic ordering, not the owner's
+        // terminal dispatcher/original proof or permission to observe it.
+        ("fill", 2_000, 1_000),
+        ("type", 1_000, 2_000),
+    ] {
         let f = fixture();
         let crate::process_identity::ProcessObservation::Observed(owner) =
             crate::process_identity::observe_process(std::process::id())
@@ -378,7 +385,7 @@ fn terminal_request619_public_completed_ordinary_request_with_live_supervisor_re
         std::fs::write(control::path("browser").unwrap(), original.to_string()).unwrap();
         BrowserSessionSqliteStore::default_sqlite().unwrap().mutate_session_state(|state| {
         let identity = state.adopted_browser_process_identities["browser"].process.clone();
-        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":action,"fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":1,"completedAtMs":2,"evidenceReferences":{}});
+        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":action,"fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":created,"completedAtMs":completed,"evidenceReferences":{}});
         state.task_operations.entry("task".into()).or_default().insert("original".into(), serde_json::from_value(value).unwrap());
         Ok(())
     }).unwrap();
@@ -388,7 +395,24 @@ fn terminal_request619_public_completed_ordinary_request_with_live_supervisor_re
             read_control()["flights"]["original"],
             "observed_uncertain_no_replay"
         );
-        assert_eq!(f.commands.lock().unwrap().len(), 1);
+        let commands = f.commands.lock().unwrap();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(
+            commands[0]["action"], "url",
+            "Reconciliation observes, never redispatches {action}"
+        );
+        let retained = BrowserSessionSqliteStore::default_sqlite()
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        let original = &retained.task_operations["task"]["original"];
+        assert_eq!(
+            original.state,
+            agent_browser_service_model::BrowserTaskOperationState::Uncertain
+        );
+        assert_eq!(original.action, action);
+        assert_eq!(original.created_at_ms, created);
+        assert_eq!(original.completed_at_ms, Some(completed));
     }
 }
 
@@ -397,6 +421,7 @@ fn terminal_request619_public_incomplete_or_private_request_keeps_live_dispatch_
     for case in [
         "pending",
         "native",
+        "unregistered_action",
         "missing_completion",
         "epoch",
         "target",
@@ -413,7 +438,7 @@ fn terminal_request619_public_incomplete_or_private_request_keeps_live_dispatch_
         std::fs::write(control::path("browser").unwrap(), original.to_string()).unwrap();
         BrowserSessionSqliteStore::default_sqlite().unwrap().mutate_session_state(|state| {
         let identity = state.adopted_browser_process_identities["browser"].process.clone();
-        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":"click","fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":1,"completedAtMs":2,"evidenceReferences":{}});
+        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":"fill","fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":1,"completedAtMs":2,"evidenceReferences":{}});
         state.task_operations.entry("task".into()).or_default().insert("original".into(), serde_json::from_value(value).unwrap());
         Ok(())
     }).unwrap();
@@ -437,6 +462,7 @@ fn terminal_request619_public_incomplete_or_private_request_keeps_live_dispatch_
                                 agent_browser_service_model::BrowserTaskOperationState::Pending
                         }
                         "native" => row.action = "native_input".into(),
+                        "unregistered_action" => row.action = "unreviewed_private_input".into(),
                         "missing_completion" => row.completed_at_ms = None,
                         "epoch" => row.control_epoch = 1,
                         "target" => row.target_id = "other".into(),
