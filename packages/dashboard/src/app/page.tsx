@@ -1,4 +1,7 @@
 "use client";
+import {dashboardResponseFailureError} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import { managedWorkspaceViewport } from "@/lib/managed-workspace";
 import { useEffect, useState } from "react";
@@ -31,9 +34,7 @@ import {
   readDashboardWorkspaceUrlSelection,
 } from "@/lib/workspace-url-selection";
 import {
-  hashOpaqueIdentifier,
   installDashboardFetchFailureInstrumentation,
-  reportDashboardFailure,
 } from "@/lib/failure-observation";
 import { WorkspaceAuthGate } from "@/components/workspace-auth-gate";
 import { fetchSharedRuntimeHealth } from "@/lib/dashboard-api";
@@ -327,7 +328,7 @@ function remoteViewHandoffIdFromPath(pathname: string): string | null {
   if (!match?.[1]) return null;
   try {
     return decodeURIComponent(match[1]);
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"page.tsx");
     return null;
   }
 }
@@ -607,14 +608,14 @@ function DashboardDiagnostics({ section, user, onLogout }: {
       try {
         const response = await fetchSharedRuntimeHealth();
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+          throw dashboardResponseFailureError(await response.clone().json().catch(()=>({success:false})),"dashboard_runtime_read_unavailable",{source:"packages/dashboard/src/app/page.tsx",owningFunction:"checkRuntimeHealth",...{}});
         }
         const health = await response.json() as RuntimeHealth;
         const issue = workstationConvergenceIssue(health);
         if (!cancelled) {
           setRuntimeHealth({ loading: false, health, issue });
         }
-      } catch (error) {
+      } catch (error) {void reportDashboardComponentFailure(error,"page.tsx");
         if (!cancelled) {
           const message = error instanceof Error ? error.message : String(error);
           setRuntimeHealth({
@@ -637,7 +638,7 @@ function DashboardDiagnostics({ section, user, onLogout }: {
       try {
         const response = await fetch("/api/runtime/manifest", { cache: "no-store" });
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+          throw dashboardResponseFailureError(await response.clone().json().catch(()=>({success:false})),"dashboard_runtime_read_unavailable",{source:"packages/dashboard/src/app/page.tsx",owningFunction:"DashboardDiagnostics",...{}});
         }
         const manifest = await response.json() as RuntimeManifest;
         if (!cancelled) {
@@ -647,7 +648,7 @@ function DashboardDiagnostics({ section, user, onLogout }: {
             issue: runtimeManifestIssue(manifest),
           });
         }
-      } catch (error) {
+      } catch (error) {void reportDashboardComponentFailure(error,"page.tsx");
         if (!cancelled) {
           const message = error instanceof Error ? error.message : String(error);
           setRuntimeManifest({

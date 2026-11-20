@@ -1,4 +1,7 @@
 "use client";
+import {dashboardConfirmationFailure,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import { useRef, useState } from "react";
 import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
@@ -53,10 +56,10 @@ function DurationPolicy({ record, onUpdated, policy }: Props & { policy: Policy 
           && typeof requested === "number" && Number.isSafeInteger(requested) && requested >= 0
           && (duration === 0 ? expires === null : typeof expires === "number" && Number.isSafeInteger(expires) && expires - requested === duration);
       }
-      if (data?.handoffId !== record.handoffId || data.status !== spec.status || !receiptMatches) throw new Error("unconfirmed_policy_receipt");
+      if ((data?.handoffId !== record.handoffId || data.status !== spec.status || !receiptMatches) || responseFailureMetadata(reply)) throw dashboardConfirmationFailure(reply,"unconfirmed_policy_receipt",{source:"packages/dashboard/src/components/native-handoff-policies.tsx",owningFunction:"save",...{handoffId:record.handoffId}});
       setSaved(true);
       await onUpdated();
-    } catch { setFailed(true); }
+    } catch (error) {void reportDashboardComponentFailure(error,"native-handoff-policies.tsx"); setFailed(true); }
     finally { pending.current = false; setBusy(false); }
   };
   return <form aria-label={spec.label} className="native-handoff-policy" onSubmit={event => { event.preventDefault(); void save(); }}>

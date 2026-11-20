@@ -1,4 +1,7 @@
 'use client';
+import {dashboardConfirmationFailure,dashboardLocalFailure} from "@/lib/response-failure";
+
+
 import {useCallback,useEffect,useState} from 'react';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import {ProfileLibrary} from '@/components/profile-library';
@@ -19,14 +22,14 @@ export function WorkspaceLibraryDialog({open,onOpenChange,initialSection,source,
  const context:TeachingContext|null=task&&site&&(account.trim()||accountUnknown)&&(organization.trim()||personal)?{...task,sitePolicyId:site,account:accountUnknown?'':account.trim(),organization:personal?'':organization.trim()}:null;
  const interpret=useCallback(async(packet:Record<string,unknown>)=>{
   const request=packet.agentRequest;
-  if(!request||typeof request!=='object'||Array.isArray(request))throw Error('Teaching agent request is unavailable. Refresh the original source packet.');
+  if(!request||typeof request!=='object'||Array.isArray(request))throw dashboardLocalFailure(Error('Teaching agent request is unavailable. Refresh the original source packet.'),"dashboard_teaching_context_invalid","packages/dashboard/src/components/workspace-library-dialog.tsx","WorkspaceLibraryDialog");
   const result=await requestSiteGuides({...request as Record<string,unknown>,operation:'request_agent'});
   if(result.status==='saved'&&typeof result.guideId==='string')return {guideId:result.guideId};
   if(['unavailable','unknown','pending','not_observed'].includes(result.status))return {
    status:result.status, reason:typeof result.reason==='string'?result.reason:undefined,
    modelCallState:result.modelCallState, newSubmissionAllowed:result.newSubmissionAllowed===true,
   };
-  throw Error('The original interpretation is not confirmed. Inspect its original operation before continuing.');
+  throw dashboardConfirmationFailure(result,"dashboard_teaching_interpretation_unconfirmed",{source:"packages/dashboard/src/components/workspace-library-dialog.tsx",owningFunction:"WorkspaceLibraryDialog",...{operationId:(request as Record<string,unknown>).operationId,taskId:(request as Record<string,unknown>).taskId}});
  },[]);
  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="native-task-dialog workspace-library"><DialogHeader><DialogTitle>Profiles and SiteGuides</DialogTitle><DialogDescription>Intended site identities and retained authentication evidence remain separate.</DialogDescription></DialogHeader>
  <nav aria-label="Library sections"><button type="button" aria-pressed={section==='profiles'} onClick={()=>setSection('profiles')}>Profiles</button><button type="button" aria-pressed={section==='guides'} onClick={()=>setSection('guides')}>SiteGuides</button><button type="button" aria-pressed={section==='lab'} disabled={!profiles.length&&!source} onClick={()=>setSection('lab')}>Profile Lab</button></nav>

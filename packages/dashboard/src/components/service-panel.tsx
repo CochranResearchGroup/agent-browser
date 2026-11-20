@@ -1,4 +1,7 @@
 "use client";
+import {dashboardResponseFailureError,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1762,7 +1765,7 @@ function TraceExplorer({
     try {
       await navigator.clipboard.writeText(value);
       setCopyStatus(`Copied ${label}.`);
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
       setCopyStatus(`Clipboard unavailable. Select the ${label} text and copy it manually.`);
     }
   }, []);
@@ -2756,7 +2759,7 @@ function urlOriginLabel(value?: string | null): string | null {
   if (!value) return null;
   try {
     return new URL(value).origin;
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
     return null;
   }
 }
@@ -2974,7 +2977,7 @@ function initialBrowserLifecycleFilter(): BrowserLifecycleFilter {
   try {
     const stored = window.localStorage.getItem(BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY);
     return isBrowserLifecycleFilter(stored) ? stored : "actionable";
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
     return "actionable";
   }
 }
@@ -2988,7 +2991,7 @@ function initialBrowserTableColumns(): BrowserTableColumnKey[] {
     if (!Array.isArray(parsed)) return DEFAULT_BROWSER_TABLE_COLUMNS;
     const columns = parsed.filter(isBrowserTableColumnKey);
     return columns.length > 0 ? columns : DEFAULT_BROWSER_TABLE_COLUMNS;
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
     return DEFAULT_BROWSER_TABLE_COLUMNS;
   }
 }
@@ -3007,7 +3010,7 @@ function initialBrowserTableColumnWidths(): Record<BrowserTableColumnId, number>
       if (width) widths[key] = width;
     }
     return widths;
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
     return DEFAULT_BROWSER_TABLE_COLUMN_WIDTHS;
   }
 }
@@ -3017,7 +3020,7 @@ function initialBrowserTableDensity(): BrowserTableDensity {
   try {
     const stored = window.localStorage.getItem(BROWSER_TABLE_DENSITY_STORAGE_KEY);
     return isBrowserTableDensity(stored) ? stored : "standard";
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
     return "standard";
   }
 }
@@ -3406,7 +3409,7 @@ function BrowserTable({
   useEffect(() => {
     try {
       window.localStorage.setItem(BROWSER_TABLE_LIFECYCLE_FILTER_STORAGE_KEY, lifecycleFilter);
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
       // Restricted storage should not break the live service dashboard.
     }
   }, [lifecycleFilter]);
@@ -3414,7 +3417,7 @@ function BrowserTable({
   useEffect(() => {
     try {
       window.localStorage.setItem(BROWSER_TABLE_VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
       // Restricted storage should not break the live service dashboard.
     }
   }, [visibleColumns]);
@@ -3422,7 +3425,7 @@ function BrowserTable({
   useEffect(() => {
     try {
       window.localStorage.setItem(BROWSER_TABLE_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
       // Restricted storage should not break the live service dashboard.
     }
   }, [columnWidths]);
@@ -3430,7 +3433,7 @@ function BrowserTable({
   useEffect(() => {
     try {
       window.localStorage.setItem(BROWSER_TABLE_DENSITY_STORAGE_KEY, density);
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
       // Restricted storage should not break the live service dashboard.
     }
   }, [density]);
@@ -3545,7 +3548,7 @@ function BrowserTable({
     setRowLimit(BROWSER_TABLE_INITIAL_ROW_LIMIT);
     try {
       BROWSER_TABLE_VIEW_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"service-panel.tsx");
       // Restricted storage should not block the in-memory reset.
     }
   };
@@ -5524,7 +5527,7 @@ function ProfileLeaseActionDialog({
       setResult(response);
       if (action !== "reconcile" && action !== "recover") setCapability("");
       await onCompleted();
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : `Profile lease ${action} failed`);
     } finally {
       setPending(false);
@@ -5554,7 +5557,7 @@ function ProfileLeaseActionDialog({
       setCapability("");
       setReconcilePlan(null);
       await onCompleted();
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : "Profile lease reconciliation apply failed");
     } finally {
       setPending(false);
@@ -5584,7 +5587,7 @@ function ProfileLeaseActionDialog({
       setCapability("");
       setRecoveryPlan(null);
       await onCompleted();
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : "Profile lease recovery apply failed");
     } finally {
       setPending(false);
@@ -5751,7 +5754,7 @@ function ProfileLifecycleActionDialog({
         setSealedPlan((response as { plan?: Record<string, unknown> }).plan ?? null);
       }
       setResult(response);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : `Profile ${action} failed`);
     } finally {
       setPending(false);
@@ -5784,7 +5787,7 @@ function ProfileLifecycleActionDialog({
       setCapability("");
       setSealedPlan(null);
       await onCompleted();
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : `Profile ${action} apply failed`);
     } finally {
       setPending(false);
@@ -7292,9 +7295,9 @@ export function ServicePanel({
       const profileLeasesJson = profileLeasesResp?.ok
         ? ((await profileLeasesResp.json()) as ApiResponse<ServiceProfileLeasesData>)
         : null;
-      if (!statusJson.success) throw new Error(statusJson.error || "Service status failed");
-      if (!jobsJson.success) throw new Error(jobsJson.error || "Service jobs failed");
-      if (!eventsJson.success) throw new Error(eventsJson.error || "Service events failed");
+      if ((!statusJson.success) || responseFailureMetadata(statusJson)) throw dashboardResponseFailureError(statusJson,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
+      if ((!jobsJson.success) || responseFailureMetadata(jobsJson)) throw dashboardResponseFailureError(jobsJson,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
+      if ((!eventsJson.success) || responseFailureMetadata(eventsJson)) throw dashboardResponseFailureError(eventsJson,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       setStatus(statusJson.data ?? null);
       setJobs(jobsJson.data ?? null);
       setEvents(eventsJson.data ?? null);
@@ -7302,7 +7305,7 @@ export function ServicePanel({
       setResources(resourcesJson?.success ? resourcesJson.data ?? null : null);
       setContracts(contractsJson?.success ? contractsJson.data ?? null : null);
       setProfileLeases(profileLeasesJson?.success ? profileLeasesJson.data ?? null : null);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : "Service API unavailable");
     } finally {
       serviceFetchInFlightRef.current = false;
@@ -7336,9 +7339,9 @@ export function ServicePanel({
       const params = traceQueryParams(filters);
       const resp = await fetch(`${serviceBase(activePort)}/trace?${params.toString()}`);
       const json = (await resp.json()) as ApiResponse<ServiceTraceData | ServiceTraceToolPayload>;
-      if (!json.success) throw new Error(json.error || "Service trace failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       setTrace(normalizeServiceTraceData(json.data));
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setTraceError(err instanceof Error ? err.message : "Service trace unavailable");
     } finally {
       setTraceLoading(false);
@@ -7377,7 +7380,7 @@ export function ServicePanel({
     fetch(`${serviceBase(activePort)}/incidents/${encodeURIComponent(selectedIncident.id)}/activity`)
       .then(async (resp) => {
         const json = (await resp.json()) as ApiResponse<ServiceIncidentActivityData>;
-        if (!json.success) throw new Error(json.error || "Service incident activity failed");
+        if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
         if (!cancelled) {
           setSelectedIncidentActivity(json.data?.activity ?? []);
         }
@@ -7414,14 +7417,14 @@ export function ServicePanel({
     try {
       const resp = await fetch(`${serviceBase(activePort)}/jobs/${encodeURIComponent(job.id)}`);
       const json = (await resp.json()) as ApiResponse<ServiceJobsData>;
-      if (!json.success) throw new Error(json.error || "Service job lookup failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       const selected = json.data?.job ?? job;
       if (onInspectSelection) {
         onInspectSelection({ kind: "job", job: selected });
       } else {
         setSelectedJob(selected);
       }
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       if (onInspectSelection) {
         onInspectSelection({ kind: "job", job });
       } else {
@@ -7476,7 +7479,7 @@ export function ServicePanel({
           setSelectedProfileAllocation(selected);
         }
       }
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       if (profileAllocationLookupId.current === lookupId) {
         if (onInspectSelection) {
           onInspectSelection({ kind: "profile", allocation });
@@ -7514,10 +7517,10 @@ export function ServicePanel({
         body: JSON.stringify(runtimeProfileConfigPayload(profile, form)),
       });
       const json = (await resp.json()) as ApiResponse<{ profile?: ServiceProfileRecord }>;
-      if (!json.success) throw new Error(json.error || "Service profile save failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       setSelectedProfileConfig(null);
       await fetchService(false);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setProfileConfigError(err instanceof Error ? err.message : "Service profile save unavailable");
     } finally {
       setProfileConfigSaving(false);
@@ -7552,10 +7555,10 @@ export function ServicePanel({
         }),
       });
       const json = (await resp.json()) as ApiResponse<ServiceJobsData>;
-      if (!json.success) throw new Error(json.error || "Profile access-policy request failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       setSelectedProfileConfig(null);
       await fetchService(false);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setProfileConfigError(err instanceof Error ? err.message : "Profile access-policy request unavailable");
     } finally {
       setProfilePolicySaving(false);
@@ -7572,11 +7575,11 @@ export function ServicePanel({
         method: "DELETE",
       });
       const json = (await resp.json()) as ApiResponse<{ deleted?: boolean; profile?: ServiceProfileRecord }>;
-      if (!json.success) throw new Error(json.error || "Service profile delete failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       setSelectedProfileConfig(null);
       if (selectedProfileAllocationId === profileId) setSelectedProfileAllocationId(null);
       await fetchService(false);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setProfileConfigError(err instanceof Error ? err.message : "Service profile delete unavailable");
     } finally {
       setProfileConfigDeleting(false);
@@ -7599,12 +7602,12 @@ export function ServicePanel({
         method: "POST",
       });
       const json = (await resp.json()) as ApiResponse<ServiceJobsData & { cancelled?: boolean }>;
-      if (!json.success) throw new Error(json.error || "Service job cancel failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       const selected = json.data?.job ?? { ...job, error: "Cancellation requested" };
       setSelectedJob(selected);
       await fetchService(false);
       return selected;
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : "Service job cancel unavailable");
       return null;
     }
@@ -7630,11 +7633,11 @@ export function ServicePanel({
         { method: "POST" },
       );
       const json = (await resp.json()) as ApiResponse<{ incident?: ServiceIncident }>;
-      if (!json.success) throw new Error(json.error || `Service incident ${action} failed`);
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       if (closeDialog) setSelectedIncident(null);
       await fetchService(false);
       return true;
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : `Service incident ${action} unavailable`);
       return false;
     } finally {
@@ -8412,7 +8415,7 @@ export function ServicePanel({
         if (!json.success) {
           focusMessage = json.error || "Remote-view focus request was not accepted; opening the stream anyway.";
         }
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
         focusMessage = err instanceof Error
           ? `Remote-view focus request failed: ${err.message}`
           : "Remote-view focus request failed; opening the stream anyway.";
@@ -8443,9 +8446,9 @@ export function ServicePanel({
         }),
       });
       const json = (await resp.json()) as ApiResponse<ServiceBrowserCloseData>;
-      if (!json.success) throw new Error(json.error || "Service browser close request failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       await fetchService(false);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : "Service browser close request failed");
     } finally {
       setActingBrowserActionId(null);
@@ -8473,9 +8476,9 @@ export function ServicePanel({
         }),
       });
       const json = (await resp.json()) as ApiResponse<ServiceBrowserRepairData>;
-      if (!json.success) throw new Error(json.error || "Service browser repair request failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       await fetchService(false);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : "Service browser repair request failed");
     } finally {
       setActingBrowserActionId(null);
@@ -8503,9 +8506,9 @@ export function ServicePanel({
         }),
       });
       const json = (await resp.json()) as ApiResponse<{ plan?: ServiceBrowserRetirementPlan }>;
-      if (!json.success || !json.data?.plan) throw new Error(json.error || "Browser retirement plan was not returned");
+      if ((!json.success || !json.data?.plan) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       setBrowserRetirementPlan(json.data.plan);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : "Browser retirement planning failed");
     } finally {
       setActingBrowserActionId(null);
@@ -8530,11 +8533,11 @@ export function ServicePanel({
         }),
       });
       const json = (await resp.json()) as ApiResponse<{ receipt?: ServiceBrowserRetirementReceipt }>;
-      if (!json.success || !json.data?.receipt) throw new Error(json.error || "Browser retirement receipt was not returned");
+      if ((!json.success || !json.data?.receipt) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       setBrowserRetirementReceipt(json.data.receipt);
       setBrowserRetirementPlan(null);
       await fetchService(false);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : "Browser retirement apply failed");
     } finally {
       setActingBrowserActionId(null);
@@ -8569,14 +8572,14 @@ export function ServicePanel({
         }),
       });
       const json = (await resp.json()) as ApiResponse<ServiceRetentionPruneData>;
-      if (json.success === false) throw new Error(json.error || "Retained-state prune request failed");
+      if ((json.success === false) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/components/service-panel.tsx",owningFunction:"ServicePanel",...{}});
       const result = (json.data ?? json) as ServiceRetentionPruneData;
       setRetainedPruneResult(result);
       if (apply) {
         await fetchService(false);
         selectWorkspaceTab("browsers");
       }
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
       setError(err instanceof Error ? err.message : "Retained-state prune request failed");
     } finally {
       setRetainedPruneAction(null);
@@ -8619,7 +8622,7 @@ export function ServicePanel({
         if (!json.success) {
           focusMessage = json.error || "Remote-view focus request was not accepted; opening the stream anyway.";
         }
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"service-panel.tsx");
         focusMessage = err instanceof Error
           ? `Remote-view focus request failed: ${err.message}`
           : "Remote-view focus request failed; opening the stream anyway.";

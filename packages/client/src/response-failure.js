@@ -24,7 +24,7 @@ export function responseFailureError(response, fallback, context={}) {
       state:'unavailable',scope:'owner_journal',ownerOccurrenceId:failure?.occurrenceId??response?.data?.occurrenceId??response?.occurrenceId??null,
       reason:'The owner response supplied no journal custody. This local adapter did not submit a journal record.',
     },
-    ...Object.fromEntries(["recoveryPlan","executableNextAction","recoveryRegistry","uncertainty"].map(key=>[key,response?.[key]??response?.data?.[key]??response?.error?.data?.[key]]).filter(([,value])=>value!==undefined)),
+    ...Object.fromEntries(["recoveryPlan","executableNextAction","recoveryRegistry","loggingReceipt","uncertainty"].map(key=>[key,response?.[key]??response?.data?.[key]??response?.error?.data?.[key]]).filter(([,value])=>value!==undefined)),
     clientRecovery: {...clientRecoveryFor(context.localRecoveryCode??fallback,context),ownerRecoveryAvailable:failure!==null},
     occurrenceId: failure?.occurrenceId ?? response?.data?.occurrenceId ?? response?.occurrenceId ?? null,
     requestId: response?.id ?? response?.error?.data?.requestId ?? null,

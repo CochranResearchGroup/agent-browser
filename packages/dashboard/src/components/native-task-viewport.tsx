@@ -1,4 +1,7 @@
 "use client";
+import {dashboardConfirmationFailure} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -69,14 +72,14 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
         if (generation.current !== current) return;
         const url = new URL(handoff.handoffUrl, window.location.href);
         if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
-          throw new Error("native_handoff_url_invalid");
+          throw dashboardConfirmationFailure(handoff,"native_handoff_url_invalid",{source:"packages/dashboard/src/components/native-task-viewport.tsx",owningFunction:"NativeTaskViewport",...{handoffId:handoff.handoffId}});
         }
         // The handoff performs exact authorized focus. Another tab on this
         // desktop does not require navigating the already connected viewer.
         setView(previous => ({ identity, desktopIdentity, status: "opened",
           url: previous?.desktopIdentity === desktopIdentity && previous.url ? previous.url : url.toString(),
         }));
-      } catch (error) {
+      } catch (error) {void reportDashboardComponentFailure(error,"native-task-viewport.tsx");
         const failure = error instanceof ServiceOperationError || error instanceof ServiceRequestHttpError
           ? error.failure : null;
         const accessCheckRequired = failure?.code === "operator_focus_profile_policy_denied"
@@ -131,7 +134,7 @@ export function NativeTaskViewport({ target, unverifiedTarget = null, hasSelecti
               const body = frame.contentDocument?.body;
               if (!body) failure = "viewer-access";
               if (body?.id === "viewer" && body.dataset.workspace === "true") return;
-            } catch {
+            } catch (error) {void reportDashboardComponentFailure(error,"native-task-viewport.tsx");
               // Cross-origin redirects and blocked frames are unverified access,
               // not evidence that authentication expired or the desktop ended.
               failure = "viewer-access";

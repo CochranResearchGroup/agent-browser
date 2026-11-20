@@ -1,4 +1,6 @@
 "use client";
+import {dashboardResponseFailureError,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai/react";
@@ -127,9 +129,9 @@ export function useSelectedWorkspaceContext(
           if (resourcesGeneration.current === resourceGeneration) setServiceResources(null);
         });
         const statusResponse = await (inventoryOnly ? fetchSharedWorkspaceStatus(revalidate) : fetchSharedServiceStatus(revalidate));
-        if (!statusResponse.ok) throw new Error(`HTTP ${statusResponse.status}`);
+        if (!statusResponse.ok) throw dashboardResponseFailureError(await statusResponse.clone().json().catch(()=>({success:false})),"dashboard_service_owner_failure",{source:"packages/dashboard/src/hooks/use-selected-workspace-context.ts",owningFunction:"useSelectedWorkspaceContext"});
         const json = (await statusResponse.json()) as ApiResponse<ServiceStatusData>;
-        if (!json.success) throw new Error(json.error || "Service status unavailable");
+        if (!json.success || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_service_owner_failure",{source:"packages/dashboard/src/hooks/use-selected-workspace-context.ts",owningFunction:"useSelectedWorkspaceContext"});
         nextPollInterval.current = inventoryOnly
           ? startupInterval.current(json.data?.browserRuntime?.workspace) : 3000;
         const token = json.data?.browserRuntime?.workspace?.observedAtMs;
@@ -145,6 +147,7 @@ export function useSelectedWorkspaceContext(
         setError(null);
         setRefreshedAt(Date.now());
       } catch (err) {
+        void reportDashboardComponentFailure(err,"use-selected-workspace-context.ts");
         nextPollInterval.current = startupInterval.current();
         setError(err instanceof Error ? err.message : "Service status unavailable");
         setServiceResources(null);

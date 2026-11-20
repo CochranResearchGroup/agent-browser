@@ -1,6 +1,6 @@
 {
   "schemaVersion": "agent-browser.client-error-qualification.v1",
-  "scope": "Finite exported-package JavaScript failure candidate partition plus reviewed caller normalizations/routine results and all explicit dashboard src/lib throw/reject/error-construction boundaries. Arbitrary future/foreign owner codes remain visible unknown with separate original-context recourse; visual components/routes/hooks are not silently included.",
+  "scope": "Finite exported-client error/result partition and complete explicit throw/reject/error-construction partition under dashboard src, including components, app, hooks, lib and store. Unknown future owner codes remain visible with separate original-context recourse; source qualification is distinct from installed runtime acceptance.",
   "checks": [
     {
       "path": "packages/client/src/native-saved-login.js",
@@ -10790,7 +10790,7 @@
     "registeredFailureOccurrences": 404,
     "positiveOrHistoricalAnnotations": 13,
     "nestedOrCaughtDiagnostics": 19,
-    "publicClientCodes": 408,
+    "publicClientCodes": 435,
     "runtimeArtifactContainsAuditCatalog": false,
     "reviewRequirement": "Exact source-anchor and aggregate candidate-count validation is required before ticket acceptance. A source audit row alone does not prove runtime acceptance or availability of an external owner interface."
   },
@@ -11168,6 +11168,7 @@
   "dashboardBoundaryInventory": {
     "scope": "All explicit throw/reject and Error/TypeError/RangeError/DOMException/DashboardReadPausedError/ManualBrowserLaunchRefusal construction under dashboard src/lib only. Visual components/routes/hooks are not silently included.",
     "modulePaths": [
+      "packages/dashboard/src/lib/browser-operation-readback.ts",
       "packages/dashboard/src/lib/dashboard-api.ts",
       "packages/dashboard/src/lib/dashboard-auth-status.ts",
       "packages/dashboard/src/lib/dashboard-read-coordinator.ts",
@@ -11212,8 +11213,2108 @@
       "packages/dashboard/src/lib/workspace-viewport-controller.ts",
       "packages/dashboard/src/lib/workspace-viewport-state.ts"
     ],
-    "candidateCount": 82,
+    "candidateCount": 84,
     "entries": [
+      {
+        "path": "packages/dashboard/src/lib/browser-operation-readback.ts",
+        "owningFunction": "inspectDashboardBrowserOperation",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new TypeError('Use the original browser operation inspection action and scope; mutation choices are not accepted.'),'dashboard_browser_inspection_scope_invalid','packages/dashboard/src/lib/browser-operation-readback.ts','inspectDashboardBrowserOperation')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/browser-operation-readback.ts",
+        "owningFunction": "inspectDashboardBrowserOperation",
+        "kind": "error_constructor",
+        "expression": "new TypeError('Use the original browser operation inspection action and scope; mutation choices are not accepted.')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Dashboard authentication status attempts must be a positive integer\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/dashboard-auth-status.ts\",\"fetchDashboardAuthStatus\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Dashboard authentication status attempts must be a positive integer\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Dashboard authentication status timeout must be positive\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/dashboard-auth-status.ts\",\"fetchDashboardAuthStatus\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Dashboard authentication status timeout must be positive\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Dashboard authentication status retry delay cannot be negative\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/dashboard-auth-status.ts\",\"fetchDashboardAuthStatus\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Dashboard authentication status retry delay cannot be negative\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Dashboard authentication status request failed\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Workspace sign-in redirect: reopen this workspace through its authenticated public URL.\"),\"dashboard_auth_redirect\",\"packages/dashboard/src/lib/dashboard-auth-status.ts\",\"fetchDashboardAuthStatus\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Workspace sign-in redirect: reopen this workspace through its authenticated public URL.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(`Dashboard authentication status returned HTTP ${response.status}`)",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(lastError as Error,\"dashboard_auth_status_unavailable\",\"packages/dashboard/src/lib/dashboard-auth-status.ts\",\"fetchDashboardAuthStatus\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-read-coordinator.ts",
+        "owningFunction": "module.read",
+        "kind": "throw",
+        "expression": "new DashboardReadPausedError()",
+        "classification": "registered_intentional_read_suspension",
+        "recourse": "dashboard_read_paused; foreground same document and existing visibilitychange read-poll continuation"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-read-coordinator.ts",
+        "owningFunction": "module.read",
+        "kind": "error_constructor",
+        "expression": "new DashboardReadPausedError()",
+        "classification": "registered_intentional_read_suspension",
+        "recourse": "dashboard_read_paused; foreground same document and existing visibilitychange read-poll continuation"
+      },
+      {
+        "path": "packages/dashboard/src/lib/failure-observation.ts",
+        "owningFunction": "installDashboardFetchFailureInstrumentation",
+        "kind": "throw",
+        "expression": "error",
+        "classification": "preserved_original_error_propagation",
+        "recourse": "Observer reports only allowlisted code/source/occurrence projection, then rethrows original error; logger availability is separate from operation outcome."
+      },
+      {
+        "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+        "owningFunction": "fetchForeignCdpScreenshot",
+        "kind": "throw",
+        "expression": "foreignCdpFailure(payload, `Foreign CDP capture returned HTTP ${response.status}.`)",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+        "owningFunction": "fetchForeignCdpScreenshot",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Foreign CDP capture did not include image data.\"),\"foreign_cdp_capture_invalid\",\"packages/dashboard/src/lib/foreign-cdp-control.ts\",\"fetchForeignCdpScreenshot\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+        "owningFunction": "fetchForeignCdpScreenshot",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Foreign CDP capture did not include image data.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+        "owningFunction": "foreignCdpJsonRequest",
+        "kind": "throw",
+        "expression": "foreignCdpFailure(payload,\n      typeof payload.error === \"string\"\n        ? payload.error\n        : `Foreign CDP control returned HTTP ${response.status}.`,\n    )",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "newShareAttemptId",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole connection-sharing attempt identity cannot be generated securely\"),\"dashboard_guacamole_secure_identity_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"newShareAttemptId\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "newShareAttemptId",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole connection-sharing attempt identity cannot be generated securely\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "guacamoleSharingRoot",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole connection-sharing origin is unavailable\"),\"dashboard_guacamole_origin_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"guacamoleSharingRoot\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "guacamoleSharingRoot",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole connection-sharing origin is unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "readJson",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError({success:false}, \"guacamole_response_invalid\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "readJson",
+        "kind": "throw",
+        "expression": "error",
+        "classification": "preserved_original_error_propagation",
+        "recourse": "Guacamole adapter rethrows its complete typed original owner failure/occurrence/plan; explicit terminal recovery precondition remains required."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "waitForElection",
+        "kind": "reject",
+        "expression": "reject(signal.reason ?? new DOMException(\"Aborted\", \"AbortError\"))",
+        "classification": "explicit_caller_abort_not_owner_failure_or_replay_authority",
+        "recourse": "Honor original signal cancellation; a separately explicit fresh read may use a new live signal. Never replay uncertain input."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "waitForElection",
+        "kind": "error_constructor",
+        "expression": "new DOMException(\"Aborted\", \"AbortError\")",
+        "classification": "explicit_caller_abort_not_owner_failure_or_replay_authority",
+        "recourse": "Honor original signal cancellation; a separately explicit fresh read may use a new live signal. Never replay uncertain input."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "waitForElection",
+        "kind": "reject",
+        "expression": "reject(signal?.reason ?? new DOMException(\"Aborted\", \"AbortError\"))",
+        "classification": "explicit_caller_abort_not_owner_failure_or_replay_authority",
+        "recourse": "Honor original signal cancellation; a separately explicit fresh read may use a new live signal. Never replay uncertain input."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "waitForElection",
+        "kind": "error_constructor",
+        "expression": "new DOMException(\"Aborted\", \"AbortError\")",
+        "classification": "explicit_caller_abort_not_owner_failure_or_replay_authority",
+        "recourse": "Honor original signal cancellation; a separately explicit fresh read may use a new live signal. Never replay uncertain input."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "recoverGuacamolePrimary",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole primary binding is incomplete\"),\"dashboard_guacamole_binding_incomplete\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"recoverGuacamolePrimary\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "recoverGuacamolePrimary",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole primary binding is incomplete\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "recoverGuacamolePrimary",
+        "kind": "throw",
+        "expression": "error",
+        "classification": "preserved_original_error_propagation",
+        "recourse": "Guacamole adapter rethrows its complete typed original owner failure/occurrence/plan; explicit terminal recovery precondition remains required."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "recoverGuacamolePrimary",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole recovered primary identity is unavailable\"),\"dashboard_guacamole_recovered_identity_unverified\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"recoverGuacamolePrimary\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "recoverGuacamolePrimary",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole recovered primary identity is unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole primary binding is incomplete\"),\"dashboard_guacamole_binding_incomplete\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole primary binding is incomplete\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole backend primary identity is unavailable\"),\"dashboard_guacamole_primary_identity_unverified\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole backend primary identity is unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole header authentication returned no token\"),\"dashboard_guacamole_authentication_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole header authentication returned no token\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole simultaneous-view sharing profile is unavailable\"),\"dashboard_guacamole_sharing_profile_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole simultaneous-view sharing profile is unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole connection-sharing returned no usable key\"),\"dashboard_guacamole_sharing_key_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole connection-sharing returned no usable key\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole connection-sharing attempt identity is unavailable\"),\"dashboard_guacamole_attempt_identity_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole connection-sharing attempt identity is unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole backend primary sharing timed out\"),\"dashboard_guacamole_wait_budget_exhausted\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole backend primary sharing timed out\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(Object.assign(new Error(stringField(serviceRequest, \"reason\") || \"Access plan service request is not available.\"),dashboardResponseFailureError({...serviceRequest,success:false},\"dashboard_access_plan_unavailable\")),\"dashboard_access_plan_unavailable\",\"packages/dashboard/src/lib/launcher-eligibility.ts\",\"createLauncherServiceRequestFromAccessPlan\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "error_constructor",
+        "expression": "new Error(stringField(serviceRequest, \"reason\") || \"Access plan service request is not available.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(Object.assign(new Error(stringField(serviceRequest, \"reason\") || \"Access plan requires manual profile seeding before launch.\"),dashboardResponseFailureError({...serviceRequest,success:false},\"dashboard_access_plan_seeding_required\")),\"dashboard_access_plan_seeding_required\",\"packages/dashboard/src/lib/launcher-eligibility.ts\",\"createLauncherServiceRequestFromAccessPlan\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "error_constructor",
+        "expression": "new Error(stringField(serviceRequest, \"reason\") || \"Access plan requires manual profile seeding before launch.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(`Access plan service request action ${plannedAction || \"unknown\"} is not launchable.`),\"dashboard_access_plan_action_unsupported\",\"packages/dashboard/src/lib/launcher-eligibility.ts\",\"createLauncherServiceRequestFromAccessPlan\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "error_constructor",
+        "expression": "new Error(`Access plan service request action ${plannedAction || \"unknown\"} is not launchable.`)",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherSessionArgsFromAccessPlan",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"A session name is required for workspace launch.\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/launcher-eligibility.ts\",\"createLauncherSessionArgsFromAccessPlan\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherSessionArgsFromAccessPlan",
+        "kind": "error_constructor",
+        "expression": "new Error(\"A session name is required for workspace launch.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "requiredRecord",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(`Missing ${label}.`),\"dashboard_access_plan_response_invalid\",\"packages/dashboard/src/lib/launcher-eligibility.ts\",\"requiredRecord\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "requiredRecord",
+        "kind": "error_constructor",
+        "expression": "new Error(`Missing ${label}.`)",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+        "owningFunction": "loadManualBrowserCatalog",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(p,'browser_choices_unconfirmed')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+        "owningFunction": "readOpened",
+        "kind": "throw",
+        "expression": "Object.assign(new ManualBrowserLaunchRefusal('No browser was created. Review the choices before trying again.'),dashboardResponseFailureError(p,'manual_browser_launch_refused_no_effect'))",
+        "classification": "typed_owner_proven_no_effect_failure_preserved",
+        "recourse": "manual_browser_launch_refused_no_effect exact original lookup; no automatic new ID/launch"
+      },
+      {
+        "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+        "owningFunction": "readOpened",
+        "kind": "error_constructor",
+        "expression": "new ManualBrowserLaunchRefusal('No browser was created. Review the choices before trying again.')",
+        "classification": "typed_owner_proven_no_effect_failure_preserved",
+        "recourse": "manual_browser_launch_refused_no_effect exact original lookup; no automatic new ID/launch"
+      },
+      {
+        "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+        "owningFunction": "readOpened",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(p,'manual_browser_launch_unconfirmed_inspect_original')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"native_inventory_invalid\"),\"native_inventory_invalid\",\"packages/dashboard/src/lib/native-window-inventory.ts\",\"nativeBrowserWindows\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "error_constructor",
+        "expression": "new Error(\"native_inventory_invalid\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"native_inventory_invalid\"),\"native_inventory_invalid\",\"packages/dashboard/src/lib/native-window-inventory.ts\",\"nativeBrowserWindows\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "error_constructor",
+        "expression": "new Error(\"native_inventory_invalid\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"native_inventory_invalid\"),\"native_inventory_invalid\",\"packages/dashboard/src/lib/native-window-inventory.ts\",\"nativeBrowserWindows\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "error_constructor",
+        "expression": "new Error(\"native_inventory_invalid\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"native_inventory_duplicate\"),\"native_inventory_duplicate\",\"packages/dashboard/src/lib/native-window-inventory.ts\",\"nativeBrowserWindows\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "error_constructor",
+        "expression": "new Error(\"native_inventory_duplicate\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/response-failure.ts",
+        "owningFunction": "dashboardResponseFailureError",
+        "kind": "error_constructor",
+        "expression": "new Error(publicMessage ?? metadata?.code ?? fallback)",
+        "classification": "shared_owner_failure_projection_preserves_whole_owner_recourse",
+        "recourse": "dashboardResponseFailureError/dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-browser-row-actions.ts",
+        "owningFunction": "browserRowCloseRoute",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Browser row close route requires a stable browser ID.\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/service-browser-row-actions.ts\",\"browserRowCloseRoute\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-browser-row-actions.ts",
+        "owningFunction": "browserRowCloseRoute",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Browser row close route requires a stable browser ID.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+        "owningFunction": "serviceProfileAllocationLookupUrl",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new TypeError(\"serviceProfileAllocationLookupUrl requires a service base URL\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/service-profile-allocation.ts\",\"serviceProfileAllocationLookupUrl\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+        "owningFunction": "serviceProfileAllocationLookupUrl",
+        "kind": "error_constructor",
+        "expression": "new TypeError(\"serviceProfileAllocationLookupUrl requires a service base URL\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+        "owningFunction": "serviceProfileAllocationLookupUrl",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new TypeError(\"serviceProfileAllocationLookupUrl requires a profile ID\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/service-profile-allocation.ts\",\"serviceProfileAllocationLookupUrl\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+        "owningFunction": "serviceProfileAllocationLookupUrl",
+        "kind": "error_constructor",
+        "expression": "new TypeError(\"serviceProfileAllocationLookupUrl requires a profile ID\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+        "owningFunction": "profileAllocationFromLookupPayload",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(payload, \"service_profile_allocation_failed\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-leases.ts",
+        "owningFunction": "profileLeaseExpiryToIso",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new TypeError(\"Enter a valid lease expiry time\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/service-profile-leases.ts\",\"profileLeaseExpiryToIso\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-leases.ts",
+        "owningFunction": "profileLeaseExpiryToIso",
+        "kind": "error_constructor",
+        "expression": "new TypeError(\"Enter a valid lease expiry time\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/workspace-profile-library.ts",
+        "owningFunction": "request",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(payload, 'profile_library_request_unconfirmed')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/workspace-siteguides.ts",
+        "owningFunction": "module",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(result,'siteguides_request_unconfirmed')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/workspace-siteguides.ts",
+        "owningFunction": "confirmTeachingReceipt",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(result,'teaching_confirmation_unconfirmed')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      }
+    ]
+  },
+  "dashboardPublicChecks": [
+    {
+      "path": "packages/dashboard/src/components/browser-build-dialog.tsx",
+      "owningFunction": "select",
+      "originalExpression": "new Error(typeof reply.error === \"string\" ? reply.error : \"Outcome could not be confirmed.\")",
+      "expression": "dashboardConfirmationFailure(reply,\"dashboard_build_selection_unconfirmed\",{source:\"packages/dashboard/src/components/browser-build-dialog.tsx\",owningFunction:\"select\",...{operationId:requestId}})",
+      "code": "dashboard_build_selection_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "reply",
+      "recipe": "dashboardRetainedBrowserOperation"
+    },
+    {
+      "path": "packages/dashboard/src/components/browser-build-picker.tsx",
+      "owningFunction": "BrowserBuildPicker",
+      "originalExpression": "new Error(typeof reply.error === \"string\" ? reply.error : \"Build evidence could not be read.\")",
+      "expression": "dashboardResponseFailureError(reply,\"dashboard_build_evidence_unavailable\",{source:\"packages/dashboard/src/components/browser-build-picker.tsx\",owningFunction:\"BrowserBuildPicker\",...{profileId}})",
+      "code": "dashboard_build_evidence_unavailable",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "reply",
+      "recipe": "dashboardRetainedBrowserOperation"
+    },
+    {
+      "path": "packages/dashboard/src/components/chat-panel.tsx",
+      "owningFunction": "ChatPanel",
+      "originalExpression": "new Error(data.error || `Codex inspection failed with HTTP ${response.status}`)",
+      "expression": "dashboardResponseFailureError(data,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+      "code": "dashboard_chat_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "data",
+      "recipe": "dashboardChatPublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/chat-panel.tsx",
+      "owningFunction": "ChatPanel",
+      "originalExpression": "new Error(data.error || `Codex inspection failed with HTTP ${response.status}`)",
+      "expression": "dashboardResponseFailureError(data,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+      "code": "dashboard_chat_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "data",
+      "recipe": "dashboardChatPublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/chat-panel.tsx",
+      "owningFunction": "ChatPanel",
+      "originalExpression": "new Error(payload.error || `Operator turn failed with HTTP ${response.status}`)",
+      "expression": "dashboardResponseFailureError(payload,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+      "code": "dashboard_chat_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "payload",
+      "recipe": "dashboardChatPublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/chat-panel.tsx",
+      "owningFunction": "ChatPanel",
+      "originalExpression": "new Error(confirmPayload.error || `Operator confirmation failed with HTTP ${confirmResponse.status}`)",
+      "expression": "dashboardResponseFailureError(confirmPayload,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+      "code": "dashboard_chat_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "confirmPayload",
+      "recipe": "dashboardChatPublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/chat-panel.tsx",
+      "owningFunction": "ChatPanel",
+      "originalExpression": "new Error(\"Confirmed operator action did not return a service request.\")",
+      "expression": "dashboardConfirmationFailure(confirmPayload,\"dashboard_operator_confirmation_unconfirmed\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{operationId:action.confirmationId}})",
+      "code": "dashboard_operator_confirmation_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "recipe": "dashboardChatPublicationReadback",
+      "payloadExpression": "confirmPayload"
+    },
+    {
+      "path": "packages/dashboard/src/components/chat-panel.tsx",
+      "owningFunction": "ChatPanel",
+      "originalExpression": "new Error(payload?.error || `Service request failed with HTTP ${response.status}`)",
+      "expression": "dashboardResponseFailureError(payload,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+      "code": "dashboard_chat_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "payload",
+      "recipe": "dashboardChatPublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/chat-panel.tsx",
+      "owningFunction": "ChatPanel",
+      "originalExpression": "new Error(payload?.error || `Service request failed with HTTP ${response.status}`)",
+      "expression": "dashboardResponseFailureError(payload,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+      "code": "dashboard_chat_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "payload",
+      "recipe": "dashboardChatPublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/compact-native-workspace.tsx",
+      "owningFunction": "shareTab",
+      "originalExpression": "new Error('invalid_handoff_url')",
+      "expression": "dashboardConfirmationFailure(handoff,\"invalid_handoff_url\",{source:\"packages/dashboard/src/components/compact-native-workspace.tsx\",owningFunction:\"shareTab\",...{handoffId:handoff.handoffId}})",
+      "code": "invalid_handoff_url",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "recipe": "dashboardGuacamoleObservation",
+      "payloadExpression": "handoff"
+    },
+    {
+      "path": "packages/dashboard/src/components/compact-native-workspace.tsx",
+      "owningFunction": "CompactNativeWorkspace",
+      "originalExpression": "new Error(\"workspace_task_unknown\")",
+      "expression": "dashboardLocalFailure(new Error(\"workspace_task_unknown\"),\"workspace_task_unknown\",\"packages/dashboard/src/components/compact-native-workspace.tsx\",\"CompactNativeWorkspace\")",
+      "code": "workspace_task_unknown",
+      "classification": "local_contract_failure_no_owner_transport",
+      "recipe": "dashboardNativeInventoryObservation"
+    },
+    {
+      "path": "packages/dashboard/src/components/native-handoff-delete.tsx",
+      "owningFunction": "remove",
+      "originalExpression": "new Error(\"unconfirmed_link_delete_receipt\")",
+      "expression": "dashboardConfirmationFailure(response,\"unconfirmed_link_delete_receipt\",{source:\"packages/dashboard/src/components/native-handoff-delete.tsx\",owningFunction:\"remove\",...{handoffId:record.handoffId}})",
+      "code": "unconfirmed_link_delete_receipt",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "response",
+      "recipe": "dashboardHandoffPolicyReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/native-handoff-policies.tsx",
+      "owningFunction": "save",
+      "originalExpression": "new Error(\"unconfirmed_policy_receipt\")",
+      "expression": "dashboardConfirmationFailure(reply,\"unconfirmed_policy_receipt\",{source:\"packages/dashboard/src/components/native-handoff-policies.tsx\",owningFunction:\"save\",...{handoffId:record.handoffId}})",
+      "code": "unconfirmed_policy_receipt",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "reply",
+      "recipe": "dashboardHandoffPolicyReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/native-tab-actions.tsx",
+      "owningFunction": "saveProfile",
+      "originalExpression": "new Error(\"profile_save_unconfirmed\")",
+      "expression": "dashboardConfirmationFailure(body,\"profile_save_unconfirmed\",{source:\"packages/dashboard/src/components/native-tab-actions.tsx\",owningFunction:\"saveProfile\",...{profileId:expected.id}})",
+      "code": "profile_save_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "body",
+      "recipe": "dashboardProfileSaveReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/native-tab-actions.tsx",
+      "owningFunction": "closeTab",
+      "originalExpression": "new Error(\"unconfirmed_exact_close_receipt\")",
+      "expression": "dashboardConfirmationFailure(response,\"unconfirmed_exact_close_receipt\",{source:\"packages/dashboard/src/components/native-tab-actions.tsx\",owningFunction:\"closeTab\",...{taskId:target.sessionId,browserId:target.browserId}})",
+      "code": "unconfirmed_exact_close_receipt",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "response",
+      "recipe": "dashboardExactCloseReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/native-task-viewport.tsx",
+      "owningFunction": "NativeTaskViewport",
+      "originalExpression": "new Error(\"native_handoff_url_invalid\")",
+      "expression": "dashboardConfirmationFailure(handoff,\"native_handoff_url_invalid\",{source:\"packages/dashboard/src/components/native-task-viewport.tsx\",owningFunction:\"NativeTaskViewport\",...{handoffId:handoff.handoffId}})",
+      "code": "native_handoff_url_invalid",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "recipe": "dashboardGuacamoleObservation",
+      "payloadExpression": "handoff"
+    },
+    {
+      "path": "packages/dashboard/src/components/native-window-viewport.tsx",
+      "owningFunction": "NativeWindowViewport",
+      "originalExpression": "new Error(\"native_viewer_unavailable\")",
+      "expression": "dashboardLocalFailure(new Error(\"native_viewer_unavailable\"),\"native_viewer_unavailable\",\"packages/dashboard/src/components/native-window-viewport.tsx\",\"NativeWindowViewport\")",
+      "code": "native_viewer_unavailable",
+      "classification": "local_contract_failure_no_owner_transport",
+      "recipe": "dashboardGuacamoleObservation"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(statusJson.error || \"Service status failed\")",
+      "expression": "dashboardResponseFailureError(statusJson,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "statusJson",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(jobsJson.error || \"Service jobs failed\")",
+      "expression": "dashboardResponseFailureError(jobsJson,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "jobsJson",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(eventsJson.error || \"Service events failed\")",
+      "expression": "dashboardResponseFailureError(eventsJson,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "eventsJson",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Service trace failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Service incident activity failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Service job lookup failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Service profile save failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Profile access-policy request failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Service profile delete failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Service job cancel failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || `Service incident ${action} failed`)",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Service browser close request failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Service browser repair request failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Browser retirement plan was not returned\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Browser retirement receipt was not returned\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/service-panel.tsx",
+      "owningFunction": "ServicePanel",
+      "originalExpression": "new Error(json.error || \"Retained-state prune request failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/siteguides-library.tsx",
+      "owningFunction": "submitAnswer",
+      "originalExpression": "Error('Connect the existing agent to revise this answer.')",
+      "expression": "dashboardLocalFailure(Error('Connect the existing agent to revise this answer.'),\"dashboard_teaching_context_invalid\",\"packages/dashboard/src/components/siteguides-library.tsx\",\"submitAnswer\")",
+      "code": "dashboard_teaching_context_invalid",
+      "classification": "local_contract_failure_no_owner_transport",
+      "recipe": "clientTeachingReviewAuthority"
+    },
+    {
+      "path": "packages/dashboard/src/components/siteguides-library.tsx",
+      "owningFunction": "submitAnswer",
+      "originalExpression": "Error('Choose explicit known-site/intended metadata for this retained guide. A new browser is not substitute demonstration evidence.')",
+      "expression": "dashboardLocalFailure(Error('Choose explicit known-site/intended metadata for this retained guide. A new browser is not substitute demonstration evidence.'),\"dashboard_teaching_context_invalid\",\"packages/dashboard/src/components/siteguides-library.tsx\",\"submitAnswer\")",
+      "code": "dashboard_teaching_context_invalid",
+      "classification": "local_contract_failure_no_owner_transport",
+      "recipe": "clientTeachingReviewAuthority"
+    },
+    {
+      "path": "packages/dashboard/src/components/siteguides-library.tsx",
+      "owningFunction": "submitAnswer",
+      "originalExpression": "Error('Original Speech operation references are unavailable. Reopen the exact existing recording and transcript operations before agent revision.')",
+      "expression": "dashboardLocalFailure(Error('Original Speech operation references are unavailable. Reopen the exact existing recording and transcript operations before agent revision.'),\"dashboard_teaching_context_invalid\",\"packages/dashboard/src/components/siteguides-library.tsx\",\"submitAnswer\")",
+      "code": "dashboard_teaching_context_invalid",
+      "classification": "local_contract_failure_no_owner_transport",
+      "recipe": "clientTeachingReviewAuthority"
+    },
+    {
+      "path": "packages/dashboard/src/components/use-browser-operation.ts",
+      "owningFunction": "useBrowserOperation",
+      "originalExpression": "new Error()",
+      "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"useBrowserOperation\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+      "code": "dashboard_browser_operation_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "reply",
+      "recipe": "dashboardRetainedBrowserOperation"
+    },
+    {
+      "path": "packages/dashboard/src/components/use-browser-operation.ts",
+      "owningFunction": "useBrowserOperation",
+      "originalExpression": "new Error()",
+      "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"useBrowserOperation\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+      "code": "dashboard_browser_operation_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "reply",
+      "recipe": "dashboardRetainedBrowserOperation"
+    },
+    {
+      "path": "packages/dashboard/src/components/use-browser-operation.ts",
+      "owningFunction": "useBrowserOperation",
+      "originalExpression": "new Error()",
+      "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"useBrowserOperation\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+      "code": "dashboard_browser_operation_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "reply",
+      "recipe": "dashboardRetainedBrowserOperation"
+    },
+    {
+      "path": "packages/dashboard/src/components/use-browser-operation.ts",
+      "owningFunction": "useBrowserOperation",
+      "originalExpression": "new Error()",
+      "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"useBrowserOperation\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+      "code": "dashboard_browser_operation_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "reply",
+      "recipe": "dashboardRetainedBrowserOperation"
+    },
+    {
+      "path": "packages/dashboard/src/components/use-browser-operation.ts",
+      "owningFunction": "useBrowserOperation",
+      "originalExpression": "new Error()",
+      "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"useBrowserOperation\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+      "code": "dashboard_browser_operation_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "reply",
+      "recipe": "dashboardRetainedBrowserOperation"
+    },
+    {
+      "path": "packages/dashboard/src/components/use-browser-operation.ts",
+      "owningFunction": "run",
+      "originalExpression": "new Error()",
+      "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"run\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+      "code": "dashboard_browser_operation_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "reply",
+      "recipe": "dashboardRetainedBrowserOperation"
+    },
+    {
+      "path": "packages/dashboard/src/components/use-browser-operation.ts",
+      "owningFunction": "run",
+      "originalExpression": "new Error()",
+      "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"run\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+      "code": "dashboard_browser_operation_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "payloadExpression": "reply",
+      "recipe": "dashboardRetainedBrowserOperation"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+      "owningFunction": "WorkspaceAuthGate",
+      "originalExpression": "new Error(\"Workspace returned an unexpected sign-in response. Reopen its authenticated public URL.\")",
+      "expression": "dashboardLocalFailure(new Error(\"Workspace returned an unexpected sign-in response. Reopen its authenticated public URL.\"),\"dashboard_auth_response_unverified\",\"packages/dashboard/src/components/workspace-auth-gate.tsx\",\"WorkspaceAuthGate\")",
+      "code": "dashboard_auth_response_unverified",
+      "classification": "local_contract_failure_no_owner_transport",
+      "recipe": "dashboardAuthenticationContinuation"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+      "owningFunction": "WorkspaceAuthGate",
+      "originalExpression": "new Error(\"Workspace authentication returned invalid data. Check service access, then retry.\")",
+      "expression": "dashboardLocalFailure(new Error(\"Workspace authentication returned invalid data. Check service access, then retry.\"),\"dashboard_auth_response_unverified\",\"packages/dashboard/src/components/workspace-auth-gate.tsx\",\"WorkspaceAuthGate\")",
+      "code": "dashboard_auth_response_unverified",
+      "classification": "local_contract_failure_no_owner_transport",
+      "recipe": "dashboardAuthenticationContinuation"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+      "owningFunction": "WorkspaceAuthGate",
+      "originalExpression": "new Error(\"Workspace authentication returned an invalid identity. Check service access, then retry.\")",
+      "expression": "dashboardLocalFailure(new Error(\"Workspace authentication returned an invalid identity. Check service access, then retry.\"),\"dashboard_auth_response_unverified\",\"packages/dashboard/src/components/workspace-auth-gate.tsx\",\"WorkspaceAuthGate\")",
+      "code": "dashboard_auth_response_unverified",
+      "classification": "local_contract_failure_no_owner_transport",
+      "recipe": "dashboardAuthenticationContinuation"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+      "owningFunction": "logout",
+      "originalExpression": "new Error(\"Could not clear the old dashboard session. Retry after restoring service access.\")",
+      "expression": "dashboardLocalFailure(new Error(\"Could not clear the old dashboard session. Retry after restoring service access.\"),\"dashboard_auth_response_unverified\",\"packages/dashboard/src/components/workspace-auth-gate.tsx\",\"logout\")",
+      "code": "dashboard_auth_response_unverified",
+      "classification": "local_contract_failure_no_owner_transport",
+      "recipe": "dashboardAuthenticationContinuation"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-library-dialog.tsx",
+      "owningFunction": "WorkspaceLibraryDialog",
+      "originalExpression": "Error('Teaching agent request is unavailable. Refresh the original source packet.')",
+      "expression": "dashboardLocalFailure(Error('Teaching agent request is unavailable. Refresh the original source packet.'),\"dashboard_teaching_context_invalid\",\"packages/dashboard/src/components/workspace-library-dialog.tsx\",\"WorkspaceLibraryDialog\")",
+      "code": "dashboard_teaching_context_invalid",
+      "classification": "local_contract_failure_no_owner_transport",
+      "recipe": "clientTeachingReviewAuthority"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-library-dialog.tsx",
+      "owningFunction": "WorkspaceLibraryDialog",
+      "originalExpression": "Error('The original interpretation is not confirmed. Inspect its original operation before continuing.')",
+      "expression": "dashboardConfirmationFailure(result,\"dashboard_teaching_interpretation_unconfirmed\",{source:\"packages/dashboard/src/components/workspace-library-dialog.tsx\",owningFunction:\"WorkspaceLibraryDialog\",...{operationId:(request as Record<string,unknown>).operationId,taskId:(request as Record<string,unknown>).taskId}})",
+      "code": "dashboard_teaching_interpretation_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "recipe": "dashboardTeachingAgentReadback",
+      "payloadExpression": "result"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+      "owningFunction": "WorkspaceNavigator",
+      "originalExpression": "new Error(json.error || \"Service status failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+      "code": "dashboard_workspace_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+      "owningFunction": "WorkspaceNavigator",
+      "originalExpression": "new Error(json.error || \"Profile discovery failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+      "code": "dashboard_workspace_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+      "owningFunction": "WorkspaceNavigator",
+      "originalExpression": "new Error(json.error || \"Access plan failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+      "code": "dashboard_workspace_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+      "owningFunction": "WorkspaceNavigator",
+      "originalExpression": "new Error(result.stderr || result.stdout || \"Workspace launch process failed.\")",
+      "expression": "dashboardResponseFailureError(result,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+      "code": "dashboard_workspace_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "result",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+      "owningFunction": "WorkspaceNavigator",
+      "originalExpression": "new Error(json.error || \"Service add-tab request failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+      "code": "dashboard_workspace_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+      "owningFunction": "WorkspaceNavigator",
+      "originalExpression": "new Error(json.error || \"Service browser close request failed\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+      "code": "dashboard_workspace_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+      "owningFunction": "readWorkspaceApiResponse",
+      "originalExpression": "new Error(`HTTP ${response.status}: ${detail}`)",
+      "expression": "dashboardResponseFailureError({success:false},\"dashboard_response_invalid\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"readWorkspaceApiResponse\",...{}})",
+      "code": "dashboard_response_invalid",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "{success:false}",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+      "owningFunction": "poll",
+      "originalExpression": "new Error(json.error || `Frame request returned HTTP ${response.status}.`)",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_viewport_owner_failure\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"poll\",...{}})",
+      "code": "dashboard_viewport_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+      "owningFunction": "fetchSnapshot",
+      "originalExpression": "new Error(json.error || `Snapshot request returned HTTP ${response.status}.`)",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_viewport_owner_failure\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"fetchSnapshot\",...{}})",
+      "code": "dashboard_viewport_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+      "owningFunction": "fetchSnapshot",
+      "originalExpression": "new Error(\"Snapshot response did not include image data.\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_viewport_capture_invalid\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"fetchSnapshot\",...{}})",
+      "code": "dashboard_viewport_capture_invalid",
+      "classification": "owner_response_failure_preserved",
+      "recipe": "dashboardForeignCdpObservation",
+      "payloadExpression": "json"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+      "owningFunction": "WorkspaceRemoteViewport",
+      "originalExpression": "new Error(workspaceRecoveryFailureMessage(json, action))",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_viewport_owner_failure\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"WorkspaceRemoteViewport\",...{}})",
+      "code": "dashboard_viewport_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "json",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+      "owningFunction": "WorkspaceRemoteViewport",
+      "originalExpression": "new Error(\"Controller takeover did not return a current controlling lease.\")",
+      "expression": "dashboardConfirmationFailure(response,\"dashboard_viewport_receipt_unconfirmed\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"WorkspaceRemoteViewport\",...{browserId:browser.id,routeId:workspaceRouteId}})",
+      "code": "dashboard_viewport_receipt_unconfirmed",
+      "classification": "owner_publication_receipt_unconfirmed_preserves_original_ids",
+      "recipe": "dashboardServicePublicationReadback",
+      "payloadExpression": "response"
+    },
+    {
+      "path": "packages/dashboard/src/app/page.tsx",
+      "owningFunction": "checkRuntimeHealth",
+      "originalExpression": "new Error(`HTTP ${response.status}`)",
+      "expression": "dashboardResponseFailureError(await response.clone().json().catch(()=>({success:false})),\"dashboard_runtime_read_unavailable\",{source:\"packages/dashboard/src/app/page.tsx\",owningFunction:\"checkRuntimeHealth\",...{}})",
+      "code": "dashboard_runtime_read_unavailable",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "await response.clone().json().catch(()=>({success:false}))",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/app/page.tsx",
+      "owningFunction": "DashboardDiagnostics",
+      "originalExpression": "new Error(`HTTP ${response.status}`)",
+      "expression": "dashboardResponseFailureError(await response.clone().json().catch(()=>({success:false})),\"dashboard_runtime_read_unavailable\",{source:\"packages/dashboard/src/app/page.tsx\",owningFunction:\"DashboardDiagnostics\",...{}})",
+      "code": "dashboard_runtime_read_unavailable",
+      "classification": "owner_response_failure_preserved",
+      "payloadExpression": "await response.clone().json().catch(()=>({success:false}))",
+      "recipe": "dashboardServicePublicationReadback"
+    }
+  ],
+  "dashboardHookChecks": [
+    {
+      "path": "packages/dashboard/src/hooks/use-selected-workspace-context.ts",
+      "owningFunction": "useSelectedWorkspaceContext",
+      "originalExpression": "new Error(`HTTP ${statusResponse.status}`)",
+      "expression": "dashboardResponseFailureError(await statusResponse.clone().json().catch(()=>({success:false})),\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/hooks/use-selected-workspace-context.ts\",owningFunction:\"useSelectedWorkspaceContext\"})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/hooks/use-selected-workspace-context.ts",
+      "owningFunction": "useSelectedWorkspaceContext",
+      "originalExpression": "new Error(json.error || \"Service status unavailable\")",
+      "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/hooks/use-selected-workspace-context.ts\",owningFunction:\"useSelectedWorkspaceContext\"})",
+      "code": "dashboard_service_owner_failure",
+      "classification": "owner_response_failure_preserved",
+      "recipe": "dashboardServicePublicationReadback"
+    },
+    {
+      "path": "packages/dashboard/src/hooks/use-native-browser-windows.ts",
+      "owningFunction": "useNativeBrowserWindows",
+      "originalExpression": "new Error(\"native_inventory_unavailable\")",
+      "expression": "dashboardResponseFailureError(await response.clone().json().catch(()=>({success:false})),\"native_inventory_unavailable\",{source:\"packages/dashboard/src/hooks/use-native-browser-windows.ts\",owningFunction:\"useNativeBrowserWindows\"})",
+      "code": "native_inventory_unavailable",
+      "classification": "owner_response_failure_preserved",
+      "recipe": "dashboardNativeInventoryObservation"
+    },
+    {
+      "path": "packages/dashboard/src/hooks/use-native-browser-windows.ts",
+      "owningFunction": "useNativeBrowserWindows",
+      "originalExpression": "new Error(\"native_inventory_stale\")",
+      "expression": "dashboardLocalFailure(new Error(\"native_inventory_stale\"),\"native_inventory_stale\",\"packages/dashboard/src/hooks/use-native-browser-windows.ts\",\"useNativeBrowserWindows\")",
+      "code": "native_inventory_stale",
+      "classification": "local_timing_projection_refresh_only_no_input_authority",
+      "recipe": "dashboardNativeInventoryObservation"
+    }
+  ],
+  "dashboardFrontendInventory": {
+    "scope": "All explicit throw/reject and Error/TypeError/RangeError/DOMException/DashboardReadPausedError/ManualBrowserLaunchRefusal construction under dashboard src, including lib/components/app/hooks/store and source type modules.",
+    "modulePaths": [
+      "packages/dashboard/src/app/activity/page.tsx",
+      "packages/dashboard/src/app/browsers/page.tsx",
+      "packages/dashboard/src/app/layout.tsx",
+      "packages/dashboard/src/app/page.tsx",
+      "packages/dashboard/src/app/service/page.tsx",
+      "packages/dashboard/src/components/activity-feed.tsx",
+      "packages/dashboard/src/components/app-shell.tsx",
+      "packages/dashboard/src/components/browser-build-dialog.tsx",
+      "packages/dashboard/src/components/browser-build-picker.tsx",
+      "packages/dashboard/src/components/browser-mode-button.tsx",
+      "packages/dashboard/src/components/browser-mode-dialog.tsx",
+      "packages/dashboard/src/components/chat-panel.tsx",
+      "packages/dashboard/src/components/compact-native-workspace.tsx",
+      "packages/dashboard/src/components/console-panel.tsx",
+      "packages/dashboard/src/components/extensions-panel.tsx",
+      "packages/dashboard/src/components/inspection-review-controls.tsx",
+      "packages/dashboard/src/components/json-syntax.tsx",
+      "packages/dashboard/src/components/manual-browser-launch-dialog.tsx",
+      "packages/dashboard/src/components/model-selector.tsx",
+      "packages/dashboard/src/components/native-handoff-delete.tsx",
+      "packages/dashboard/src/components/native-handoff-drawer.tsx",
+      "packages/dashboard/src/components/native-handoff-policies.tsx",
+      "packages/dashboard/src/components/native-tab-actions.tsx",
+      "packages/dashboard/src/components/native-task-viewport.tsx",
+      "packages/dashboard/src/components/native-window-viewport.tsx",
+      "packages/dashboard/src/components/network-panel.tsx",
+      "packages/dashboard/src/components/profile-duplicate-dialog.tsx",
+      "packages/dashboard/src/components/profile-lab.tsx",
+      "packages/dashboard/src/components/profile-library.tsx",
+      "packages/dashboard/src/components/service-panel.tsx",
+      "packages/dashboard/src/components/session-tree.tsx",
+      "packages/dashboard/src/components/siteguides-library.tsx",
+      "packages/dashboard/src/components/storage-panel.tsx",
+      "packages/dashboard/src/components/subsystem-health.tsx",
+      "packages/dashboard/src/components/theme-provider.tsx",
+      "packages/dashboard/src/components/theme-toggle.tsx",
+      "packages/dashboard/src/components/ui/alert-dialog.tsx",
+      "packages/dashboard/src/components/ui/badge.tsx",
+      "packages/dashboard/src/components/ui/button.tsx",
+      "packages/dashboard/src/components/ui/collapsible.tsx",
+      "packages/dashboard/src/components/ui/command.tsx",
+      "packages/dashboard/src/components/ui/context-menu.tsx",
+      "packages/dashboard/src/components/ui/dialog.tsx",
+      "packages/dashboard/src/components/ui/dropdown-menu.tsx",
+      "packages/dashboard/src/components/ui/popover.tsx",
+      "packages/dashboard/src/components/ui/resizable.tsx",
+      "packages/dashboard/src/components/ui/scroll-area.tsx",
+      "packages/dashboard/src/components/ui/separator.tsx",
+      "packages/dashboard/src/components/ui/tabs.tsx",
+      "packages/dashboard/src/components/ui/tooltip.tsx",
+      "packages/dashboard/src/components/use-browser-operation.ts",
+      "packages/dashboard/src/components/viewport.tsx",
+      "packages/dashboard/src/components/workspace-auth-gate.tsx",
+      "packages/dashboard/src/components/workspace-library-dialog.tsx",
+      "packages/dashboard/src/components/workspace-navigator.tsx",
+      "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+      "packages/dashboard/src/components/workspace-selection-panel.tsx",
+      "packages/dashboard/src/hooks/use-media-query.ts",
+      "packages/dashboard/src/hooks/use-native-browser-windows.ts",
+      "packages/dashboard/src/hooks/use-selected-workspace-context.ts",
+      "packages/dashboard/src/hooks/use-workspace-view-preferences.ts",
+      "packages/dashboard/src/lib/browser-operation-readback.ts",
+      "packages/dashboard/src/lib/dashboard-api.ts",
+      "packages/dashboard/src/lib/dashboard-auth-status.ts",
+      "packages/dashboard/src/lib/dashboard-read-coordinator.ts",
+      "packages/dashboard/src/lib/exec.ts",
+      "packages/dashboard/src/lib/failure-observation.ts",
+      "packages/dashboard/src/lib/foreign-cdp-control.ts",
+      "packages/dashboard/src/lib/foundation-stress-receipt.test.ts",
+      "packages/dashboard/src/lib/foundation-stress-receipt.ts",
+      "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "packages/dashboard/src/lib/inspection-review.ts",
+      "packages/dashboard/src/lib/launcher-eligibility.ts",
+      "packages/dashboard/src/lib/managed-workspace.ts",
+      "packages/dashboard/src/lib/manual-browser-launch.ts",
+      "packages/dashboard/src/lib/native-rail.ts",
+      "packages/dashboard/src/lib/native-task-focus.ts",
+      "packages/dashboard/src/lib/native-window-inventory.ts",
+      "packages/dashboard/src/lib/response-failure.ts",
+      "packages/dashboard/src/lib/runtime-health-summary.ts",
+      "packages/dashboard/src/lib/selected-workspace-chat-packet.ts",
+      "packages/dashboard/src/lib/selected-workspace-console.ts",
+      "packages/dashboard/src/lib/selected-workspace-context.ts",
+      "packages/dashboard/src/lib/service-browser-row-actions.ts",
+      "packages/dashboard/src/lib/service-incident-summary.ts",
+      "packages/dashboard/src/lib/service-incidents.ts",
+      "packages/dashboard/src/lib/service-profile-allocation.ts",
+      "packages/dashboard/src/lib/service-profile-leases.ts",
+      "packages/dashboard/src/lib/service-trace.ts",
+      "packages/dashboard/src/lib/service-view-streams.ts",
+      "packages/dashboard/src/lib/service-workspaces.ts",
+      "packages/dashboard/src/lib/shiki-theme.ts",
+      "packages/dashboard/src/lib/subsystem-health.ts",
+      "packages/dashboard/src/lib/tab-description.ts",
+      "packages/dashboard/src/lib/utils.ts",
+      "packages/dashboard/src/lib/workspace-export-urls.ts",
+      "packages/dashboard/src/lib/workspace-focus-request.ts",
+      "packages/dashboard/src/lib/workspace-profile-library.ts",
+      "packages/dashboard/src/lib/workspace-recovery.ts",
+      "packages/dashboard/src/lib/workspace-siteguides.ts",
+      "packages/dashboard/src/lib/workspace-url-selection.ts",
+      "packages/dashboard/src/lib/workspace-view-connection.ts",
+      "packages/dashboard/src/lib/workspace-view-projection.ts",
+      "packages/dashboard/src/lib/workspace-viewport-controller.ts",
+      "packages/dashboard/src/lib/workspace-viewport-state.ts",
+      "packages/dashboard/src/store/activity.ts",
+      "packages/dashboard/src/store/chat.ts",
+      "packages/dashboard/src/store/provider.tsx",
+      "packages/dashboard/src/store/sessions.ts",
+      "packages/dashboard/src/store/stream.ts",
+      "packages/dashboard/src/store/tabs.ts",
+      "packages/dashboard/src/types.ts"
+    ],
+    "candidateCount": 163,
+    "entries": [
+      {
+        "path": "packages/dashboard/src/app/page.tsx",
+        "owningFunction": "DashboardDiagnostics",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(await response.clone().json().catch(()=>({success:false})),\"dashboard_runtime_read_unavailable\",{source:\"packages/dashboard/src/app/page.tsx\",owningFunction:\"checkRuntimeHealth\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/app/page.tsx",
+        "owningFunction": "DashboardDiagnostics",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(await response.clone().json().catch(()=>({success:false})),\"dashboard_runtime_read_unavailable\",{source:\"packages/dashboard/src/app/page.tsx\",owningFunction:\"DashboardDiagnostics\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/browser-build-dialog.tsx",
+        "owningFunction": "BrowserBuildDialog",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(reply,\"dashboard_build_selection_unconfirmed\",{source:\"packages/dashboard/src/components/browser-build-dialog.tsx\",owningFunction:\"select\",...{operationId:requestId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/browser-build-picker.tsx",
+        "owningFunction": "BrowserBuildPicker",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(reply,\"dashboard_build_evidence_unavailable\",{source:\"packages/dashboard/src/components/browser-build-picker.tsx\",owningFunction:\"BrowserBuildPicker\",...{profileId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/chat-panel.tsx",
+        "owningFunction": "ChatPanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(data,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/chat-panel.tsx",
+        "owningFunction": "ChatPanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(data,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/chat-panel.tsx",
+        "owningFunction": "ChatPanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(payload,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/chat-panel.tsx",
+        "owningFunction": "ChatPanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(confirmPayload,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/chat-panel.tsx",
+        "owningFunction": "ChatPanel",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(confirmPayload,\"dashboard_operator_confirmation_unconfirmed\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{operationId:action.confirmationId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/chat-panel.tsx",
+        "owningFunction": "ChatPanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(payload,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/chat-panel.tsx",
+        "owningFunction": "ChatPanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(payload,\"dashboard_chat_owner_failure\",{source:\"packages/dashboard/src/components/chat-panel.tsx\",owningFunction:\"ChatPanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/compact-native-workspace.tsx",
+        "owningFunction": "CompactNativeWorkspace",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(handoff,\"invalid_handoff_url\",{source:\"packages/dashboard/src/components/compact-native-workspace.tsx\",owningFunction:\"shareTab\",...{handoffId:handoff.handoffId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/compact-native-workspace.tsx",
+        "owningFunction": "CompactNativeWorkspace",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"workspace_task_unknown\"),\"workspace_task_unknown\",\"packages/dashboard/src/components/compact-native-workspace.tsx\",\"CompactNativeWorkspace\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/compact-native-workspace.tsx",
+        "owningFunction": "CompactNativeWorkspace",
+        "kind": "error_constructor",
+        "expression": "new Error(\"workspace_task_unknown\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/components/native-handoff-delete.tsx",
+        "owningFunction": "NativeHandoffDelete",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(response,\"unconfirmed_link_delete_receipt\",{source:\"packages/dashboard/src/components/native-handoff-delete.tsx\",owningFunction:\"remove\",...{handoffId:record.handoffId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/native-handoff-policies.tsx",
+        "owningFunction": "DurationPolicy",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(reply,\"unconfirmed_policy_receipt\",{source:\"packages/dashboard/src/components/native-handoff-policies.tsx\",owningFunction:\"save\",...{handoffId:record.handoffId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/native-tab-actions.tsx",
+        "owningFunction": "NativeTabActions",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(body,\"profile_save_unconfirmed\",{source:\"packages/dashboard/src/components/native-tab-actions.tsx\",owningFunction:\"saveProfile\",...{profileId:expected.id}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/native-tab-actions.tsx",
+        "owningFunction": "NativeTabActions",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(response,\"unconfirmed_exact_close_receipt\",{source:\"packages/dashboard/src/components/native-tab-actions.tsx\",owningFunction:\"closeTab\",...{taskId:target.sessionId,browserId:target.browserId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/native-task-viewport.tsx",
+        "owningFunction": "NativeTaskViewport",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(handoff,\"native_handoff_url_invalid\",{source:\"packages/dashboard/src/components/native-task-viewport.tsx\",owningFunction:\"NativeTaskViewport\",...{handoffId:handoff.handoffId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/native-window-viewport.tsx",
+        "owningFunction": "NativeWindowViewport",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"native_viewer_unavailable\"),\"native_viewer_unavailable\",\"packages/dashboard/src/components/native-window-viewport.tsx\",\"NativeWindowViewport\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/native-window-viewport.tsx",
+        "owningFunction": "NativeWindowViewport",
+        "kind": "error_constructor",
+        "expression": "new Error(\"native_viewer_unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(statusJson,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(jobsJson,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(eventsJson,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/service-panel.tsx",
+        "owningFunction": "ServicePanel",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/components/service-panel.tsx\",owningFunction:\"ServicePanel\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/siteguides-library.tsx",
+        "owningFunction": "submitAnswer",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(Error('Connect the existing agent to revise this answer.'),\"dashboard_teaching_context_invalid\",\"packages/dashboard/src/components/siteguides-library.tsx\",\"submitAnswer\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/siteguides-library.tsx",
+        "owningFunction": "submitAnswer",
+        "kind": "error_constructor",
+        "expression": "Error('Connect the existing agent to revise this answer.')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/components/siteguides-library.tsx",
+        "owningFunction": "submitAnswer",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(Error('Choose explicit known-site/intended metadata for this retained guide. A new browser is not substitute demonstration evidence.'),\"dashboard_teaching_context_invalid\",\"packages/dashboard/src/components/siteguides-library.tsx\",\"submitAnswer\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/siteguides-library.tsx",
+        "owningFunction": "submitAnswer",
+        "kind": "error_constructor",
+        "expression": "Error('Choose explicit known-site/intended metadata for this retained guide. A new browser is not substitute demonstration evidence.')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/components/siteguides-library.tsx",
+        "owningFunction": "submitAnswer",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(Error('Original Speech operation references are unavailable. Reopen the exact existing recording and transcript operations before agent revision.'),\"dashboard_teaching_context_invalid\",\"packages/dashboard/src/components/siteguides-library.tsx\",\"submitAnswer\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/siteguides-library.tsx",
+        "owningFunction": "submitAnswer",
+        "kind": "error_constructor",
+        "expression": "Error('Original Speech operation references are unavailable. Reopen the exact existing recording and transcript operations before agent revision.')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/components/use-browser-operation.ts",
+        "owningFunction": "useBrowserOperation",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"useBrowserOperation\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/use-browser-operation.ts",
+        "owningFunction": "useBrowserOperation",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"useBrowserOperation\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/use-browser-operation.ts",
+        "owningFunction": "useBrowserOperation",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"useBrowserOperation\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/use-browser-operation.ts",
+        "owningFunction": "useBrowserOperation",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"useBrowserOperation\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/use-browser-operation.ts",
+        "owningFunction": "useBrowserOperation",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"useBrowserOperation\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/use-browser-operation.ts",
+        "owningFunction": "useBrowserOperation",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"run\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/use-browser-operation.ts",
+        "owningFunction": "useBrowserOperation",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(reply,\"dashboard_browser_operation_unconfirmed\",{source:\"packages/dashboard/src/components/use-browser-operation.ts\",owningFunction:\"run\",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+        "owningFunction": "WorkspaceAuthGate",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Workspace returned an unexpected sign-in response. Reopen its authenticated public URL.\"),\"dashboard_auth_response_unverified\",\"packages/dashboard/src/components/workspace-auth-gate.tsx\",\"WorkspaceAuthGate\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+        "owningFunction": "WorkspaceAuthGate",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Workspace returned an unexpected sign-in response. Reopen its authenticated public URL.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+        "owningFunction": "WorkspaceAuthGate",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Workspace authentication returned invalid data. Check service access, then retry.\"),\"dashboard_auth_response_unverified\",\"packages/dashboard/src/components/workspace-auth-gate.tsx\",\"WorkspaceAuthGate\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+        "owningFunction": "WorkspaceAuthGate",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Workspace authentication returned invalid data. Check service access, then retry.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+        "owningFunction": "WorkspaceAuthGate",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Workspace authentication returned an invalid identity. Check service access, then retry.\"),\"dashboard_auth_response_unverified\",\"packages/dashboard/src/components/workspace-auth-gate.tsx\",\"WorkspaceAuthGate\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+        "owningFunction": "WorkspaceAuthGate",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Workspace authentication returned an invalid identity. Check service access, then retry.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+        "owningFunction": "WorkspaceAuthGate",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Could not clear the old dashboard session. Retry after restoring service access.\"),\"dashboard_auth_response_unverified\",\"packages/dashboard/src/components/workspace-auth-gate.tsx\",\"logout\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-auth-gate.tsx",
+        "owningFunction": "WorkspaceAuthGate",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Could not clear the old dashboard session. Retry after restoring service access.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-library-dialog.tsx",
+        "owningFunction": "WorkspaceLibraryDialog",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(Error('Teaching agent request is unavailable. Refresh the original source packet.'),\"dashboard_teaching_context_invalid\",\"packages/dashboard/src/components/workspace-library-dialog.tsx\",\"WorkspaceLibraryDialog\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-library-dialog.tsx",
+        "owningFunction": "WorkspaceLibraryDialog",
+        "kind": "error_constructor",
+        "expression": "Error('Teaching agent request is unavailable. Refresh the original source packet.')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-library-dialog.tsx",
+        "owningFunction": "WorkspaceLibraryDialog",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(result,\"dashboard_teaching_interpretation_unconfirmed\",{source:\"packages/dashboard/src/components/workspace-library-dialog.tsx\",owningFunction:\"WorkspaceLibraryDialog\",...{operationId:(request as Record<string,unknown>).operationId,taskId:(request as Record<string,unknown>).taskId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+        "owningFunction": "WorkspaceNavigator",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+        "owningFunction": "WorkspaceNavigator",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+        "owningFunction": "WorkspaceNavigator",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+        "owningFunction": "WorkspaceNavigator",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(result,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+        "owningFunction": "WorkspaceNavigator",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-navigator.tsx",
+        "owningFunction": "WorkspaceNavigator",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_workspace_owner_failure\",{source:\"packages/dashboard/src/components/workspace-navigator.tsx\",owningFunction:\"WorkspaceNavigator\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+        "owningFunction": "readWorkspaceApiResponse",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError({success:false},\"dashboard_response_invalid\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"readWorkspaceApiResponse\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+        "owningFunction": "WorkspaceCdpStreamCanvas",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_viewport_owner_failure\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"poll\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+        "owningFunction": "WorkspaceCdpSnapshotViewer",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_viewport_owner_failure\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"fetchSnapshot\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+        "owningFunction": "WorkspaceCdpSnapshotViewer",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_viewport_capture_invalid\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"fetchSnapshot\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+        "owningFunction": "WorkspaceRemoteViewport",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_viewport_owner_failure\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"WorkspaceRemoteViewport\",...{}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/components/workspace-remote-viewport.tsx",
+        "owningFunction": "WorkspaceRemoteViewport",
+        "kind": "throw",
+        "expression": "dashboardConfirmationFailure(response,\"dashboard_viewport_receipt_unconfirmed\",{source:\"packages/dashboard/src/components/workspace-remote-viewport.tsx\",owningFunction:\"WorkspaceRemoteViewport\",...{browserId:browser.id,routeId:workspaceRouteId}})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/hooks/use-native-browser-windows.ts",
+        "owningFunction": "useNativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(await response.clone().json().catch(()=>({success:false})),\"native_inventory_unavailable\",{source:\"packages/dashboard/src/hooks/use-native-browser-windows.ts\",owningFunction:\"useNativeBrowserWindows\"})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/hooks/use-native-browser-windows.ts",
+        "owningFunction": "useNativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(payload,\"native_inventory_unavailable\",{source:\"packages/dashboard/src/hooks/use-native-browser-windows.ts\",owningFunction:\"useNativeBrowserWindows\"})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/hooks/use-native-browser-windows.ts",
+        "owningFunction": "useNativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"native_inventory_stale\"),\"native_inventory_stale\",\"packages/dashboard/src/hooks/use-native-browser-windows.ts\",\"useNativeBrowserWindows\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/hooks/use-native-browser-windows.ts",
+        "owningFunction": "useNativeBrowserWindows",
+        "kind": "error_constructor",
+        "expression": "new Error(\"native_inventory_stale\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/hooks/use-selected-workspace-context.ts",
+        "owningFunction": "useSelectedWorkspaceContext",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(await statusResponse.clone().json().catch(()=>({success:false})),\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/hooks/use-selected-workspace-context.ts\",owningFunction:\"useSelectedWorkspaceContext\"})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/hooks/use-selected-workspace-context.ts",
+        "owningFunction": "useSelectedWorkspaceContext",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(json,\"dashboard_service_owner_failure\",{source:\"packages/dashboard/src/hooks/use-selected-workspace-context.ts\",owningFunction:\"useSelectedWorkspaceContext\"})",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/browser-operation-readback.ts",
+        "owningFunction": "inspectDashboardBrowserOperation",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new TypeError('Use the original browser operation inspection action and scope; mutation choices are not accepted.'),'dashboard_browser_inspection_scope_invalid','packages/dashboard/src/lib/browser-operation-readback.ts','inspectDashboardBrowserOperation')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/browser-operation-readback.ts",
+        "owningFunction": "inspectDashboardBrowserOperation",
+        "kind": "error_constructor",
+        "expression": "new TypeError('Use the original browser operation inspection action and scope; mutation choices are not accepted.')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
       {
         "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
         "owningFunction": "fetchDashboardAuthStatus",

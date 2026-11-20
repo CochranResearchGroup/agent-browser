@@ -1,4 +1,7 @@
 "use client";
+import {dashboardConfirmationFailure,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrowserModeDialog } from "@/components/browser-mode-dialog";
@@ -71,12 +74,12 @@ export function NativeTabActions({ node, tab, children, onClosed, onProfileChang
       });
       const body = await response.json();
       const saved = body?.data?.profile;
-      if (!response.ok || body?.success !== true || saved?.id !== expected.id || saved?.name !== profileName.trim()
-        || saved?.kind !== (promote ? "named" : expected.kind)) throw new Error("profile_save_unconfirmed");
+      if ((!response.ok || body?.success !== true || saved?.id !== expected.id || saved?.name !== profileName.trim()
+        || saved?.kind !== (promote ? "named" : expected.kind)) || responseFailureMetadata(body)) throw dashboardConfirmationFailure(body,"profile_save_unconfirmed",{source:"packages/dashboard/src/components/native-tab-actions.tsx",owningFunction:"saveProfile",...{profileId:expected.id}});
       setProfile(saved); setProfileName(saved.name);
       void onProfileChanged?.().catch(() => undefined);
       setProfileMessage(promote ? "Profile is now durable. Browser data and open tabs are preserved." : "Profile name saved.");
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"native-tab-actions.tsx");
       setProfileUnconfirmed(true);
       setProfileMessage("Profile change could not be confirmed. Refresh browsers to read its current name and retention before retrying.");
     } finally { profilePending.current = false; setProfileBusy(false); }
@@ -97,13 +100,13 @@ export function NativeTabActions({ node, tab, children, onClosed, onProfileChang
           params: { targetId: target.targetId, operatorClose: true } },
       }));
       const data = response.data as Partial<ServiceTabCloseData> | undefined;
-      if (data?.source !== "managed-owner" || data.closedTabId !== target.id || data.targetId !== target.targetId
-          || data.physicalTabClosed !== true || data.unrelatedTargetsPreserved !== true) {
-        throw new Error("unconfirmed_exact_close_receipt");
+      if ((data?.source !== "managed-owner" || data.closedTabId !== target.id || data.targetId !== target.targetId
+          || data.physicalTabClosed !== true || data.unrelatedTargetsPreserved !== true) || responseFailureMetadata(response)) {
+        throw dashboardConfirmationFailure(response,"unconfirmed_exact_close_receipt",{source:"packages/dashboard/src/components/native-tab-actions.tsx",owningFunction:"closeTab",...{taskId:target.sessionId,browserId:target.browserId}});
       }
       setCloseTarget(null);
       await onClosed?.();
-    } catch (error) {
+    } catch (error) {void reportDashboardComponentFailure(error,"native-tab-actions.tsx");
       const failure = error instanceof ServiceOperationError || error instanceof ServiceRequestHttpError ? error.failure : null;
       setCloseError(failure?.code === "operator_tab_close_profile_policy_denied" && failure.effectState === "no_effect"
         ? "This profile does not allow you to close this tab. No tab was closed. Ask the profile owner to review close permission."
@@ -115,7 +118,7 @@ export function NativeTabActions({ node, tab, children, onClosed, onProfileChang
     try {
       await navigator.clipboard.writeText(tab.url);
       setCopyFeedback("copied");
-    } catch { setCopyFeedback("failed"); }
+    } catch (error) {void reportDashboardComponentFailure(error,"native-tab-actions.tsx"); setCopyFeedback("failed"); }
   };
   const provenanceFields: [string, unknown][] = [
     ["Service", metadata?.serviceName], ["Agent", metadata?.agentName],

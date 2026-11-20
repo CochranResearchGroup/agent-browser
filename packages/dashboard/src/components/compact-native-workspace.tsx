@@ -1,4 +1,7 @@
 "use client";
+import {dashboardConfirmationFailure,dashboardLocalFailure} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Link2, Wrench, Plus, GraduationCap } from "lucide-react";
@@ -71,10 +74,10 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
         });
         const url = new URL(handoff.handoffUrl, window.location.origin);
         if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash
-            || !/^\/remote-view\/[A-Za-z0-9_-]+$/.test(url.pathname)) throw new Error('invalid_handoff_url');
+            || !/^\/remote-view\/[A-Za-z0-9_-]+$/.test(url.pathname)) throw dashboardConfirmationFailure(handoff,"invalid_handoff_url",{source:"packages/dashboard/src/components/compact-native-workspace.tsx",owningFunction:"shareTab",...{handoffId:handoff.handoffId}});
         setSharedLink({ url: url.toString(), label: tabDescription(tab) });
       });
-    } catch { setShareError("Could not prepare this link. Refresh browsers and check access before trying again."); }
+    } catch (error) {void reportDashboardComponentFailure(error,"compact-native-workspace.tsx"); setShareError("Could not prepare this link. Refresh browsers and check access before trying again."); }
     finally { sharePending.current = false; setShareBusy(false); }
   };
   const [collapsed, setCollapsed] = useState(false);
@@ -92,7 +95,7 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
     setClosedTabs(current => new Set(current).add(tab.id));
     setCloseRefreshError(null);
     try { await onRefresh(); }
-    catch { setCloseRefreshError("The tab closed, but inventory could not refresh. Refresh browsers."); }
+    catch (error) {void reportDashboardComponentFailure(error,"compact-native-workspace.tsx"); setCloseRefreshError("The tab closed, but inventory could not refresh. Refresh browsers."); }
     finally {
       requestAnimationFrame(() => {
         const next = root.current?.querySelector<HTMLButtonElement>(".native-workspace-tab[aria-current]")
@@ -107,15 +110,15 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
       setCollapsed(localStorage.getItem("native-workspace-rail-collapsed") === "true");
       const stored = Number(localStorage.getItem("native-workspace-rail-width"));
       if (stored >= 180 && stored <= 400) setWidth(stored);
-    } catch { /* Storage denial must not prevent browser operation. */ }
+    } catch (error) {void reportDashboardComponentFailure(error,"compact-native-workspace.tsx"); /* Storage denial must not prevent browser operation. */ }
   }, []);
   const saveWidth = (next: number) => {
     const value = Math.max(180, Math.min(400, next));
     setWidth(value);
-    try { localStorage.setItem("native-workspace-rail-width", String(value)); } catch { /* Optional preference. */ }
+    try { localStorage.setItem("native-workspace-rail-width", String(value)); } catch (error) {void reportDashboardComponentFailure(error,"compact-native-workspace.tsx"); /* Optional preference. */ }
   };
   const toggleRail = () => setCollapsed(current => {
-    try { localStorage.setItem("native-workspace-rail-collapsed", String(!current)); } catch { /* Optional preference. */ }
+    try { localStorage.setItem("native-workspace-rail-collapsed", String(!current)); } catch (error) {void reportDashboardComponentFailure(error,"compact-native-workspace.tsx"); /* Optional preference. */ }
     return !current;
   });
   const selectTab = (node: WorkspaceNode, tab: WorkspaceServiceTab) => {
@@ -203,7 +206,7 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
         <div className="native-workspace-desktop">{selection.tabId && closedTabs.has(selection.tabId) ? <p role="status" className="native-task-message">The selected tab was closed. Select another tab to continue.</p> : children}</div>
       </section>
       <ManualBrowserLaunchDialog initialProfileId={launchProfile} open={launchOpen} onOpenChange={setLaunchOpen} userLabel={userLabel} onOpened={selectManualTask} onReturnTask={async profile => {
-        if (!profile.browserId || !profile.taskId || !profile.tabId) throw new Error("workspace_task_unknown");
+        if (!profile.browserId || !profile.taskId || !profile.tabId) throw dashboardLocalFailure(new Error("workspace_task_unknown"),"workspace_task_unknown","packages/dashboard/src/components/compact-native-workspace.tsx","CompactNativeWorkspace");
         await selectManualTask({browserId: profile.browserId, taskId: profile.taskId, tabId: profile.tabId, profileId: profile.id});
       }} onCopyProfile={profile => {setLabSource({id:profile.id,name:profile.name,taskId:profile.taskId,sessionName:profile.sessionName,browserId:profile.browserId});setLibrarySection("lab");setLibraryOpen(true)}} />
       <WorkspaceLibraryDialog open={libraryOpen} onOpenChange={setLibraryOpen} initialSection={librarySection} source={labSource} task={selectedTask?.sessionId && (selectedTask.profileId || nodes.find(node=>node.browserId===selectedTask.browserId)?.profileId) ? {taskId:selectedTask.sessionId,profileId:(selectedTask.profileId || nodes.find(node=>node.browserId===selectedTask.browserId)?.profileId)!} : null} onRefresh={onRefresh} diagnosticsHref={diagnosticsHref} onOpenProfile={profileId=>{setLaunchProfile(profileId);setLaunchOpen(true)}} />

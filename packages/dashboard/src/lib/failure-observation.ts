@@ -131,8 +131,8 @@ export class DashboardFailureDeliveryQueue {
 export async function reportDashboardFailure(
   observation: DashboardFailureObservation,
   fetcher: FetchImplementation = globalThis.fetch,
-): Promise<void> {
-  await sendDashboardFailure(observation, fetcher);
+): Promise<DashboardFailureDeliveryResult> {
+  return sendDashboardFailureReceipt(observation, fetcher);
 }
 
 // Module lifetime spans dashboard SPA transitions and runtime recovery. The
@@ -311,30 +311,21 @@ function isDocumentVisible(): boolean {
   return typeof document === "undefined" || document.visibilityState === "visible";
 }
 
-async function sendDashboardFailure(
-  observation: DashboardFailureObservation,
-  fetcher: FetchImplementation,
-): Promise<boolean> {
+export type DashboardFailureDeliveryResult = {accepted:boolean;transportAccepted:boolean;receipt:Record<string,any>|null;reason?:string;failure?:unknown};
+async function sendDashboardFailure(observation:DashboardFailureObservation,fetcher:FetchImplementation):Promise<boolean> {
+  return (await sendDashboardFailureReceipt(observation,fetcher)).accepted;
+}
+async function sendDashboardFailureReceipt(observation:DashboardFailureObservation,fetcher:FetchImplementation):Promise<DashboardFailureDeliveryResult> {
   try {
-    const response = await fetcher(FAILURE_OBSERVATION_ROUTE, {
-      method: "POST",
-      credentials: "same-origin",
-      keepalive: true,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...observation,
-        // performance.now() has fractional precision; the receiver accepts u64 milliseconds.
-        elapsedMs: observation.elapsedMs == null
-          ? observation.elapsedMs
-          : Math.max(0, Math.round(observation.elapsedMs)),
-        observationId: observation.observationId || newObservationId(),
-      }),
+    const response=await fetcher(FAILURE_OBSERVATION_ROUTE,{
+      method:"POST",credentials:"same-origin",keepalive:true,signal:AbortSignal.timeout(5000),headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({...observation,elapsedMs:observation.elapsedMs==null?observation.elapsedMs:Math.max(0,Math.round(observation.elapsedMs)),observationId:observation.observationId||newObservationId()}),
     });
-    return response.ok;
-  } catch {
-    // Failure reporting is strictly subordinate to the original action.
-    return false;
-  }
+    const payload=await response.json().catch(()=>null) as Record<string,any>|null;
+    const receipt=payload?.data;
+    const accepted=response.ok&&payload?.success===true&&!responseFailureMetadata(payload)&&receipt?.schemaVersion==="agent-browser.service-failure-record.v1"&&receipt.recorded===true&&typeof receipt.occurrenceId==="string"&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(receipt.occurrenceId);
+    return {accepted,transportAccepted:response.ok,receipt:accepted?payload:null,...(!accepted?{reason:"observer_receipt_unverified"}:{}),...(payload?.failure?{failure:payload.failure}:{})};
+  } catch {return {accepted:false,transportAccepted:false,receipt:null,reason:"observer_transport_unavailable"};}
 }
 
 function actionFromBody(body: BodyInit | null | undefined): string | null {
@@ -349,4 +340,22 @@ function actionFromBody(body: BodyInit | null | undefined): string | null {
 
 function newObservationId(): string {
   return globalThis.crypto?.randomUUID?.() || `dashboard-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+/** Optional existing observer delivery, separate from owner outcome/durability. */
+export async function reportDashboardComponentFailure(error:unknown,stage:string):Promise<void> {
+  try {
+  if(!error||typeof error!=="object")return;
+  const value=error as Record<string,any>;
+  if(value.transportObserved!==true)return;
+  const code=typeof value.code==="string"&&/^[a-z][a-z0-9_]{0,127}$/.test(value.code)?value.code:"dashboard_component_owner_failure";
+  const occurrence=typeof value.occurrenceId==="string"&&/^[a-zA-Z0-9_-]{1,160}$/.test(value.occurrenceId)?value.occurrenceId:undefined;
+  const observationId=occurrence??newObservationId();
+  value.clientObservationId=observationId;
+  value.clientLogging={state:"observer_delivery_pending",ownerOccurrenceId:occurrence??null,clientObservationId:observationId};
+  try {
+    const delivery=await reportDashboardFailure({category:"dashboard_action",stage,code,summary:"Dashboard owner response could not be confirmed.",observationId});
+    value.clientLogging={state:delivery.accepted?"observer_receipt_confirmed":delivery.reason??"observer_delivery_unavailable",transportAccepted:delivery.transportAccepted,observerReceipt:delivery.receipt,observerFailure:delivery.failure??null,ownerOccurrenceId:occurrence??null,clientObservationId:observationId,durableOwnerJournal:"not_asserted"};
+  } catch {value.clientLogging={state:"observer_delivery_failed",ownerOccurrenceId:occurrence??null,clientObservationId:observationId,durableOwnerJournal:"not_asserted"};}
+  } catch { /* Diagnostics cannot replace the original failure. */ }
 }

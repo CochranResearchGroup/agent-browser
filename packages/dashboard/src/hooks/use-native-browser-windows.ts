@@ -1,4 +1,6 @@
 "use client";
+import {dashboardResponseFailureError,dashboardLocalFailure,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchCoordinatedDashboardRead, startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
@@ -20,18 +22,21 @@ export function useNativeBrowserWindows() {
     const request = (async () => {
       try {
         const response = await fetchCoordinatedDashboardRead("/api/v1/desktops/browser-windows?include_hidden=true", { freshForMs: 1000, revalidate });
-        if (!response.ok) throw new Error("native_inventory_unavailable");
-        const result = nativeBrowserWindows(await response.json());
+        if (!response.ok) throw dashboardResponseFailureError(await response.clone().json().catch(()=>({success:false})),"native_inventory_unavailable",{source:"packages/dashboard/src/hooks/use-native-browser-windows.ts",owningFunction:"useNativeBrowserWindows"});
+        const payload=await response.json();
+        if(responseFailureMetadata(payload))throw dashboardResponseFailureError(payload,"native_inventory_unavailable",{source:"packages/dashboard/src/hooks/use-native-browser-windows.ts",owningFunction:"useNativeBrowserWindows"});
+        const result = nativeBrowserWindows(payload);
         if (!mounted.current) return;
         const firstSeen = performance.now() - result.ageMs;
         observation.current = { token: result.observedAtMs, firstSeen: observation.current.token === result.observedAtMs ? Math.min(observation.current.firstSeen, firstSeen) : firstSeen };
         const ageMs = performance.now() - observation.current.firstSeen;
-        if (ageMs >= 30_000) throw new Error("native_inventory_stale");
+        if (ageMs >= 30_000) throw dashboardLocalFailure(new Error("native_inventory_stale"),"native_inventory_stale","packages/dashboard/src/hooks/use-native-browser-windows.ts","useNativeBrowserWindows");
         setWindows(result.windows);
         setIssue(result.unverified ? "Some Remote View desktops could not be checked." : null);
         if (expiry.current) clearTimeout(expiry.current);
         expiry.current = setTimeout(() => { setWindows([]); setIssue("Remote View browser inventory is stale. Refresh browsers."); }, 30_000 - ageMs);
-      } catch {
+      } catch (error) {
+        void reportDashboardComponentFailure(error,"use-native-browser-windows.ts");
         if (!mounted.current) return;
         setWindows([]);
         setIssue("Remote View browser inventory is unavailable. Managed tasks remain listed separately.");
