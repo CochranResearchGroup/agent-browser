@@ -19701,6 +19701,1150 @@
       "policySource": "cli/src/mcp/workflow.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
+    },
+    "browser_record_missing": {
+      "recipe": "service_resource_cleanup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_resources.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_resources.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_shutdown_force_kill_failed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_health.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_health.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_control_coordinator_fence_required": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view/viewer_lease.rs"
+        }
+      ],
+      "policySource": "cli/src/native/remote_view/viewer_lease.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "desktop_input_sink_acknowledgement_missing": {
+      "recipe": "desktop_input_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/desktop_input_provider.rs"
+        }
+      ],
+      "policySource": "cli/src/native/desktop_input_provider.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_journey_commit_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_journey_dashboard_changed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_journey_desktop_missing": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_journey_encode_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_journey_evidence_invalid": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_journey_identity_changed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_journey_persist_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_journey_process_unavailable": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_journey_provider_evidence_unavailable": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_journey_stage_failed": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "native_window_focus_unsupported": {
+      "recipe": "native_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_acquisition_profile_required": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_capability_authentication_failed": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_capability_authorization_required": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_capability_bearer_invalid": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_capability_required": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_acquisition.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_acquisition.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_identity_unavailable": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_acquisition.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_acquisition.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_lease_conflict": {
+      "recipe": "service_connection_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_model.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_model.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_lease_plan_required": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_lease_revision_required": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_lease_schema_unsupported": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_state_migration.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_state_migration.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_recovery_operation_invalid": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_recovery_plan_daemon_route_required": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_recovery_plan_profile_required": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_recovery_plan_required": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_reset_operation_invalid": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_reset_plan_required": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_reset_scope_required": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/http.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/http.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_user_data_directory_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_diagnosis.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_diagnosis.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_display_missing": {
+      "recipe": "service_connection_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_model.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_model.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_provider_auth_failed": {
+      "recipe": "service_connection_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_model.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_model.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_route_pool_exhausted": {
+      "recipe": "service_connection_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_model.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_model.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_environment_ownership_unproven": {
+      "recipe": "service_resource_cleanup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_resources.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_resources.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_host_admission_required": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/connection.rs"
+        }
+      ],
+      "policySource": "cli/src/connection.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_browser_unproven": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_descendant_closure_unproven": {
+      "recipe": "service_resource_cleanup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_resources.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_resources.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_exact_owner_unproven": {
+      "recipe": "service_resource_cleanup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_resources.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_resources.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_generation_exhausted": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_identity_encode_failed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_launch_identity_unproven": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_owner_browser_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_owner_generation_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_owner_process_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_owner_unproven": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_package_launch_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_process_group_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_process_group_unproven": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_process_identity_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_process_identity_unproven": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_process_tree_record_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_profile_identity_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_profile_identity_unproven": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_profile_path_invalid": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_profile_record_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_record_browser_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_record_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_record_profile_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_record_unproven": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_relinquish_authority_unproven": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_relinquish_owner_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_relinquish_record_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_owner_lifecycle_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_owner_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_owner_principal_binding_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_diagnosis.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_diagnosis.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_request_unavailable": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_acquisition.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_acquisition.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_display_browser_missing": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_state_migration.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_state_migration.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_process_browser_missing": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_state_migration.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_state_migration.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_session_browser_missing": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_state_migration.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_state_migration.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_session_profile_missing": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_state_migration.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_state_migration.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_tab_browser_missing": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_state_migration.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_state_migration.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_unavailable": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/action_runtime/runtime/daemon.rs"
+        }
+      ],
+      "policySource": "cli/src/native/action_runtime/runtime/daemon.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_lifecycle_cleanup_not_owned": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_not_closing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_owner_not_ready": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_reconciliation.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_reconciliation.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_abandoned_close_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_abandoned_owner_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_abandoned_ready_compare_and_swap_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_abandoned_transfer_compare_and_swap_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_abandoned_transfer_owner_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_candidate_commit_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_close_binding_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_close_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_legacy_revoke_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_observed_supersession_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_process_tree_generation_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_process_tree_identity_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_process_tree_owner_stale": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_profile_migration_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_profile_record_sync_rejected": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_reconciled_close_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_refresh_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_registration_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_relinquish_before_owner_commit": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_replacement_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_reverse_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_target_set_empty": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_terminal_profile_migration_ambiguous": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_transfer_abort_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "runtime_lifecycle_transfer_prepare_outcome_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/runtime_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/runtime_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "native_journey_use_pending": {
+      "recipe": "desktop_scene_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/dashboard_ingress/native_journey.rs"
+        }
+      ],
+      "policySource": "cli/src/dashboard_ingress/native_journey.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -20058,6 +21202,48 @@
       "source": "cli/src/native/remote_view_application_http.rs",
       "sourceEvidence": "\"native_use_missing\"",
       "reason": "Upstream missing reservation is an internal release/reconciliation match; the public application transport returns the owning classified result rather than raising this cause as a standalone Agent Browser error."
+    },
+    {
+      "code": "browser_health_changed",
+      "source": "cli/src/native/service_activity.rs",
+      "sourceEvidence": "\"browser_health_changed\"",
+      "reason": "ServiceEventKind display/activity label, not an owner failure code. Browser health evidence and its typed failure remain separate from the event kind."
+    },
+    {
+      "code": "profile_lease_lifecycle_changed",
+      "source": "cli/src/native/service_activity.rs",
+      "sourceEvidence": "\"profile_lease_lifecycle_changed\"",
+      "reason": "ServiceEventKind activity label, not a failure publication. Actual lease owner failures are classified separately."
+    },
+    {
+      "code": "service_job_timeout",
+      "source": "cli/src/native/service_activity.rs",
+      "sourceEvidence": "\"service_job_timeout\"",
+      "reason": "Activity/event kind for the retained job terminal state; actual typed job timeout failure is published by the reviewed job owner, not by this presentation label."
+    },
+    {
+      "code": "profile_launch_reached",
+      "source": "cli/src/native/service_profile_recovery.rs",
+      "sourceEvidence": "\"profile_launch_reached\"",
+      "reason": "cfg(test) injected closure sentinel proves the launch branch was reached; production code never emits this test sentinel as an independent public failure."
+    },
+    {
+      "code": "native_use_expired",
+      "source": "cli/src/native/browser_session_host.rs",
+      "sourceEvidence": "\"native_use_expired\"",
+      "reason": "Success-envelope handoff use status records the current Remote View use state; it is not a failure code. Current native-use inspection and separately qualified owner admission remain authoritative."
+    },
+    {
+      "code": "profile_readiness_expired",
+      "source": "cli/src/native/service_monitors.rs",
+      "sourceEvidence": "\"profile_readiness_expired\"",
+      "reason": "Monitor result evidence verdict is nested in readiness, not independently raised as a public error. The reviewed preflight/profile owner contract consumes that verdict and retains its own failure scope."
+    },
+    {
+      "code": "profile_readiness_missing",
+      "source": "cli/src/native/service_monitors.rs",
+      "sourceEvidence": "\"profile_readiness_missing\"",
+      "reason": "Monitor result evidence verdict is nested in readiness, not independently raised as a public error. The reviewed preflight/profile owner contract consumes that verdict and retains its own failure scope."
     }
   ],
   "fragments": [
@@ -20370,6 +21556,21 @@
     {
       "path": "cli/src/native/stream/dashboard.rs",
       "codePattern": "browser_command_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/runtime_reconciliation.rs",
+      "codePattern": "runtime_lifecycle_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/runtime_lifecycle.rs",
+      "codePattern": "runtime_lifecycle_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/dashboard_ingress/native_journey.rs",
+      "codePattern": "native_journey_[a-z0-9_]+",
       "beforeNamedTestModule": true
     }
   ],
