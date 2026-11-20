@@ -15,6 +15,21 @@
       "source": "packages/client/src/playbooks.js",
       "export": "createPlaybookClient",
       "kind": "client_export"
+    },
+    "@agent-browser/client/service-request#createServiceRequest": {
+      "source": "packages/client/src/service-request.js",
+      "export": "createServiceRequest",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceStatus": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceStatus",
+      "kind": "client_export"
+    },
+    "caller_argument_correction": {
+      "source": "packages/client/src/client-argument-error.js",
+      "export": "clientArgumentError",
+      "kind": "caller_correction"
     }
   },
   "recipes": {
@@ -44,6 +59,72 @@
         }
       },
       "resumeCondition": "Exact retained task identity and current control are verified; inspect the original operation with getTaskOperation before deciding whether any input may continue. Unresolved or uncertain originals remain blocked from replay.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientArgumentCorrection": {
+      "rationale": "Only the enumerated pre-dispatch caller-input/configuration checks normalize to this code. An owner, transport, stale-handle or permission failure is not an invalid argument.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Original TypeError message and recovery.source/recovery.owningFunction. No argument values or credential material belong in logs. Local errors have no invented owner occurrence ID.",
+      "inspect": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "contract": "docs/dev/contracts/public-client-argument-normalization.v1.json",
+        "kind": "source_reference",
+        "precondition": "Read the already returned local error and match its exact source and owningFunction against the qualified contract. This is not a file-read command or an installed-source availability claim."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the owning function advertised argument signature and original TypeError message. Correct only the named missing, invalid or contradictory field using the same owner-approved policy and original intended scope. A pure request-builder call may validate corrected request arguments without dispatch. For HTTP helper configuration, correct the existing endpoint/fetch configuration without changing the intended operation. Preserve original task/request IDs.",
+          "precondition": "The exact source check is admitted by the normalization contract and this validation dispatched no owner request. Prior workflow outcomes remain subject to their own original readback.",
+          "interface": "caller_argument_correction"
+        }
+      ],
+      "verification": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "contract": "docs/dev/contracts/public-client-argument-normalization.v1.json",
+        "kind": "source_reference",
+        "precondition": "Read the already returned local error and match its exact source and owningFunction against the qualified contract. This is not a file-read command or an installed-source availability claim."
+      },
+      "resumeCondition": "The original local input contract passes, the existing authenticated owner is observed, and any preceding uncertain operation has been reconciled before resuming the same intended call. A status read alone does not validate caller arguments or grant authority.",
+      "maximumAutomaticAttempts": 1
+    },
+    "serviceClientTransportReadback": {
+      "rationale": "An observability transport failure does not establish an owner operation outcome. The public owner status read is available without inventing a task scope.",
+      "requiredActor": "caller_with_existing_service_access",
+      "evidenceRequirement": "Existing authenticated Service endpoint and original operation identity where applicable.",
+      "inspect": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "diagnostics",
+          "operation": "service_status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Repair the existing authenticated Service transport configuration and re-read status. Preserve original IDs and inspect any original mutation receipt before replay.",
+          "precondition": "Caller has reviewed the original endpoint and access configuration; no permission expansion or automatic mutation retry is authorized.",
+          "interface": "@agent-browser/client/service-observability#getServiceStatus"
+        }
+      ],
+      "verification": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "diagnostics",
+          "operation": "service_status"
+        }
+      },
+      "resumeCondition": "The same owner endpoint is readable and original operation uncertainty is reconciled. Status alone is not proof that a mutation did not occur.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -97,6 +178,57 @@
       "owningChecks": [
         {
           "path": "packages/client/src/native-image-challenge.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "client_argument_invalid": {
+      "recipe": "clientArgumentCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/client-argument-error.js"
+        },
+        {
+          "path": "packages/client/src/service-request.js"
+        },
+        {
+          "path": "packages/client/src/service-observability.js"
+        }
+      ],
+      "normalizationContract": "docs/dev/contracts/public-client-argument-normalization.v1.json",
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_observability_read_failed": {
+      "recipe": "serviceClientTransportReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-observability.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "service_observability_write_failed": {
+      "recipe": "serviceClientTransportReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-observability.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "service_observability_delete_failed": {
+      "recipe": "serviceClientTransportReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/service-observability.js"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",

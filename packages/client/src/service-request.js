@@ -1,3 +1,4 @@
+import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure } from './response-failure.js';
 // @ts-check
 
@@ -187,7 +188,7 @@ export function createServiceRequest(input) {
   assertPlainObject(input, 'service request');
   const record = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (input));
   if (!actionSet.has(input.action)) {
-    throw new TypeError(`Unsupported service request action: ${String(input.action)}`);
+    throw clientArgumentError(`Unsupported service request action: ${String(input.action)}`, "packages/client/src/service-request.js", "createServiceRequest");
   }
   if (Object.hasOwn(input, 'params')) {
     assertPlainObject(input.params, 'service request params');
@@ -197,12 +198,12 @@ export function createServiceRequest(input) {
       Object.hasOwn(input, field) &&
       (!Number.isInteger(record[field]) || Number(record[field]) < 1)
     ) {
-      throw new TypeError(`service request ${field} must be a positive integer`);
+      throw clientArgumentError(`service request ${field} must be a positive integer`, "packages/client/src/service-request.js", "createServiceRequest");
     }
   }
   for (const field of SERVICE_REQUEST_BOOLEAN_FIELDS) {
     if (Object.hasOwn(input, field) && typeof record[field] !== 'boolean') {
-      throw new TypeError(`service request ${field} must be a boolean`);
+      throw clientArgumentError(`service request ${field} must be a boolean`, "packages/client/src/service-request.js", "createServiceRequest");
     }
   }
   for (const field of SERVICE_REQUEST_OBJECT_FIELDS) {
@@ -212,7 +213,7 @@ export function createServiceRequest(input) {
   }
   for (const field of SERVICE_REQUEST_STRING_FIELDS) {
     if (Object.hasOwn(input, field) && typeof record[field] !== 'string') {
-      throw new TypeError(`service request ${field} must be a string`);
+      throw clientArgumentError(`service request ${field} must be a string`, "packages/client/src/service-request.js", "createServiceRequest");
     }
   }
   if (
@@ -220,33 +221,31 @@ export function createServiceRequest(input) {
     record.profileLeasePolicy !== 'reject' &&
     record.profileLeasePolicy !== 'wait'
   ) {
-    throw new TypeError('service request profileLeasePolicy must be reject or wait');
+    throw clientArgumentError('service request profileLeasePolicy must be reject or wait', "packages/client/src/service-request.js", "createServiceRequest");
   }
   if (Object.hasOwn(input, 'displayIsolation') && !displayIsolationSet.has(String(record.displayIsolation))) {
-    throw new TypeError(
-      'service request displayIsolation must be private_virtual_display, shared_display, or ambient_display',
-    );
+    throw clientArgumentError('service request displayIsolation must be private_virtual_display, shared_display, or ambient_display', "packages/client/src/service-request.js", "createServiceRequest");
   }
   for (const field of SERVICE_REQUEST_STRING_ARRAY_FIELDS) {
     if (Object.hasOwn(input, field)) {
       const value = record[field];
       if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
-        throw new TypeError(`service request ${field} must be an array of strings`);
+        throw clientArgumentError(`service request ${field} must be an array of strings`, "packages/client/src/service-request.js", "createServiceRequest");
       }
     }
   }
   if (input.action === 'desktop_capture') {
     if (typeof record.browserId !== 'string' || record.browserId.length === 0) {
-      throw new TypeError('service request desktop_capture requires browserId');
+      throw clientArgumentError('service request desktop_capture requires browserId', "packages/client/src/service-request.js", "createServiceRequest");
     }
     if (record.format !== undefined && record.format !== 'png') {
-      throw new TypeError('service request desktop_capture format must be png');
+      throw clientArgumentError('service request desktop_capture format must be png', "packages/client/src/service-request.js", "createServiceRequest");
     }
     if (record.maxBytes !== undefined && (!Number.isInteger(record.maxBytes) || Number(record.maxBytes) < 1)) {
-      throw new TypeError('service request desktop_capture maxBytes must be a positive integer');
+      throw clientArgumentError('service request desktop_capture maxBytes must be a positive integer', "packages/client/src/service-request.js", "createServiceRequest");
     }
     if (record.maxBytes !== undefined && Number(record.maxBytes) > 16 * 1024 * 1024) {
-      throw new TypeError('service request desktop_capture maxBytes must not exceed 16777216');
+      throw clientArgumentError('service request desktop_capture maxBytes must not exceed 16777216', "packages/client/src/service-request.js", "createServiceRequest");
     }
   }
   if (input.action === 'desktop_locate') {
@@ -287,13 +286,13 @@ export function createServiceTabRequest(input) {
   const { accessPlan, allowManualAction, allowMonitorFreshnessRisk, monitorRunDueSummary, url, params, ...request } =
     input;
   if (url !== undefined && typeof url !== 'string') {
-    throw new TypeError('service tab request url must be a string');
+    throw clientArgumentError('service tab request url must be a string', "packages/client/src/service-request.js", "createServiceTabRequest");
   }
   if (allowManualAction !== undefined && typeof allowManualAction !== 'boolean') {
-    throw new TypeError('service tab request allowManualAction must be a boolean');
+    throw clientArgumentError('service tab request allowManualAction must be a boolean', "packages/client/src/service-request.js", "createServiceTabRequest");
   }
   if (allowMonitorFreshnessRisk !== undefined && typeof allowMonitorFreshnessRisk !== 'boolean') {
-    throw new TypeError('service tab request allowMonitorFreshnessRisk must be a boolean');
+    throw clientArgumentError('service tab request allowMonitorFreshnessRisk must be a boolean', "packages/client/src/service-request.js", "createServiceTabRequest");
   }
   if (params !== undefined) {
     assertPlainObject(params, 'service tab request params');
@@ -312,9 +311,7 @@ export function createServiceTabRequest(input) {
       request[routeField] !== undefined &&
       request[routeField] !== plannedRequestFields[routeField]
     ) {
-      throw new TypeError(
-        `service tab request ${routeField} contradicts the access-plan route`,
-      );
+      throw clientArgumentError(`service tab request ${routeField} contradicts the access-plan route`, "packages/client/src/service-request.js", "createServiceTabRequest");
     }
   }
 
@@ -331,9 +328,7 @@ export function createServiceTabRequest(input) {
     'displayName',
   ];
   if (routeFields.some((field) => tabParams[field] !== undefined || request[field] !== undefined)) {
-    throw new TypeError(
-      'service tab request cannot execute remote-view route intent; use requestServiceRemoteViewOpen() to acquire the route and serviceTabHandle',
-    );
+    throw clientArgumentError('service tab request cannot execute remote-view route intent; use requestServiceRemoteViewOpen() to acquire the route and serviceTabHandle', "packages/client/src/service-request.js", "createServiceTabRequest");
   }
 
   return createServiceRequest({
@@ -517,10 +512,10 @@ export function classifyServiceControlPlaneAuthority(response) {
 function requireRefreshableServiceTabHandle(response) {
   const handle = getServiceTabHandle(response);
   if (!handle) {
-    throw new TypeError('service tab handle refresh request requires serviceTabHandle');
+    throw clientArgumentError('service tab handle refresh request requires serviceTabHandle', "packages/client/src/service-request.js", "requireRefreshableServiceTabHandle");
   }
   if (typeof handle.tabId !== 'string' || handle.tabId.length === 0) {
-    throw new TypeError('service tab handle refresh request requires serviceTabHandle.tabId');
+    throw clientArgumentError('service tab handle refresh request requires serviceTabHandle.tabId', "packages/client/src/service-request.js", "requireRefreshableServiceTabHandle");
   }
   return handle;
 }
@@ -565,13 +560,13 @@ export function createServiceCdpFreeLaunchRequest(input) {
   const { accessPlan, allowManualAction, allowMonitorFreshnessRisk, monitorRunDueSummary, url, params, ...request } =
     input;
   if (url !== undefined && typeof url !== 'string') {
-    throw new TypeError('CDP-free launch request url must be a string');
+    throw clientArgumentError('CDP-free launch request url must be a string', "packages/client/src/service-request.js", "createServiceCdpFreeLaunchRequest");
   }
   if (allowManualAction !== undefined && typeof allowManualAction !== 'boolean') {
-    throw new TypeError('CDP-free launch request allowManualAction must be a boolean');
+    throw clientArgumentError('CDP-free launch request allowManualAction must be a boolean', "packages/client/src/service-request.js", "createServiceCdpFreeLaunchRequest");
   }
   if (allowMonitorFreshnessRisk !== undefined && typeof allowMonitorFreshnessRisk !== 'boolean') {
-    throw new TypeError('CDP-free launch request allowMonitorFreshnessRisk must be a boolean');
+    throw clientArgumentError('CDP-free launch request allowMonitorFreshnessRisk must be a boolean', "packages/client/src/service-request.js", "createServiceCdpFreeLaunchRequest");
   }
   if (params !== undefined) {
     assertPlainObject(params, 'CDP-free launch request params');
@@ -615,21 +610,21 @@ export function createServiceExternalByopAdoptRequest(input) {
   const { profileId, runtimeProfile, cdpUrl, cdpPort, url, params, ...request } = input;
   const effectiveProfileId = runtimeProfile ?? profileId;
   if (typeof effectiveProfileId !== 'string' || effectiveProfileId.trim().length === 0) {
-    throw new TypeError('external BYOP adopt request requires runtimeProfile or profileId');
+    throw clientArgumentError('external BYOP adopt request requires runtimeProfile or profileId', "packages/client/src/service-request.js", "createServiceExternalByopAdoptRequest");
   }
   if (cdpUrl !== undefined && typeof cdpUrl !== 'string') {
-    throw new TypeError('external BYOP adopt request cdpUrl must be a string');
+    throw clientArgumentError('external BYOP adopt request cdpUrl must be a string', "packages/client/src/service-request.js", "createServiceExternalByopAdoptRequest");
   }
   if (cdpPort !== undefined && (!Number.isInteger(cdpPort) || cdpPort < 1)) {
-    throw new TypeError('external BYOP adopt request cdpPort must be a positive integer');
+    throw clientArgumentError('external BYOP adopt request cdpPort must be a positive integer', "packages/client/src/service-request.js", "createServiceExternalByopAdoptRequest");
   }
   const hasCdpUrl = typeof cdpUrl === 'string' && cdpUrl.trim().length > 0;
   const hasCdpPort = cdpPort !== undefined;
   if (hasCdpUrl === hasCdpPort) {
-    throw new TypeError('external BYOP adopt request requires exactly one of cdpUrl or cdpPort');
+    throw clientArgumentError('external BYOP adopt request requires exactly one of cdpUrl or cdpPort', "packages/client/src/service-request.js", "createServiceExternalByopAdoptRequest");
   }
   if (url !== undefined && typeof url !== 'string') {
-    throw new TypeError('external BYOP adopt request url must be a string');
+    throw clientArgumentError('external BYOP adopt request url must be a string', "packages/client/src/service-request.js", "createServiceExternalByopAdoptRequest");
   }
   if (params !== undefined) {
     assertPlainObject(params, 'external BYOP adopt request params');
@@ -660,13 +655,13 @@ export function createServiceCdpAttachRequest(input) {
     assertPlainObject(params, 'service CDP attach request params');
   }
   if (request.cdpAttachmentAllowed !== true) {
-    throw new TypeError('service CDP attach request requires cdpAttachmentAllowed=true');
+    throw clientArgumentError('service CDP attach request requires cdpAttachmentAllowed=true', "packages/client/src/service-request.js", "createServiceCdpAttachRequest");
   }
   if (request.requiresCdpFree === true) {
-    throw new TypeError('service CDP attach request cannot run when requiresCdpFree=true');
+    throw clientArgumentError('service CDP attach request cannot run when requiresCdpFree=true', "packages/client/src/service-request.js", "createServiceCdpAttachRequest");
   }
   if (!handle.targetId) {
-    throw new TypeError('service CDP attach request requires serviceTabHandle.targetId');
+    throw clientArgumentError('service CDP attach request requires serviceTabHandle.targetId', "packages/client/src/service-request.js", "createServiceCdpAttachRequest");
   }
   const routing = serviceTabHandleRouting(request, handle);
   return createServiceRequest({
@@ -717,19 +712,19 @@ export function createServiceEvaluateRequest(input) {
   }
   const source = script ?? expression;
   if (typeof source !== 'string' || source.length === 0) {
-    throw new TypeError('service evaluate request requires script or expression');
+    throw clientArgumentError('service evaluate request requires script or expression', "packages/client/src/service-request.js", "createServiceEvaluateRequest");
   }
   if (request.returnByValue === false) {
-    throw new TypeError('service evaluate request requires returnByValue=true');
+    throw clientArgumentError('service evaluate request requires returnByValue=true', "packages/client/src/service-request.js", "createServiceEvaluateRequest");
   }
   if (!Number.isInteger(request.timeoutMs) || Number(request.timeoutMs) < 1) {
-    throw new TypeError('service evaluate request requires positive timeoutMs');
+    throw clientArgumentError('service evaluate request requires positive timeoutMs', "packages/client/src/service-request.js", "createServiceEvaluateRequest");
   }
   if (!Number.isInteger(request.maxReturnBytes) || Number(request.maxReturnBytes) < 1) {
-    throw new TypeError('service evaluate request requires positive maxReturnBytes');
+    throw clientArgumentError('service evaluate request requires positive maxReturnBytes', "packages/client/src/service-request.js", "createServiceEvaluateRequest");
   }
   if (!handle.targetId) {
-    throw new TypeError('service evaluate request requires serviceTabHandle.targetId');
+    throw clientArgumentError('service evaluate request requires serviceTabHandle.targetId', "packages/client/src/service-request.js", "createServiceEvaluateRequest");
   }
   const routing = serviceTabHandleRouting(request, handle);
   return createServiceRequest({
@@ -761,14 +756,14 @@ export function createServiceDiagnosticsRequest(input) {
   for (const field of ['maxConsoleEntries', 'maxErrorEntries', 'maxRequestEntries']) {
     const value = /** @type {Record<string, unknown>} */ (request)[field];
     if (value !== undefined && (!Number.isInteger(value) || Number(value) < 1)) {
-      throw new TypeError(`service diagnostics request ${field} must be a positive integer`);
+      throw clientArgumentError(`service diagnostics request ${field} must be a positive integer`, "packages/client/src/service-request.js", "createServiceDiagnosticsRequest");
     }
   }
   if (request.includeScreenshot !== undefined && typeof request.includeScreenshot !== 'boolean') {
-    throw new TypeError('service diagnostics request includeScreenshot must be a boolean');
+    throw clientArgumentError('service diagnostics request includeScreenshot must be a boolean', "packages/client/src/service-request.js", "createServiceDiagnosticsRequest");
   }
   if (request.screenshotDir !== undefined && typeof request.screenshotDir !== 'string') {
-    throw new TypeError('service diagnostics request screenshotDir must be a string');
+    throw clientArgumentError('service diagnostics request screenshotDir must be a string', "packages/client/src/service-request.js", "createServiceDiagnosticsRequest");
   }
   const routing = serviceTabHandleRouting(request, handle);
   return createServiceRequest({
@@ -790,19 +785,19 @@ export function createServiceDesktopCaptureRequest(input) {
   assertPlainObject(input, 'service desktop capture request');
   const { browserId, sessionName, format = 'png', maxBytes = 4 * 1024 * 1024, ...request } = input;
   if (typeof browserId !== 'string' || browserId.length === 0) {
-    throw new TypeError('service desktop capture request requires browserId');
+    throw clientArgumentError('service desktop capture request requires browserId', "packages/client/src/service-request.js", "createServiceDesktopCaptureRequest");
   }
   if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.length === 0)) {
-    throw new TypeError('service desktop capture request sessionName must be a non-empty string');
+    throw clientArgumentError('service desktop capture request sessionName must be a non-empty string', "packages/client/src/service-request.js", "createServiceDesktopCaptureRequest");
   }
   if (format !== 'png') {
-    throw new TypeError('service desktop capture request format must be png');
+    throw clientArgumentError('service desktop capture request format must be png', "packages/client/src/service-request.js", "createServiceDesktopCaptureRequest");
   }
   if (!Number.isInteger(maxBytes) || maxBytes < 1) {
-    throw new TypeError('service desktop capture request maxBytes must be a positive integer');
+    throw clientArgumentError('service desktop capture request maxBytes must be a positive integer', "packages/client/src/service-request.js", "createServiceDesktopCaptureRequest");
   }
   if (maxBytes > 16 * 1024 * 1024) {
-    throw new TypeError('service desktop capture request maxBytes must not exceed 16777216');
+    throw clientArgumentError('service desktop capture request maxBytes must not exceed 16777216', "packages/client/src/service-request.js", "createServiceDesktopCaptureRequest");
   }
   return createServiceRequest({
     ...request,
@@ -834,22 +829,22 @@ export function createServiceDesktopLocateRequest(input) {
   const allowedRequestFields = new Set(['jobTimeoutMs', 'serviceName', 'agentName', 'taskName']);
   const forbiddenField = Object.keys(request).find((field) => !allowedRequestFields.has(field));
   if (forbiddenField !== undefined) {
-    throw new TypeError(`service desktop locate request does not accept ${forbiddenField}`);
+    throw clientArgumentError(`service desktop locate request does not accept ${forbiddenField}`, "packages/client/src/service-request.js", "createServiceDesktopLocateRequest");
   }
   if (typeof browserId !== 'string' || browserId.trim().length === 0) {
-    throw new TypeError('service desktop locate request requires browserId');
+    throw clientArgumentError('service desktop locate request requires browserId', "packages/client/src/service-request.js", "createServiceDesktopLocateRequest");
   }
   if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
-    throw new TypeError('service desktop locate request sessionName must be a non-empty string');
+    throw clientArgumentError('service desktop locate request sessionName must be a non-empty string', "packages/client/src/service-request.js", "createServiceDesktopLocateRequest");
   }
   if (typeof locatorId !== 'string' || locatorId.trim().length === 0) {
-    throw new TypeError('service desktop locate request requires locatorId');
+    throw clientArgumentError('service desktop locate request requires locatorId', "packages/client/src/service-request.js", "createServiceDesktopLocateRequest");
   }
   if (!Number.isInteger(maxCandidates) || maxCandidates < 1 || maxCandidates > 32) {
-    throw new TypeError('service desktop locate request maxCandidates must be an integer between 1 and 32');
+    throw clientArgumentError('service desktop locate request maxCandidates must be an integer between 1 and 32', "packages/client/src/service-request.js", "createServiceDesktopLocateRequest");
   }
   if (typeof includeVisualization !== 'boolean') {
-    throw new TypeError('service desktop locate request includeVisualization must be a boolean');
+    throw clientArgumentError('service desktop locate request includeVisualization must be a boolean', "packages/client/src/service-request.js", "createServiceDesktopLocateRequest");
   }
   return createServiceRequest({
     ...request,
@@ -887,7 +882,7 @@ export function createServiceDesktopEvidenceObserveRequest(input) {
   const allowedRequestFields = new Set(['jobTimeoutMs']);
   const forbiddenField = Object.keys(request).find((field) => !allowedRequestFields.has(field));
   if (forbiddenField !== undefined) {
-    throw new TypeError(`service desktop evidence observe request does not accept ${forbiddenField}`);
+    throw clientArgumentError(`service desktop evidence observe request does not accept ${forbiddenField}`, "packages/client/src/service-request.js", "createServiceDesktopEvidenceObserveRequest");
   }
   for (const [field, value] of Object.entries({
     browserId,
@@ -897,20 +892,18 @@ export function createServiceDesktopEvidenceObserveRequest(input) {
     taskName,
   })) {
     if (typeof value !== 'string' || value.trim().length === 0) {
-      throw new TypeError(`service desktop evidence observe request requires ${field}`);
+      throw clientArgumentError(`service desktop evidence observe request requires ${field}`, "packages/client/src/service-request.js", "createServiceDesktopEvidenceObserveRequest");
     }
   }
   if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
-    throw new TypeError('service desktop evidence observe request sessionName must be a non-empty string');
+    throw clientArgumentError('service desktop evidence observe request sessionName must be a non-empty string', "packages/client/src/service-request.js", "createServiceDesktopEvidenceObserveRequest");
   }
   if (!['stacking_or_occlusion', 'passkey_chooser'].includes(evidenceSurface)) {
-    throw new TypeError(
-      'service desktop evidence observe request requires evidenceSurface stacking_or_occlusion or passkey_chooser',
-    );
+    throw clientArgumentError('service desktop evidence observe request requires evidenceSurface stacking_or_occlusion or passkey_chooser', "packages/client/src/service-request.js", "createServiceDesktopEvidenceObserveRequest");
   }
   validateDesktopEvidenceTrigger(evidenceSurface, serviceTabHandle, uiAction);
   if (typeof includeFrame !== 'boolean') {
-    throw new TypeError('service desktop evidence observe request includeFrame must be a boolean');
+    throw clientArgumentError('service desktop evidence observe request includeFrame must be a boolean', "packages/client/src/service-request.js", "createServiceDesktopEvidenceObserveRequest");
   }
   return createServiceRequest({
     ...request,
@@ -952,7 +945,7 @@ export function createServiceDesktopInteractRequest(input) {
   const allowedRequestFields = new Set(['jobTimeoutMs']);
   const forbiddenField = Object.keys(request).find((field) => !allowedRequestFields.has(field));
   if (forbiddenField !== undefined) {
-    throw new TypeError(`service desktop interact request does not accept ${forbiddenField}`);
+    throw clientArgumentError(`service desktop interact request does not accept ${forbiddenField}`, "packages/client/src/service-request.js", "createServiceDesktopInteractRequest");
   }
   for (const [field, value] of Object.entries({
     browserId,
@@ -963,16 +956,14 @@ export function createServiceDesktopInteractRequest(input) {
     taskName,
   })) {
     if (typeof value !== 'string' || value.trim().length === 0) {
-      throw new TypeError(`service desktop interact request requires ${field}`);
+      throw clientArgumentError(`service desktop interact request requires ${field}`, "packages/client/src/service-request.js", "createServiceDesktopInteractRequest");
     }
   }
   if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
-    throw new TypeError('service desktop interact request sessionName must be a non-empty string');
+    throw clientArgumentError('service desktop interact request sessionName must be a non-empty string', "packages/client/src/service-request.js", "createServiceDesktopInteractRequest");
   }
   if (!['p110-pointer-keyboard-v1', 'p110-foundation-stress-v1', 'p131-controlled-x11-v1', 'cloudflare-turnstile-v1', 'hcaptcha-checkbox-v1'].includes(recipeId)) {
-    throw new TypeError(
-      'service desktop interact request requires a supported recipeId',
-    );
+    throw clientArgumentError('service desktop interact request requires a supported recipeId', "packages/client/src/service-request.js", "createServiceDesktopInteractRequest");
   }
   return createServiceRequest({
     ...request,
@@ -1011,7 +1002,7 @@ export function createServiceDesktopPromptObserveRequest(input) {
   const allowedRequestFields = new Set(['jobTimeoutMs']);
   const forbiddenField = Object.keys(request).find((field) => !allowedRequestFields.has(field));
   if (forbiddenField !== undefined) {
-    throw new TypeError(`service desktop prompt observe request does not accept ${forbiddenField}`);
+    throw clientArgumentError(`service desktop prompt observe request does not accept ${forbiddenField}`, "packages/client/src/service-request.js", "createServiceDesktopPromptObserveRequest");
   }
   for (const [field, value] of Object.entries({
     browserId,
@@ -1020,19 +1011,17 @@ export function createServiceDesktopPromptObserveRequest(input) {
     taskName,
   })) {
     if (typeof value !== 'string' || value.trim().length === 0) {
-      throw new TypeError(`service desktop prompt observe request requires ${field}`);
+      throw clientArgumentError(`service desktop prompt observe request requires ${field}`, "packages/client/src/service-request.js", "createServiceDesktopPromptObserveRequest");
     }
   }
   if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
-    throw new TypeError('service desktop prompt observe request sessionName must be a non-empty string');
+    throw clientArgumentError('service desktop prompt observe request sessionName must be a non-empty string', "packages/client/src/service-request.js", "createServiceDesktopPromptObserveRequest");
   }
   if (promptProfileId !== 'p110-external-prompt-v1') {
-    throw new TypeError(
-      'service desktop prompt observe request requires promptProfileId p110-external-prompt-v1',
-    );
+    throw clientArgumentError('service desktop prompt observe request requires promptProfileId p110-external-prompt-v1', "packages/client/src/service-request.js", "createServiceDesktopPromptObserveRequest");
   }
   if (typeof includeVisualization !== 'boolean') {
-    throw new TypeError('service desktop prompt observe request includeVisualization must be a boolean');
+    throw clientArgumentError('service desktop prompt observe request includeVisualization must be a boolean', "packages/client/src/service-request.js", "createServiceDesktopPromptObserveRequest");
   }
   return createServiceRequest({
     ...request,
@@ -1064,27 +1053,27 @@ export function createServiceProbeRequest(input) {
   const probeRecord = /** @type {Record<string, unknown>} */ (probe);
   const detectors = probeRecord.detectors;
   if (!Array.isArray(detectors) || detectors.length === 0) {
-    throw new TypeError('service probe request requires probe.detectors array');
+    throw clientArgumentError('service probe request requires probe.detectors array', "packages/client/src/service-request.js", "createServiceProbeRequest");
   }
   const timeoutMs = request.timeoutMs ?? probeRecord.timeoutMs;
   const maxReturnBytes = request.maxReturnBytes ?? probeRecord.maxReturnBytes;
   if (!Number.isInteger(timeoutMs) || Number(timeoutMs) < 1) {
-    throw new TypeError('service probe request requires positive timeoutMs');
+    throw clientArgumentError('service probe request requires positive timeoutMs', "packages/client/src/service-request.js", "createServiceProbeRequest");
   }
   if (!Number.isInteger(maxReturnBytes) || Number(maxReturnBytes) < 1) {
-    throw new TypeError('service probe request requires positive maxReturnBytes');
+    throw clientArgumentError('service probe request requires positive maxReturnBytes', "packages/client/src/service-request.js", "createServiceProbeRequest");
   }
   if (!handle.targetId) {
-    throw new TypeError('service probe request requires serviceTabHandle.targetId');
+    throw clientArgumentError('service probe request requires serviceTabHandle.targetId', "packages/client/src/service-request.js", "createServiceProbeRequest");
   }
   const recordFreshness = /** @type {Record<string, unknown> | undefined} */ (probeRecord.recordFreshness);
   if (recordFreshness !== undefined) {
     assertPlainObject(recordFreshness, 'service probe request probe.recordFreshness');
     if (typeof recordFreshness.targetServiceId !== 'string' || recordFreshness.targetServiceId.length === 0) {
-      throw new TypeError('service probe request probe.recordFreshness requires targetServiceId');
+      throw clientArgumentError('service probe request probe.recordFreshness requires targetServiceId', "packages/client/src/service-request.js", "createServiceProbeRequest");
     }
     if (typeof recordFreshness.accountId !== 'string' || recordFreshness.accountId.length === 0) {
-      throw new TypeError('service probe request probe.recordFreshness requires accountId');
+      throw clientArgumentError('service probe request probe.recordFreshness requires accountId', "packages/client/src/service-request.js", "createServiceProbeRequest");
     }
   }
   const routing = serviceTabHandleRouting(request, handle);
@@ -1117,18 +1106,18 @@ export function createServiceUiActionRequest(input) {
   const uiActionRecord = /** @type {Record<string, unknown>} */ (uiAction);
   const steps = uiActionRecord.steps;
   if (!Array.isArray(steps) || steps.length === 0) {
-    throw new TypeError('service UI action request requires uiAction.steps array');
+    throw clientArgumentError('service UI action request requires uiAction.steps array', "packages/client/src/service-request.js", "createServiceUiActionRequest");
   }
   const timeoutMs = request.timeoutMs ?? uiActionRecord.timeoutMs;
   if (!Number.isInteger(timeoutMs) || Number(timeoutMs) < 1) {
-    throw new TypeError('service UI action request requires positive timeoutMs');
+    throw clientArgumentError('service UI action request requires positive timeoutMs', "packages/client/src/service-request.js", "createServiceUiActionRequest");
   }
   const maxTextBytes = request.maxTextBytes ?? uiActionRecord.maxTextBytes;
   if (maxTextBytes !== undefined && (!Number.isInteger(maxTextBytes) || Number(maxTextBytes) < 1)) {
-    throw new TypeError('service UI action request maxTextBytes must be positive when supplied');
+    throw clientArgumentError('service UI action request maxTextBytes must be positive when supplied', "packages/client/src/service-request.js", "createServiceUiActionRequest");
   }
   if (!handle.targetId) {
-    throw new TypeError('service UI action request requires serviceTabHandle.targetId');
+    throw clientArgumentError('service UI action request requires serviceTabHandle.targetId', "packages/client/src/service-request.js", "createServiceUiActionRequest");
   }
   const routing = serviceTabHandleRouting(request, handle);
   return createServiceRequest({
@@ -1160,22 +1149,22 @@ export function createServiceNetworkCaptureRequest(input) {
   const networkCaptureRecord = /** @type {Record<string, unknown>} */ (networkCapture);
   const timeoutMs = request.timeoutMs ?? networkCaptureRecord.timeoutMs ?? networkCaptureRecord.maxDurationMs;
   if (!Number.isInteger(timeoutMs) || Number(timeoutMs) < 1) {
-    throw new TypeError('service network capture request requires positive timeoutMs');
+    throw clientArgumentError('service network capture request requires positive timeoutMs', "packages/client/src/service-request.js", "createServiceNetworkCaptureRequest");
   }
   const maxEvents = networkCaptureRecord.maxEvents;
   if (!Number.isInteger(maxEvents) || Number(maxEvents) < 1) {
-    throw new TypeError('service network capture request requires positive networkCapture.maxEvents');
+    throw clientArgumentError('service network capture request requires positive networkCapture.maxEvents', "packages/client/src/service-request.js", "createServiceNetworkCaptureRequest");
   }
   const captureBodies = networkCaptureRecord.captureBodies === true;
   const maxBodyBytes = request.maxBodyBytes ?? networkCaptureRecord.maxBodyBytes;
   if (captureBodies && (!Number.isInteger(maxBodyBytes) || Number(maxBodyBytes) < 1)) {
-    throw new TypeError('service network capture request captureBodies requires positive maxBodyBytes');
+    throw clientArgumentError('service network capture request captureBodies requires positive maxBodyBytes', "packages/client/src/service-request.js", "createServiceNetworkCaptureRequest");
   }
   if (maxBodyBytes !== undefined && (!Number.isInteger(maxBodyBytes) || Number(maxBodyBytes) < 1)) {
-    throw new TypeError('service network capture request maxBodyBytes must be positive when supplied');
+    throw clientArgumentError('service network capture request maxBodyBytes must be positive when supplied', "packages/client/src/service-request.js", "createServiceNetworkCaptureRequest");
   }
   if (!handle.targetId) {
-    throw new TypeError('service network capture request requires serviceTabHandle.targetId');
+    throw clientArgumentError('service network capture request requires serviceTabHandle.targetId', "packages/client/src/service-request.js", "createServiceNetworkCaptureRequest");
   }
   const routing = serviceTabHandleRouting(request, handle);
   return createServiceRequest({
@@ -1207,10 +1196,10 @@ export function createServiceFileTransferRequest(input) {
   const fileTransferRecord = /** @type {Record<string, unknown>} */ (fileTransfer);
   const timeoutMs = request.timeoutMs ?? fileTransferRecord.timeoutMs;
   if (!Number.isInteger(timeoutMs) || Number(timeoutMs) < 1) {
-    throw new TypeError('service file transfer request requires positive timeoutMs');
+    throw clientArgumentError('service file transfer request requires positive timeoutMs', "packages/client/src/service-request.js", "createServiceFileTransferRequest");
   }
   if (fileTransferRecord.upload === undefined && fileTransferRecord.download === undefined) {
-    throw new TypeError('service file transfer request requires upload or download recipe');
+    throw clientArgumentError('service file transfer request requires upload or download recipe', "packages/client/src/service-request.js", "createServiceFileTransferRequest");
   }
   if (fileTransferRecord.upload !== undefined) {
     assertFileTransferUploadRecipe(fileTransferRecord.upload);
@@ -1219,7 +1208,7 @@ export function createServiceFileTransferRequest(input) {
     assertFileTransferDownloadRecipe(fileTransferRecord.download);
   }
   if (!handle.targetId) {
-    throw new TypeError('service file transfer request requires serviceTabHandle.targetId');
+    throw clientArgumentError('service file transfer request requires serviceTabHandle.targetId', "packages/client/src/service-request.js", "createServiceFileTransferRequest");
   }
   const routing = serviceTabHandleRouting(request, handle);
   return createServiceRequest({
@@ -1240,18 +1229,18 @@ function assertFileTransferUploadRecipe(upload) {
   assertPlainObject(upload, 'service file transfer upload');
   const record = /** @type {Record<string, unknown>} */ (upload);
   if (typeof record.selector !== 'string' && typeof record.labelText !== 'string' && typeof record.label !== 'string') {
-    throw new TypeError('service file transfer upload requires selector or labelText');
+    throw clientArgumentError('service file transfer upload requires selector or labelText', "packages/client/src/service-request.js", "assertFileTransferUploadRecipe");
   }
   const files = record.files;
   if (!Array.isArray(files) || files.length === 0 || files.some((file) => typeof file !== 'string' || file.length === 0)) {
-    throw new TypeError('service file transfer upload requires files array');
+    throw clientArgumentError('service file transfer upload requires files array', "packages/client/src/service-request.js", "assertFileTransferUploadRecipe");
   }
   const maxFiles = record.maxFiles;
   if (!Number.isInteger(maxFiles) || Number(maxFiles) < 1) {
-    throw new TypeError('service file transfer upload requires positive maxFiles');
+    throw clientArgumentError('service file transfer upload requires positive maxFiles', "packages/client/src/service-request.js", "assertFileTransferUploadRecipe");
   }
   if (files.length > Number(maxFiles)) {
-    throw new TypeError('service file transfer upload file count exceeds maxFiles');
+    throw clientArgumentError('service file transfer upload file count exceeds maxFiles', "packages/client/src/service-request.js", "assertFileTransferUploadRecipe");
   }
   assertNonemptyStringArray(record.allowedPaths, 'service file transfer upload allowedPaths');
 }
@@ -1263,14 +1252,14 @@ function assertFileTransferDownloadRecipe(download) {
   assertPlainObject(download, 'service file transfer download');
   const record = /** @type {Record<string, unknown>} */ (download);
   if (typeof record.selector !== 'string' || record.selector.length === 0) {
-    throw new TypeError('service file transfer download requires selector');
+    throw clientArgumentError('service file transfer download requires selector', "packages/client/src/service-request.js", "assertFileTransferDownloadRecipe");
   }
   if (typeof record.directory !== 'string' || record.directory.length === 0) {
-    throw new TypeError('service file transfer download requires directory');
+    throw clientArgumentError('service file transfer download requires directory', "packages/client/src/service-request.js", "assertFileTransferDownloadRecipe");
   }
   assertNonemptyStringArray(record.allowedDirectories, 'service file transfer download allowedDirectories');
   if (record.maxBytes !== undefined && (!Number.isInteger(record.maxBytes) || Number(record.maxBytes) < 1)) {
-    throw new TypeError('service file transfer download maxBytes must be positive when supplied');
+    throw clientArgumentError('service file transfer download maxBytes must be positive when supplied', "packages/client/src/service-request.js", "assertFileTransferDownloadRecipe");
   }
 }
 
@@ -1280,7 +1269,7 @@ function assertFileTransferDownloadRecipe(download) {
  */
 function assertNonemptyStringArray(value, label) {
   if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== 'string' || item.length === 0)) {
-    throw new TypeError(`${label} must be a nonempty string array`);
+    throw clientArgumentError(`${label} must be a nonempty string array`, "packages/client/src/service-request.js", "assertNonemptyStringArray");
   }
 }
 
@@ -1299,9 +1288,7 @@ export function createServiceTabHandleRefreshRequest(input) {
   }
   const repairPolicy = request.repairPolicy ?? 'reject_only';
   if (!['reject_only', 'reuse_compatible', 'open_if_missing', 'replace_duplicates'].includes(repairPolicy)) {
-    throw new TypeError(
-      'service tab handle refresh request repairPolicy must be reject_only, reuse_compatible, open_if_missing, or replace_duplicates',
-    );
+    throw clientArgumentError('service tab handle refresh request repairPolicy must be reject_only, reuse_compatible, open_if_missing, or replace_duplicates', "packages/client/src/service-request.js", "createServiceTabHandleRefreshRequest");
   }
   const routing = serviceTabHandleRouting(request, handle);
   return createServiceRequest({
@@ -1564,18 +1551,18 @@ export function createServiceProfilePolicyMutationRequest(input) {
   assertPlainObject(input, 'profile policy mutation request');
   const { params, ...request } = input;
   if (typeof request.profileId !== 'string' || request.profileId.trim().length === 0) {
-    throw new TypeError('profile policy mutation request requires profileId');
+    throw clientArgumentError('profile policy mutation request requires profileId', "packages/client/src/service-request.js", "createServiceProfilePolicyMutationRequest");
   }
   if (!Number.isInteger(request.expectedRevision) || request.expectedRevision < 1) {
-    throw new TypeError('profile policy mutation request expectedRevision must be a positive integer');
+    throw clientArgumentError('profile policy mutation request expectedRevision must be a positive integer', "packages/client/src/service-request.js", "createServiceProfilePolicyMutationRequest");
   }
   const hasTargetPolicy = request.targetPolicy !== undefined;
   const hasPreset = request.mode !== undefined || request.preset !== undefined;
   if (hasTargetPolicy === hasPreset) {
-    throw new TypeError('profile policy mutation request requires targetPolicy or mode and preset');
+    throw clientArgumentError('profile policy mutation request requires targetPolicy or mode and preset', "packages/client/src/service-request.js", "createServiceProfilePolicyMutationRequest");
   }
   if (hasPreset && (request.mode === undefined || request.preset === undefined)) {
-    throw new TypeError('profile policy mutation request requires both mode and preset');
+    throw clientArgumentError('profile policy mutation request requires both mode and preset', "packages/client/src/service-request.js", "createServiceProfilePolicyMutationRequest");
   }
   const mergedParams = mergeParams(params, request, [
     'expectedRevision',
@@ -1603,7 +1590,7 @@ export function createServiceProfileTabEvictionRequest(input) {
   const { params, ...request } = input;
   for (const field of ['authorizationId', 'tabId']) {
     if (typeof request[field] !== 'string' || request[field].trim().length === 0) {
-      throw new TypeError(`profile tab eviction request requires ${field}`);
+      throw clientArgumentError(`profile tab eviction request requires ${field}`, "packages/client/src/service-request.js", "createServiceProfileTabEvictionRequest");
     }
   }
   const mergedParams = mergeParams(params, request, ['authorizationId', 'tabId']);
@@ -1731,10 +1718,10 @@ export function createServiceControllerLeaseTakeoverRequest(input) {
  */
 export async function postServiceRequest({ baseUrl, request, profileCapability, fetch = globalThis.fetch, signal }) {
   if (typeof fetch !== 'function') {
-    throw new TypeError('postServiceRequest requires a fetch implementation');
+    throw clientArgumentError('postServiceRequest requires a fetch implementation', "packages/client/src/service-request.js", "postServiceRequest");
   }
   if (typeof baseUrl !== 'string' || baseUrl.length === 0) {
-    throw new TypeError('postServiceRequest requires a baseUrl string');
+    throw clientArgumentError('postServiceRequest requires a baseUrl string', "packages/client/src/service-request.js", "postServiceRequest");
   }
 
   const response = await fetch(new URL('/api/service/request', baseUrl), {
@@ -2963,45 +2950,45 @@ function validateDesktopLocateRequest(request) {
   ]);
   const forbiddenField = Object.keys(request).find((field) => !allowedFields.has(field));
   if (forbiddenField !== undefined) {
-    throw new TypeError(`service desktop locate request does not accept ${forbiddenField}`);
+    throw clientArgumentError(`service desktop locate request does not accept ${forbiddenField}`, "packages/client/src/service-request.js", "validateDesktopLocateRequest");
   }
   const params = recordFromUnknown(request.params);
   if (request.params !== undefined && params === null) {
-    throw new TypeError('service desktop locate request params must be an object');
+    throw clientArgumentError('service desktop locate request params must be an object', "packages/client/src/service-request.js", "validateDesktopLocateRequest");
   }
   const allowedParams = new Set(['browserId', 'sessionName', 'locator', 'includeVisualization']);
   const forbiddenParam = params && Object.keys(params).find((field) => !allowedParams.has(field));
   if (forbiddenParam) {
-    throw new TypeError(`service desktop locate request does not accept params.${forbiddenParam}`);
+    throw clientArgumentError(`service desktop locate request does not accept params.${forbiddenParam}`, "packages/client/src/service-request.js", "validateDesktopLocateRequest");
   }
   const field = (name) => request[name] ?? params?.[name];
   if (typeof field('browserId') !== 'string' || String(field('browserId')).trim().length === 0) {
-    throw new TypeError('service desktop locate request requires browserId');
+    throw clientArgumentError('service desktop locate request requires browserId', "packages/client/src/service-request.js", "validateDesktopLocateRequest");
   }
   const sessionName = field('sessionName');
   if (sessionName !== undefined && (typeof sessionName !== 'string' || sessionName.trim().length === 0)) {
-    throw new TypeError('service desktop locate request sessionName must be a non-empty string');
+    throw clientArgumentError('service desktop locate request sessionName must be a non-empty string', "packages/client/src/service-request.js", "validateDesktopLocateRequest");
   }
   const locator = recordFromUnknown(field('locator'));
   if (locator === null) {
-    throw new TypeError('service desktop locate request requires locator');
+    throw clientArgumentError('service desktop locate request requires locator', "packages/client/src/service-request.js", "validateDesktopLocateRequest");
   }
   const locatorField = Object.keys(locator).find((name) => !['locatorId', 'maxCandidates'].includes(name));
   if (locatorField !== undefined) {
-    throw new TypeError(`service desktop locate request locator does not accept ${locatorField}`);
+    throw clientArgumentError(`service desktop locate request locator does not accept ${locatorField}`, "packages/client/src/service-request.js", "validateDesktopLocateRequest");
   }
   if (typeof locator.locatorId !== 'string' || locator.locatorId.trim().length === 0) {
-    throw new TypeError('service desktop locate request locator requires locatorId');
+    throw clientArgumentError('service desktop locate request locator requires locatorId', "packages/client/src/service-request.js", "validateDesktopLocateRequest");
   }
   if (
     locator.maxCandidates !== undefined &&
     (!Number.isInteger(locator.maxCandidates) || Number(locator.maxCandidates) < 1 || Number(locator.maxCandidates) > 32)
   ) {
-    throw new TypeError('service desktop locate request locator.maxCandidates must be an integer between 1 and 32');
+    throw clientArgumentError('service desktop locate request locator.maxCandidates must be an integer between 1 and 32', "packages/client/src/service-request.js", "validateDesktopLocateRequest");
   }
   const includeVisualization = field('includeVisualization');
   if (includeVisualization !== undefined && typeof includeVisualization !== 'boolean') {
-    throw new TypeError('service desktop locate request includeVisualization must be a boolean');
+    throw clientArgumentError('service desktop locate request includeVisualization must be a boolean', "packages/client/src/service-request.js", "validateDesktopLocateRequest");
   }
 }
 
@@ -3025,26 +3012,24 @@ function validateDesktopEvidenceObserveRequest(request) {
   ]);
   const forbiddenField = Object.keys(request).find((field) => !allowedFields.has(field));
   if (forbiddenField !== undefined) {
-    throw new TypeError(`service desktop evidence observe request does not accept ${forbiddenField}`);
+    throw clientArgumentError(`service desktop evidence observe request does not accept ${forbiddenField}`, "packages/client/src/service-request.js", "validateDesktopEvidenceObserveRequest");
   }
   for (const field of ['browserId', 'episodeId', 'serviceName', 'agentName', 'taskName']) {
     if (typeof request[field] !== 'string' || String(request[field]).trim().length === 0) {
-      throw new TypeError(`service desktop evidence observe request requires ${field}`);
+      throw clientArgumentError(`service desktop evidence observe request requires ${field}`, "packages/client/src/service-request.js", "validateDesktopEvidenceObserveRequest");
     }
   }
   if (
     request.sessionName !== undefined &&
     (typeof request.sessionName !== 'string' || request.sessionName.trim().length === 0)
   ) {
-    throw new TypeError('service desktop evidence observe request sessionName must be a non-empty string');
+    throw clientArgumentError('service desktop evidence observe request sessionName must be a non-empty string', "packages/client/src/service-request.js", "validateDesktopEvidenceObserveRequest");
   }
   if (
     request.evidenceSurface !== 'stacking_or_occlusion' &&
     request.evidenceSurface !== 'passkey_chooser'
   ) {
-    throw new TypeError(
-      'service desktop evidence observe request requires evidenceSurface stacking_or_occlusion or passkey_chooser',
-    );
+    throw clientArgumentError('service desktop evidence observe request requires evidenceSurface stacking_or_occlusion or passkey_chooser', "packages/client/src/service-request.js", "validateDesktopEvidenceObserveRequest");
   }
   validateDesktopEvidenceTrigger(
     request.evidenceSurface,
@@ -3052,7 +3037,7 @@ function validateDesktopEvidenceObserveRequest(request) {
     request.uiAction,
   );
   if (request.includeFrame !== undefined && typeof request.includeFrame !== 'boolean') {
-    throw new TypeError('service desktop evidence observe request includeFrame must be a boolean');
+    throw clientArgumentError('service desktop evidence observe request includeFrame must be a boolean', "packages/client/src/service-request.js", "validateDesktopEvidenceObserveRequest");
   }
 }
 
@@ -3064,29 +3049,27 @@ function validateDesktopEvidenceObserveRequest(request) {
 function validateDesktopEvidenceTrigger(evidenceSurface, serviceTabHandle, uiAction) {
   if (evidenceSurface === 'stacking_or_occlusion') {
     if (serviceTabHandle !== undefined || uiAction !== undefined) {
-      throw new TypeError(
-        'service desktop evidence observe stacking_or_occlusion does not accept serviceTabHandle or uiAction',
-      );
+      throw clientArgumentError('service desktop evidence observe stacking_or_occlusion does not accept serviceTabHandle or uiAction', "packages/client/src/service-request.js", "validateDesktopEvidenceTrigger");
     }
     return;
   }
   const handle = recordFromUnknown(serviceTabHandle);
   if (handle === null) {
-    throw new TypeError('service desktop evidence observe requires serviceTabHandle');
+    throw clientArgumentError('service desktop evidence observe requires serviceTabHandle', "packages/client/src/service-request.js", "validateDesktopEvidenceTrigger");
   }
   const action = recordFromUnknown(uiAction);
   if (action === null) {
-    throw new TypeError('service desktop evidence observe requires uiAction');
+    throw clientArgumentError('service desktop evidence observe requires uiAction', "packages/client/src/service-request.js", "validateDesktopEvidenceTrigger");
   }
   const actionFields = Object.keys(action);
   if (actionFields.some((field) => !['maxActions', 'steps'].includes(field))) {
-    throw new TypeError('service desktop evidence observe uiAction accepts only maxActions and steps');
+    throw clientArgumentError('service desktop evidence observe uiAction accepts only maxActions and steps', "packages/client/src/service-request.js", "validateDesktopEvidenceTrigger");
   }
   if (action.maxActions !== undefined && action.maxActions !== 1) {
-    throw new TypeError('service desktop evidence observe uiAction.maxActions must be 1');
+    throw clientArgumentError('service desktop evidence observe uiAction.maxActions must be 1', "packages/client/src/service-request.js", "validateDesktopEvidenceTrigger");
   }
   if (!Array.isArray(action.steps) || action.steps.length !== 1) {
-    throw new TypeError('service desktop evidence observe uiAction requires exactly one step');
+    throw clientArgumentError('service desktop evidence observe uiAction requires exactly one step', "packages/client/src/service-request.js", "validateDesktopEvidenceTrigger");
   }
   const step = recordFromUnknown(action.steps[0]);
   if (
@@ -3097,9 +3080,7 @@ function validateDesktopEvidenceTrigger(evidenceSurface, serviceTabHandle, uiAct
     step.selector.trim().length === 0 ||
     step.selector.length > 1024
   ) {
-    throw new TypeError(
-      'service desktop evidence observe passkey_chooser requires one bounded selector click',
-    );
+    throw clientArgumentError('service desktop evidence observe passkey_chooser requires one bounded selector click', "packages/client/src/service-request.js", "validateDesktopEvidenceTrigger");
   }
 }
 
@@ -3121,7 +3102,7 @@ function validateDesktopInteractRequest(request) {
   ]);
   const forbiddenField = Object.keys(request).find((field) => !allowedFields.has(field));
   if (forbiddenField !== undefined) {
-    throw new TypeError(`service desktop interact request does not accept ${forbiddenField}`);
+    throw clientArgumentError(`service desktop interact request does not accept ${forbiddenField}`, "packages/client/src/service-request.js", "validateDesktopInteractRequest");
   }
   for (const field of [
     'browserId',
@@ -3132,28 +3113,28 @@ function validateDesktopInteractRequest(request) {
     'taskName',
   ]) {
     if (typeof request[field] !== 'string' || String(request[field]).trim().length === 0) {
-      throw new TypeError(`service desktop interact request requires ${field}`);
+      throw clientArgumentError(`service desktop interact request requires ${field}`, "packages/client/src/service-request.js", "validateDesktopInteractRequest");
     }
   }
   if (
     request.sessionName !== undefined &&
     (typeof request.sessionName !== 'string' || request.sessionName.trim().length === 0)
   ) {
-    throw new TypeError('service desktop interact request sessionName must be a non-empty string');
+    throw clientArgumentError('service desktop interact request sessionName must be a non-empty string', "packages/client/src/service-request.js", "validateDesktopInteractRequest");
   }
   const recipe = recordFromUnknown(request.recipe);
   if (recipe === null) {
-    throw new TypeError('service desktop interact request requires recipe');
+    throw clientArgumentError('service desktop interact request requires recipe', "packages/client/src/service-request.js", "validateDesktopInteractRequest");
   }
   const recipeField = Object.keys(recipe).find((field) => field !== 'recipeId');
   if (recipeField !== undefined) {
-    throw new TypeError(`service desktop interact request recipe does not accept ${recipeField}`);
+    throw clientArgumentError(`service desktop interact request recipe does not accept ${recipeField}`, "packages/client/src/service-request.js", "validateDesktopInteractRequest");
   }
   if (
     typeof recipe.recipeId !== 'string' ||
     !['p110-pointer-keyboard-v1', 'p110-foundation-stress-v1', 'p131-controlled-x11-v1', 'cloudflare-turnstile-v1', 'hcaptcha-checkbox-v1'].includes(recipe.recipeId)
   ) {
-    throw new TypeError('service desktop interact request requires a supported recipeId');
+    throw clientArgumentError('service desktop interact request requires a supported recipeId', "packages/client/src/service-request.js", "validateDesktopInteractRequest");
   }
 }
 
@@ -3174,26 +3155,24 @@ function validateDesktopPromptObserveRequest(request) {
   ]);
   const forbiddenField = Object.keys(request).find((field) => !allowedFields.has(field));
   if (forbiddenField !== undefined) {
-    throw new TypeError(`service desktop prompt observe request does not accept ${forbiddenField}`);
+    throw clientArgumentError(`service desktop prompt observe request does not accept ${forbiddenField}`, "packages/client/src/service-request.js", "validateDesktopPromptObserveRequest");
   }
   for (const field of ['browserId', 'serviceName', 'agentName', 'taskName']) {
     if (typeof request[field] !== 'string' || String(request[field]).trim().length === 0) {
-      throw new TypeError(`service desktop prompt observe request requires ${field}`);
+      throw clientArgumentError(`service desktop prompt observe request requires ${field}`, "packages/client/src/service-request.js", "validateDesktopPromptObserveRequest");
     }
   }
   if (
     request.sessionName !== undefined &&
     (typeof request.sessionName !== 'string' || request.sessionName.trim().length === 0)
   ) {
-    throw new TypeError('service desktop prompt observe request sessionName must be a non-empty string');
+    throw clientArgumentError('service desktop prompt observe request sessionName must be a non-empty string', "packages/client/src/service-request.js", "validateDesktopPromptObserveRequest");
   }
   if (request.promptProfileId !== 'p110-external-prompt-v1') {
-    throw new TypeError(
-      'service desktop prompt observe request requires promptProfileId p110-external-prompt-v1',
-    );
+    throw clientArgumentError('service desktop prompt observe request requires promptProfileId p110-external-prompt-v1', "packages/client/src/service-request.js", "validateDesktopPromptObserveRequest");
   }
   if (request.includeVisualization !== undefined && typeof request.includeVisualization !== 'boolean') {
-    throw new TypeError('service desktop prompt observe request includeVisualization must be a boolean');
+    throw clientArgumentError('service desktop prompt observe request includeVisualization must be a boolean', "packages/client/src/service-request.js", "validateDesktopPromptObserveRequest");
   }
 }
 
@@ -3248,7 +3227,7 @@ function mergeParams(params, request, keys) {
  */
 function assertPlainObject(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
+    throw clientArgumentError(`${label} must be an object`, "packages/client/src/service-request.js", "assertPlainObject");
   }
 }
 

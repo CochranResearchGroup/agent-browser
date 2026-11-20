@@ -3896,3 +3896,6 @@ const nestedFailure760 = {code:'browser_task_operation_outcome_uncertain',effect
 const nestedRefusal = {success:true, data:{ok:false, failure:nestedFailure760}};
 assert.equal(getServiceFailureRecourse(nestedRefusal), nestedFailure760);
 assert.throws(()=>requireServiceRequestSuccess(nestedRefusal), error=>error.failure===nestedFailure760);
+
+assert.throws(()=>createServiceRequest({action:'not-supported'}),error=>error instanceof TypeError&&error.message==='Unsupported service request action: not-supported'&&error.code==='client_argument_invalid'&&error.recovery.owningFunction==='createServiceRequest'&&error.recovery.effectState==='not_dispatched_by_this_validation'&&error.logging.state==='local_only');
+assert.throws(()=>requireServiceTabHandle({success:true,data:{}}),error=>error instanceof TypeError&&error.code!=='client_argument_invalid','owner response failure must not become invalid arguments');

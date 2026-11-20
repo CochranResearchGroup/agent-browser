@@ -3282,3 +3282,7 @@ main().catch((err) => {
 
 const nestedOwner760 = {code:'browser_task_operation_outcome_uncertain',occurrenceId:'observability-original-760',effectState:'effect_uncertain'};
 await assert.rejects(getServiceContracts({baseUrl:'https://owner.invalid',fetch:async()=>new Response(JSON.stringify({success:true,data:{ok:false,failure:nestedOwner760},privateValue:'never-in-error-message'}))}), error=>error.code===nestedOwner760.code&&error.failure.effectState==='effect_uncertain'&&!error.message.includes('never-in-error-message'));
+
+let invalidArgumentFetches760=0;
+await assert.rejects(getServiceStatus({baseUrl:'',fetch:async()=>{invalidArgumentFetches760++;return Response.json({success:true,data:{}});}}),error=>error instanceof TypeError&&error.code==='client_argument_invalid'&&error.recovery.owningFunction==='serviceGet'&&error.message==='service observability helpers require a baseUrl string');
+assert.equal(invalidArgumentFetches760,0,'local argument normalization never dispatches an owner request');
