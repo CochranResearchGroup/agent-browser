@@ -1,3 +1,4 @@
+import { isResponseFailure } from './response-failure.js';
 // @ts-check
 
 import {
@@ -149,7 +150,8 @@ export class ServiceOperationError extends Error {
  */
 export function getServiceFailureRecourse(response) {
   if (!response || typeof response !== 'object' || Array.isArray(response)) return null;
-  const failure = /** @type {Record<string, unknown>} */ (response).failure;
+  const envelope = /** @type {any} */ (response);
+  const failure = envelope.failure ?? envelope.data?.failure ?? envelope.error?.data?.failure;
   if (!failure || typeof failure !== 'object' || Array.isArray(failure)) return null;
   const record = /** @type {Record<string, unknown>} */ (failure);
   if (
@@ -173,7 +175,7 @@ export function getServiceFailureRecourse(response) {
  * @returns {TResponse}
  */
 export function requireServiceRequestSuccess(response) {
-  if (response?.success === true) return response;
+  if (response?.success === true && !isResponseFailure(response)) return response;
   throw new ServiceOperationError(response);
 }
 

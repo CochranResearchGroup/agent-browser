@@ -1,3 +1,5 @@
+import { responseFailureMetadata } from "./response-failure.ts";
+
 export type ForeignCdpScreenshotFormat = "jpeg" | "png";
 
 export type ForeignCdpScreenshot = {
@@ -85,8 +87,8 @@ export async function fetchForeignCdpScreenshot({
     url?: string | null;
     error?: string | null;
   };
-  if (!response.ok || payload.success === false) {
-    throw new Error(payload.error || `Foreign CDP capture returned HTTP ${response.status}.`);
+  if (!response.ok || responseFailureMetadata(payload)) {
+    throw foreignCdpFailure(payload, `Foreign CDP capture returned HTTP ${response.status}.`);
   }
   const resolvedFormat: ForeignCdpScreenshotFormat = payload.format === "jpeg" ? "jpeg" : format;
   const dataUrl = payload.dataUrl
@@ -115,8 +117,8 @@ async function foreignCdpJsonRequest(
       : init.headers,
   });
   const payload = await response.json() as Record<string, unknown>;
-  if (!response.ok || payload.success === false) {
-    throw new Error(
+  if (!response.ok || responseFailureMetadata(payload)) {
+    throw foreignCdpFailure(payload,
       typeof payload.error === "string"
         ? payload.error
         : `Foreign CDP control returned HTTP ${response.status}.`,
@@ -217,4 +219,15 @@ export async function dispatchForeignCdpInput({
     { method: "POST", body: JSON.stringify({ port, targetId, grantId, input }) },
     fetcher,
   );
+}
+
+/** Preserve owner recourse on errors exposed by dashboard control adapters. */
+function foreignCdpFailure(payload: unknown, fallback: string): Error {
+  const envelope = payload as {failure?: unknown; data?: {failure?: unknown}};
+  const metadata = responseFailureMetadata(payload);
+  return Object.assign(new Error(metadata?.code ?? fallback), {
+    code: metadata?.code ?? "foreign_cdp_request_failed",
+    failure: envelope.failure ?? envelope.data?.failure ?? null,
+    occurrenceId: metadata?.observationId ?? null,
+  });
 }

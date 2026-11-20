@@ -1,3 +1,4 @@
+import { isResponseFailure, responseFailureError } from './response-failure.js';
 // @ts-check
 /** @typedef {import('./playbooks.d.ts').CallTool} CallTool */
 /** @typedef {import('./playbooks.d.ts').VerifyLoginOptions} VerifyLoginOptions */
@@ -14,7 +15,7 @@ async function invoke(callTool, name, args) {
   const text = result?.content?.find(item => item.type === 'text')?.text;
   if (typeof text !== 'string') throw new Error('playbook_response_invalid');
   const envelope = JSON.parse(text);
-  if (envelope.success !== true) throw new Error('playbook_request_failed');
+  if (/** @type {any} */ (result)?.isError || envelope.success !== true || isResponseFailure(envelope)) throw responseFailureError(envelope, 'playbook_request_failed');
   return envelope.data;
 }
 

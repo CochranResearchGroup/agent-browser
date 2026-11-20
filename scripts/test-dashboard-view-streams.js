@@ -331,3 +331,6 @@ assert.doesNotMatch(viewport, /aria-label="Refresh workspace viewport"/);
 assert.doesNotMatch(viewport, /aria-label="Reconnect viewer lease"/);
 
 console.log('dashboard view-stream tests passed');
+
+const refusedOwner760 = {code:'browser_task_operation_outcome_uncertain',occurrenceId:'failure-cdp-760',effectState:'effect_uncertain',retryDisposition:'inspect_before_retry'};
+await assert.rejects(fetchForeignCdpScreenshot({port:9222,fetcher:async()=>new Response(JSON.stringify({success:true,data:{ok:false,failure:refusedOwner760}}))}),error=>error.code===refusedOwner760.code&&error.failure.effectState==='effect_uncertain'&&error.occurrenceId===refusedOwner760.occurrenceId);

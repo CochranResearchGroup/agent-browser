@@ -1,3 +1,5 @@
+import { responseFailureMetadata } from "./response-failure.ts";
+
 export type DashboardFailureCategory =
   | "guacamole_load"
   | "handoff_link"
@@ -176,10 +178,11 @@ export function installDashboardFetchFailureInstrumentation(): () => void {
         });
       } else if (metadata?.deferUntilRecovery) {
         void response.clone().json().then((payload: unknown) => {
-          if (payload && typeof payload === "object" && (payload as { success?: unknown }).success === false) {
+          const failure = responseFailureMetadata(payload);
+          if (failure) {
             dashboardReadFailureDeliveryQueue.enqueue({
               ...metadata.observation,
-              code: "application_failure",
+              ...failure,
               summary: "Dashboard read returned a non-success application result.",
             });
             return;
@@ -200,10 +203,11 @@ export function installDashboardFetchFailureInstrumentation(): () => void {
         }, current);
       } else if (metadata && isJsonResponse(response)) {
         void response.clone().json().then((payload: unknown) => {
-          if (payload && typeof payload === "object" && (payload as { success?: unknown }).success === false) {
+          const failure = responseFailureMetadata(payload);
+          if (failure) {
             return reportDashboardFailure({
               ...metadata.observation,
-              code: "application_failure",
+              ...failure,
               summary: "Dashboard action returned a non-success application result.",
             }, current);
           }

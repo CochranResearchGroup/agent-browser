@@ -1,3 +1,4 @@
+import { isResponseFailure, responseFailureError } from './response-failure.js';
 import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {createChallengeAssistanceClient} from './challenge-assistance.js';
@@ -37,9 +38,9 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
   async function call(name,args) {
     const reply=/** @type {any} */(await callTool(name,args));
     const text=reply?.content?.find(block=>block.type==='text')?.text;
-    if(reply?.isError||typeof text!=='string'||text.length>8*1024*1024)fail('native_image_workflow_response_invalid');
+    if(typeof text!=='string'||text.length>8*1024*1024)fail('native_image_workflow_response_invalid');
     let envelope;try{envelope=JSON.parse(text)}catch{fail('native_image_workflow_response_invalid')}
-    if(envelope.success!==true)fail('native_image_workflow_refused');
+    if(reply?.isError||envelope.success!==true||isResponseFailure(envelope))throw responseFailureError(envelope,'native_image_workflow_refused');
     return {data:envelope.data,images:reply.content.filter(block=>block.type==='image')};
   }
   async function briefing(taskId) {const {data}=await call('browser_command',{taskId,action:'task_briefing'});if(!same(data,data)||data.taskId!==taskId||data.control?.owner!=='agent'||!Number.isSafeInteger(data.control.epoch))fail('native_image_task_control_unverified');return data;}
@@ -136,7 +137,7 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
         return {taskId,status:'verified_access_after_native_image',binding:identity(after),originalOperation:retained,...(rounds?{roundOperations}:{}),verification:{clearance:clearance.evidenceRef,access:access.evidenceRef,frameSha256:freshSha},continuation:continued,retryAllowed:false};
         }
         return assist('native_image_round_budget_exhausted');
-      }catch(error){try{retained=await original(taskId,requestId);const uncertain=await original(taskId,attemptedRequestId);if(uncertain&&!roundOperations.some(operation=>operation.requestId===attemptedRequestId))roundOperations.push(uncertain)}catch{}const message=String(error?.message??'');return assist(/^native_image_[a-z_]+$/.test(message)?message:'native_image_workflow_unavailable_observe_original');}
+      }catch(error){try{retained=await original(taskId,requestId);const uncertain=await original(taskId,attemptedRequestId);if(uncertain&&!roundOperations.some(operation=>operation.requestId===attemptedRequestId))roundOperations.push(uncertain)}catch{}const message=String(error?.message??'');return {...await assist(/^native_image_[a-z_]+$/.test(message)?message:'native_image_workflow_unavailable_observe_original'),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{})};}
     },
   };
 }

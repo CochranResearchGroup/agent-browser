@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "agent-browser.public-error-recovery-registry.v1",
+  "interfaces": {
+    "@agent-browser/client/task-briefing#getTaskBriefing": {
+      "source": "packages/client/src/task-briefing.js",
+      "export": "getTaskBriefing",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/task-briefing#getTaskOperation": {
+      "source": "packages/client/src/task-briefing.js",
+      "export": "getTaskOperation",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/playbooks#createPlaybookClient": {
+      "source": "packages/client/src/playbooks.js",
+      "export": "createPlaybookClient",
+      "kind": "client_export"
+    }
+  },
+  "recipes": {
+    "clientTransportOwnerReadback": {
+      "rationale": "A client transport refusal does not establish whether a prior effect occurred. Preserve the original task and request identifiers and inspect the owner before further input.",
+      "requiredActor": "agent_with_existing_task_scope",
+      "evidenceRequirement": "Exact original task identifier; original request identifier where an effect was attempted. Caller must supply existing authenticated transport configuration.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Repair the existing authenticated transport or its base URL using the supplied client interface. Re-read the same retained task. Do not broaden authorization or replay input.",
+          "precondition": "Caller has independently reviewed the same owner endpoint and authentication configuration. No uncertain effect is authorized for replay.",
+          "interface": "@agent-browser/client/task-briefing#getTaskBriefing"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Exact retained task identity and current control are verified; inspect the original operation with getTaskOperation before deciding whether any input may continue. Unresolved or uncertain originals remain blocked from replay.",
+      "maximumAutomaticAttempts": 1
+    }
+  },
+  "codes": {
+    "task_briefing_read_failed": {
+      "recipe": "clientTransportOwnerReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/task-briefing.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "task_operation_read_failed": {
+      "recipe": "clientTransportOwnerReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/task-briefing.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "playbook_request_failed": {
+      "recipe": "clientTransportOwnerReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/playbooks.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "native_saved_login_operation_refused": {
+      "recipe": "clientTransportOwnerReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-saved-login.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "native_image_workflow_refused": {
+      "recipe": "clientTransportOwnerReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-image-challenge.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    }
+  }
+}

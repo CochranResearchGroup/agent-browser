@@ -299,3 +299,16 @@ try {
 }
 
 process.stdout.write('Dashboard failure observation behavior passed\n');
+
+const projected = [];
+await withInstrumentedFetch(async (input, init) => {
+  if (String(input).includes('failure-observation')) {projected.push(JSON.parse(init.body));return new Response('{}');}
+  return new Response(JSON.stringify({success:true,data:{ok:false,failure:{code:'browser_task_operation_outcome_uncertain',occurrenceId:'failure-original-760',privateValue:'never-log-this'}}}), {headers:{'content-type':'application/json'}});
+}, async()=> {
+  const response=await fetch('/api/command',{method:'POST'});
+  assert.equal((await response.json()).data.ok,false,'observer preserves caller body');
+  await tick();await tick();
+});
+assert.equal(projected[0]?.code,'browser_task_operation_outcome_uncertain');
+assert.equal(projected[0]?.observationId,'failure-original-760');
+assert.ok(!JSON.stringify(projected).includes('never-log-this'));

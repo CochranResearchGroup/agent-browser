@@ -1,3 +1,4 @@
+import { isResponseFailure, responseFailureError } from './response-failure.js';
 import {isDeepStrictEqual} from 'node:util';
 /** Compose existing task, Native capture/handoff and cooperative control APIs.
  * Site-specific verification ports must independently observe the application.
@@ -19,14 +20,7 @@ export function createChallengeAssistanceClient({callTool,verifyClearance,verify
     if(typeof text!=='string'||text.length>8*1024*1024)fail('challenge_workflow_response_invalid');
     let envelope;
     try{envelope=JSON.parse(text);}catch{fail('challenge_workflow_response_invalid');}
-    if(reply?.isError||envelope.success!==true) {
-      // Keep the public owner's recovery contract. A refusal is not malformed JSON.
-      const failure=envelope.failure??envelope.error?.data?.failure;
-      const candidate=failure?.code??envelope.error?.code;
-      const code=typeof candidate==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(candidate)
-        ?candidate:'challenge_workflow_refused_observe_before_retry';
-      throw Object.assign(new Error(code),{code,failure,requestId:envelope.id??envelope.error?.data?.requestId});
-    }
+    if(reply?.isError||envelope.success!==true||isResponseFailure(envelope)) throw responseFailureError(envelope,'challenge_workflow_refused_observe_before_retry');
     return envelope.data;
   }
   const briefing=taskId=>call('browser_command',{taskId,action:'task_briefing'});
@@ -75,7 +69,7 @@ export function createChallengeAssistanceClient({callTool,verifyClearance,verify
     if(typeof text!=='string'||text.length>8*1024*1024)fail('challenge_original_operation_unverified');
     let envelope;
     try{envelope=JSON.parse(text);}catch{fail('challenge_original_operation_unverified');}
-    if(reply?.isError||envelope.success!==true) {
+    if(reply?.isError||envelope.success!==true||isResponseFailure(envelope)) {
       if(missing(envelope.error))return null;
       fail('challenge_original_operation_unverified');
     }
@@ -186,7 +180,7 @@ export function createChallengeAssistanceClient({callTool,verifyClearance,verify
         }
         return {taskId,status:'verified_access_after_native',binding:current.binding,originalOperation:retained,
           verification:await verifyCurrent(current),taskCompleted:false,retryAllowed:false};
-      } catch(error) { return assist(error?.message??'challenge_intervention_required'); }
+      } catch(error) { return {...await assist(error?.message??'challenge_intervention_required'),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{})}; }
     },
     /** A ready link is preparation, never human use or successful assistance. */
     async prepare({taskId}) {

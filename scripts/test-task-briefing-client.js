@@ -19,3 +19,9 @@ try {
   assert.equal(calls.length, 2, 'invalid identity has no request');
   console.log('Task briefing client public HTTP protocol cases passed');
 } finally { await new Promise(resolve => server.close(resolve)); }
+
+// Owner refusals survive an HTTP-success transport, without a second request.
+const failure = {code:'browser_task_operation_outcome_uncertain', occurrenceId:'failure-exact-760', effectState:'effect_uncertain', retryDisposition:'inspect_before_retry', recommendedAction:'Inspect the original operation', reuseAllowed:false};
+let refusedCalls = 0;
+await assert.rejects(getTaskBriefing({baseUrl:'https://example.invalid', taskId:'task-exact', fetch:async()=>{refusedCalls++;return new Response(JSON.stringify({success:true,data:{ok:false,failure}}));}}), error=>error.code===failure.code && error.failure.occurrenceId===failure.occurrenceId && error.failure.effectState==='effect_uncertain');
+assert.equal(refusedCalls,1);

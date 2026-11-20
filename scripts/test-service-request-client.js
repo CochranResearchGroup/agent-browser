@@ -3891,3 +3891,8 @@ main().catch((err) => {
   console.error(err?.stack || err?.message || String(err));
   process.exit(1);
 });
+
+const nestedFailure760 = {code:'browser_task_operation_outcome_uncertain',effectState:'effect_uncertain',retryDisposition:'inspect_before_retry',recommendedAction:'Inspect the original operation',reuseAllowed:false,occurrenceId:'failure-original-760'};
+const nestedRefusal = {success:true, data:{ok:false, failure:nestedFailure760}};
+assert.equal(getServiceFailureRecourse(nestedRefusal), nestedFailure760);
+assert.throws(()=>requireServiceRequestSuccess(nestedRefusal), error=>error.failure===nestedFailure760);
