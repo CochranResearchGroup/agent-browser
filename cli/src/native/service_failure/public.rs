@@ -19,6 +19,21 @@ fn code_token(value: &str) -> Option<&str> {
 /// publish sanitized refusal metadata. Request payloads never enter the journal.
 pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, source: &str) {
     if response["success"] != false {
+        // Successful transport does not establish a successful operation. Only
+        // the action envelope is inspected, never arbitrary evaluate result data.
+        if response["success"] == true && response.pointer("/data/ok") == Some(&json!(false)) {
+            let cause = response
+                .pointer("/data/error")
+                .and_then(Value::as_str)
+                .or_else(|| response.pointer("/data/errorKind").and_then(Value::as_str))
+                .unwrap_or("service_operation_failed");
+            let mut operation = json!({"success":false,"error":cause});
+            if response["failure"].is_object() {
+                operation["failure"] = response["failure"].clone();
+            }
+            attach_public_failure(&mut operation, command, source);
+            response["failure"] = operation["failure"].clone();
+        }
         return;
     }
     let had_failure = response["failure"].is_object();
@@ -85,6 +100,7 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
                 "purpose":"Discover available profiles and supported workflow operations"})
         };
     }
+    super::recovery_registry::enrich(failure, command);
     if failure["occurrenceId"].is_string() {
         return;
     }
@@ -112,8 +128,9 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
             "recommendedAction":failure["recommendedAction"],
             "blockingCheck":code,
             "taskIdSha256":task.map(|id| format!("{:x}", Sha256::digest(id.as_bytes()))),
-        "evidenceFreshness":"not_supplied",
-        "policySource":"not_supplied"
+        "evidenceFreshness":failure["recoveryPlan"]["evidence"],
+        "policySource":failure["recoveryPlan"]["policySource"],
+        "recoveryCoverage":failure["recoveryPlan"]["coverage"]
     }));
     failure["occurrenceId"] = json!(record.occurrence_id);
     failure["logging"] = match append_service_failure(&record) {

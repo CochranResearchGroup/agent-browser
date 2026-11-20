@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 
 const recordSchema = JSON.parse(readFileSync('docs/dev/contracts/service-failure-record.v1.schema.json', 'utf8'));
@@ -96,3 +97,60 @@ assert(handoff.includes('window.location.replace(`/api/remote-view/'));
 assert(handoff.includes('/presentation`);'));
 
 process.stdout.write('Service failure journal contract checks passed\n');
+
+// This registry is deliberately exact-code. A future named producer error in a
+// reviewed family cannot inherit a generic plan without review.
+const recoveryRegistry = JSON.parse(readFileSync('docs/dev/contracts/public-error-recovery-registry.v1.json', 'utf8'));
+const mcpSource = readFileSync('cli/src/mcp.rs', 'utf8');
+const allowedActionsBlock = mcpSource.match(/const BROWSER_COMMAND_ALLOWED_ACTIONS:[\s\S]*?= &\[([\s\S]*?)\];/)[1];
+const allowedActions = new Set([...allowedActionsBlock.matchAll(/"([a-z_]+)"/g)].map(match => match[1]));
+function validateRecoveryCall(call) {
+  assert(['browser_command', 'browser_control'].includes(call.tool), `Unavailable recovery tool ${call.tool}`);
+  assert(mcpSource.includes(`name == "${call.tool}"`) || call.tool === 'browser_command', `Unrouted recovery tool ${call.tool}`);
+  assert.equal(call.arguments.taskId, '$taskId', 'Recovery must retain exact task scope');
+  if (call.tool === 'browser_command') {
+    assert(allowedActions.has(call.arguments.action), `Unavailable recovery action ${call.arguments.action}`);
+    if (call.arguments.action === 'task_operation') {
+      assert(call.arguments.params?.operation === 'capacity' || call.arguments.params?.requestId === '$requestId', 'Original/capacity inspection must use supported arguments');
+    }
+  } else assert.equal(call.arguments.operation, 'status');
+}
+function validateRecoveryInventory(registry, discovered) {
+  for (const code of discovered) assert(registry.codes[code], `Uncovered public code ${code}`);
+  for (const [code, entry] of Object.entries(registry.codes)) {
+    assert(/^[a-z][a-z0-9_]+$/.test(code));
+    const recipe = registry.recipes[entry.recipe];
+    assert(recipe, `Missing recipe for ${code}`);
+    for (const field of ['rationale', 'requiredActor', 'evidenceRequirement', 'resumeCondition']) assert(recipe[field]?.length > (field === 'requiredActor' ? 0 : 10), `${code} lacks ${field}`);
+    assert(['unknown','stale','denied','unavailable','invalid','uncertain','configured_budget','coordination_paused'].includes(entry.evidenceClass), `Missing evidence classification for ${code}`);
+    assert.equal(entry.evidenceFreshness, 'not_observed_by_projection', 'Registry must not invent runtime freshness');
+    assert(entry.owningChecks.some(check => readFileSync(check.path, 'utf8').includes(code)), `Missing owning check for ${code}`);
+    assert(readFileSync(entry.policySource, 'utf8').includes(code), `Unavailable policy source for ${code}`);
+    validateRecoveryCall(recipe.inspect);
+    validateRecoveryCall(recipe.verification);
+    for (const step of recipe.remediation) {
+      assert(step.instruction?.length > 20 && step.precondition?.length > 10, `${code} lacks an actionable remedy precondition`);
+      if (step.call) validateRecoveryCall(step.call);
+      else assert(step.interface, `${code} has no supported owner interface`);
+    }
+    assert(recipe.maximumAutomaticAttempts <= 1, 'Recovery cannot create an unbounded retry loop');
+  }
+}
+function rustFiles(root) {
+  return readdirSync(root, {withFileTypes: true}).flatMap(entry => entry.isDirectory() ? rustFiles(join(root, entry.name)) : entry.name.endsWith('.rs') ? [join(root, entry.name)] : []);
+}
+const discoveredReviewedCodes = new Set();
+for (const path of rustFiles('cli/src')) {
+  const source = readFileSync(path, 'utf8');
+  for (const match of source.matchAll(/["'](browser_task_operation_[a-z0-9_]+)(?=[:"'])/g)) discoveredReviewedCodes.add(match[1]);
+}
+validateRecoveryInventory(recoveryRegistry, discoveredReviewedCodes);
+assert.throws(() => validateRecoveryInventory(recoveryRegistry, new Set(['unregistered_public_error'])), /Uncovered public code/);
+assert.throws(() => validateRecoveryCall({tool:'browser_command',arguments:{taskId:'$taskId',action:'nonexistent_recovery_command'}}), /Unavailable recovery action/);
+assert.throws(() => validateRecoveryCall({tool:'nonexistent_recovery_tool',arguments:{taskId:'$taskId'}}), /Unavailable recovery tool/);
+for (const boundary of recoveryRegistry.boundaries) assert(readFileSync(boundary.source, 'utf8').includes(boundary.publication), `Missing ${boundary.surface} publication seam`);
+if (process.argv.includes('--require-complete-recovery')) {
+  assert.equal(recoveryRegistry.inventoryStatus, 'complete', `Public recovery inventory incomplete: ${recoveryRegistry.knownCoverageGaps.join('; ')}`);
+  assert.deepEqual(recoveryRegistry.knownCoverageGaps, []);
+}
+process.stdout.write(`Exact recovery contracts checked: ${Object.keys(recoveryRegistry.codes).length}; reviewed producer emissions checked: ${discoveredReviewedCodes.size}; full inventory: ${recoveryRegistry.inventoryStatus}\n`);
