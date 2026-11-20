@@ -1,5 +1,149 @@
 # Advanced CLI and service reference
 
+### Task operation capacity
+
+Inspect or update capacity through the existing task-operation interface:
+
+```json
+{"name":"browser_command","arguments":{"taskId":"session:report","action":"task_operation","params":{"operation":"capacity","scope":"task","policy":{"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096}}}}
+```
+
+Omit `policy` to inspect usage and the effective policy. Use `scope:"defaults"`
+for default policy and `scope:"task"` for a retained task override. Updates do not
+restart or rename the task. The initial default is 256, the default increment
+is 256 and the default maximum is 4,096 active records.
+
+Admission archives acknowledged completed operations before extending active
+capacity. Original operation lookup and duplicate detection include archived
+records. Pending and uncertain operations remain active. Native episode and
+attempt checks include archived history. Archival retains evidence; it does not
+delete records or reset an attempt budget.
+
+If unsettled operations fill the configured maximum, inspect and reconcile the
+originals or increase the appropriate configured capacity through this interface.
+Changing a request ID does not make an uncertain effect safe to repeat.
+The first archive promotes the runtime database to schema 6; older binaries
+must not consume that database and silently forget archived duplicate protection.
+
+
+Retention and popup admission use optional positive `maximumRetentionClaims`
+(default 4096) and `maximumPopupAdmissions` (default 64) in the same live policy.
+Retention admission counts all retained unreleased claims; released original
+history remains inspectable and does not consume admission. Guest expiry never
+releases a claim. Capacity status reports `retentionClaimActiveCount`,
+`retentionClaimReleasedHistoryCount`, `retentionClaimCountScope`,
+`retentionClaimLimit` and `popupAdmissionLimit` with the effective policy source.
+Popup refresh admits a bounded batch and reports `deferredEligibleTargetCount`
+instead of refusing the original task. Raise its live policy and refresh the same
+task to admit remaining eligible targets; no input replay or permission change.
+
+Reconnect receipts use optional positive `maximumReconnectRequests` (default 128).
+Runtime lanes use `maximumRuntimeLanes` (default 64) from system defaults only;
+task overrides do not change host-wide capacity. Update these fields through the
+existing `task_operation` capacity interface. Readback reports
+`reconnectRequestLimit`, `runtimeLaneLimit` and `runtimeLanePolicySource`.
+Increasing a limit admits new work without removing original reconnect receipts
+or existing lanes. Lowering a limit never evicts an existing lane. The runtime
+manifest reports its startup snapshot, not current policy.
+
+### Live teaching capacity
+
+Existing client teaching review, submission and workspace owners expose
+`capacity()` for effective policy and `capacity(partialPolicy)` for live updates.
+Pass initial `teachingCapacity` in client options or trusted installed host JSON:
+`{"maximumLineageRevisions":512,"maximumRetainedContexts":4096,"maximumCatalogEntries":4096}`.
+Defaults are 256 lineage revisions and 4096 working contexts/catalog entries.
+Values are positive safe integers. The host rereads private configuration each
+run. Increasing a limit preserves append-only history, duplicate detection and
+provenance. Lowering future admission does not truncate historical lookup or
+change task permissions. No restart, deletion or new approval interface is needed.
+
+### Deferred legacy expiry
+
+Automatic task/tab expiry and disposable-profile deletion are deferred when their
+starting timestamps have only guest-clock evidence. A clock jump cannot authorize
+those destructive effects. `browser_session_reap` reports `maintenanceEvidence`
+with `unqualified_legacy_start`; this does not claim qualified automatic cleanup.
+Use retained task status/briefing for inspection and explicit scoped close under
+existing authority when work is finished. Browser work and explicit close remain
+independent of this maintenance timing qualification.
+
+### Continue after a refusal
+
+Use the existing `browser_command` action `failure_recovery` with
+`params:{"operation":"inspect","occurrenceId":"RETURNED-UUID"}` and the original
+`taskId` when available. `packet` returns sanitized escalation context; `history`
+reads retained attempts. These reads do not dispatch browser input.
+
+`run` accepts a stable UUID `attemptId` and optionally one declared `remedy`
+containing `tool` and `arguments`. It performs registered inspection, one supported
+remedy and verification. Supported remedies use existing task-bound observation,
+reconnect, capacity or owner-proof reconciliation interfaces. Original input and
+permission overrides are excluded. The same attempt and arguments return its
+retained result; changed arguments conflict. After interruption, `reconcile`
+verifies the retained attempt without repeating its remedy.
+
+Configure budgets live with `params:{"operation":"configure","scope":"task",
+"actor":"AGENT","reason":"REVIEWED REPAIR","policy":{"maxAttempts":5,
+"maxNoProgress":3}}`. Use `scope:"defaults"` for defaults. Defaults are three
+attempts and two consecutive checks without progress; zero `maxAttempts` disables
+automatic recovery. Optional positive `maxDurationMs` checks supported StableTime
+observation bounds before subsequent remedy and verification dispatch. It does not
+promise delivery or completion by a deadline. Without it, ordinary recovery reads
+add no timing gate. An unqualified client, service bound or elapsed interval pauses
+only these budgeted steps; inspect, history and escalation remain available.
+Inspection and history remain available after exhaustion.
+Updates preserve prior attempts and require no restart or recompile. Configuration
+and actor labels do not grant new permissions or authenticate the caller.
+
+CLI clients use `agent-browser --json mcp failure-recovery '<JSON request containing
+taskId and params>'`. `agent-browser --json mcp task-operation TASK REQUEST reconcile`
+settles an original failure only from verified owner evidence of no dispatched
+input. Its state is `owner_refused_no_effect`, never a successful acknowledgement.
+A new input intent still needs fresh observation and existing authority. First
+such settlement promotes runtime schema to 7; older readers must refuse it.
+
+After ordinary work resumes, `record_resume` accepts the recovery `attemptId`,
+original occurrence, acknowledged new `requestId` and `actor`. It verifies that
+exact task operation's owner acknowledgement. The association is caller supplied;
+it does not establish website success or task completion. Attempt and outcome
+journal records link the original occurrence without copying private input.
+
+Legacy helper callbacks without owner-qualified executable expiry now return
+`helper_grant_time_unqualified` before new private input. Original request
+inspection/reconciliation and independently verified prior completion remain
+available. Continue through the existing authenticated owner SDK
+(`createOwnerLoginPlaybook` / `connectHostedAuthHelper`) under its current grants;
+caller timestamps or assertions cannot qualify a new credential use. Teaching
+sources with finite, unqualified expiry similarly use current recording-owner
+pin/qualified-read recourse; owner revocation and deletion still apply.
+
+### Recover a public refusal
+
+Workflow refusals preserve structured `failure` recourse alongside the original
+message, request and operation evidence. `failure.occurrenceId` identifies a
+private journal occurrence. `failure.logging.state=durable_pending` means the
+record is in durable custody awaiting journal projection; `failed` reports a
+logging failure separately from the original refusal. An uncertain effect is
+never permission to repeat input.
+
+Read recent task-scoped records without starting a browser:
+
+```json
+{"name":"browser_command","arguments":{"taskId":"session:report","action":"failure_log","params":{"occurrenceId":"RETURNED-OCCURRENCE-ID","limit":100}}}
+```
+
+A known `occurrenceId` can be looked up without `taskId`, including admission
+failures before task creation. HTTP clients can use
+`GET /api/service/failures?occurrenceId=RETURNED-OCCURRENCE-ID`.
+
+Omit `occurrenceId` for recent task records. Filtering occurs before the result limit, so unrelated polling failures do not
+hide the selected occurrence. At most `limit` matching records are returned. The authenticated
+`GET /api/service/failures` and private journal remain available for diagnostics.
+Use the returned `executableNextAction` for supported inspection. Inspection
+itself does not resolve an uncertain operation or establish that replay is safe.
+
+
 Workstation candidates must include the built dashboard. `pnpm build:development-candidate` builds it before Cargo and stops if the frontend build fails. Installation and doctor reject missing or placeholder-only dashboard assets with `dashboard_build_incomplete`; rebuild the dashboard and then recompile the candidate. Rust-only compilation remains available for source development.
 
 Only an executing workstation writer delays a conflicting change. Renaming or
@@ -4688,7 +4832,7 @@ a separate **Reopen with a new profile** choice that discloses lost sign-ins and
 unsaved state. Never silently replace a named profile or send a replacement link.
 Software uses `service_remote_view_handoff_resolve` with `handoffOperation=reopen`;
 use `reopen_with_new_profile` only after that explicit choice. The request and
-choice survive retries; renewed assistance pauses cooperative automation.
+choice survive retries; actual Native viewer input pauses cooperative automation.
 
 ## Handoff creator context
 
@@ -4743,7 +4887,7 @@ A valid retained CDP-free handoff also recovers an ordinary browser exit using t
 
 After exact original exit during a pending graceful conversion, the same link opens existing mode controls only. It neither starts a desktop stream nor takes input control. Explicitly reconcile the original operation to continue; navigation never launches its replacement.
 
-After human input, use Give control back in the viewer, then `browser_continue` with the same `taskId` reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff. A pending browser mode change does not block the same durable handoff while the exact original browser remains live. Reconnecting preserves the mode operation and does not close or replace that browser.
+Actual Native viewer input pauses automation until service-time-qualified quiet. Explicit Take control holds until that viewer selects view-only; other viewers retain their own claims. Then `browser_continue` with the same `taskId` freshly reads identity/URL and preserves edits. It is separate from CLI executable-transfer handoff. A pending browser mode change does not block the same durable handoff while the exact original browser remains live. Reconnecting preserves the mode operation and does not close or replace that browser.
 
 A retained handoff may finish its original settled browser-close publication before recovery; keep the same task and handoff, and preserve unresolved effect or identity failures for readback. An interactive invitation survives physical replacement only through its recorded exact recovery mapping; missing legacy mapping or changed targets stay fenced, with the human hold preserved.
 
@@ -4790,3 +4934,121 @@ unpublished launch assignment before atomic publication. The original logical
 target, pending custody, process identity and changed/foreign target checks remain
 binding; ordinary browser input still uses published assignment custody. Window
 qualification observes only and does not query input policy or grant control.
+
+
+## Evidence-backed login progress
+
+The public Auth helper exposes `inspectLoginProgress({loginId})` or `inspectLoginProgress({requestId})` for read-only, evidence-backed progress. `summarizeLoginProgress` projects an existing public observation without effects. Selection, request submission, confirmed actionable delivery, expiry, denial and unknown input remain distinct; a review state or URL alone never means the operator received a request. Native operator ownership is metadata, not proof of human activity. Follow the returned read-only next operation; the summary grants no credential or Native input authority.
+
+
+`helper.loginRecovery.reconcile({requestId})` observes and reconciles the same original owner attempt without dispatching credentials. `recordFailure` forwards qualified caller observations to Auth completion and independently reads the settlement; it preserves unknown input history and never grants retry permission. `prepareFresh` may ask Auth to prepare a distinct challenge only after a settled business failure, with the same explicit account and receiving scope; Auth still owns current target readiness, permission and any subsequent private use. A running or changed original remains held. No clock is synthesized by this helper.
+
+
+`verifyLoginAccess` composes the existing independent application readback with original Auth request and completion reads. The intended account and any required organization must match the exact addressed browser binding. Receiving-provider origin and application origin remain distinct. Auth completion is caller-observed bookkeeping, not independent identity proof; receiver settlement is reported separately. Closed source tickets, filled fields and provider sign-in cannot complete the workflow. No verification call writes credentials or completion.
+
+
+`discoverLoginReadiness` checks supported Auth capabilities and source metadata before manual unlock. A signed-out extension does not imply unavailable private-source recovery. Credential readiness means uniquely selected metadata, never private-use authority. A hidden owner permission view is visibility unavailable, not an absent grant. Trusted host compositions may use `createLoginDiscovery` with an already authorized scoped owner reader; this neither broadens access nor renews an expired request.
+
+
+`resumeLoginContinuation` extends only an existing private record’s `loginContinuation` namespace, through the existing store lock/load/save interface. Preserve its Native episode, exact caller and browser bindings, requested account/organization and unresolved attempts. Fresh Auth reads and independent verification decide the outcome; a stored success flag never does. Equivalent progress is coalesced across resumes. Notification intent is persisted before the optional callback, and callback acknowledgement is not human delivery; an unknown notification is not blindly resent. An injected trusted Wake reader normalizes its supported receipt: registered/held is not ready, readiness requires the exact armed intent and ready monitor, and cancellation remains a separate cleanup obligation.
+
+
+The local pre-push gate uses the existing validation selector to run the public login workflow checks for relevant committed changes. It requires clean current source and rejects unknown coverage or failed checks. Enable it for one checkout with `git config --local extensions.worktreeConfig true` and `git config --worktree core.hooksPath .husky`; peer checkout settings and hosted CI remain unchanged. This focused source check does not replace full required validation or grant merge/install authority.
+
+
+For a Native control observation, pass the addressed browser task ID rather than the Auth caller ID: the progress summary returns a read-only `browser_command` / `task_briefing` action. Missing binding is explicit as `addressed_browser_task_required`. Continuation preserves sanitized incomplete verifier categories, evidence, qualification and supported next reads. Broad executable, dependency and selector changes select the workflow and gate checks as well; the gate is not duplicated inside the tooling aggregate.
+
+
+## Standalone authentication
+
+Follow explicit user instructions and service-specific authentication guidance.
+Use an available authorized stored credential through its supported private
+channel. Auth Receipts is the generic path when an agent needs credential
+discovery, owner approval or private login orchestration and no more specific
+authorized path is available. It is not required for every browser login.
+
+Keep the username and password from the same credential source together. A
+service account name selects its matching credential pair; it does not replace
+the username belonging to another saved password. Do not mix pairs based on an
+account hint or discovery ranking. An explicitly requested alternative mapping
+must remain explicit rather than becoming an inferred default.
+
+Preserve account, realm, browser ownership and private-input checks for every
+path. Read secret files only inside the authorized login process; never put
+secrets in model context, command arguments, logs, screenshots or Git. An
+already-authorized credential file or saved login does not need migration into
+Auth before use.
+
+For route selection and special cases, read [authentication paths](references/authentication.md#choose-an-authentication-path). The following Auth helper rules apply when Auth is the selected path. Discover connected channels before asking the operator; proposals grant no authority.
+
+Use `connectHostedAuthHelper` only for a genuine current Codex caller.
+An explicitly enrolled unattended application uses `connectEnrolledAuthHelper`
+with its own discovery file and exact operation/recovery/browser context; never
+copy CODEX_THREAD_ID or fall back to Codex discovery. Auth owns enrollment and
+current authority; the adapter does not expose bearer or credential contents.
+Use current `discover_credentials`, not empty legacy scopes, to distinguish
+missing authority, unavailable/partial sources, no match and account choice.
+Before saved-password Native input, read [input and control ownership](references/authentication.md#native-input-and-control-ownership). Keep original unknown attempts; never replay private use.
+
+
+## CLI fallback
+
+If browser_open is absent, report missing Agent Browser MCP integration.
+Register installed agent-browser mcp serve in that client and reconnect.
+Use the CLI while correcting integration; server tools/list does not prove client exposure.
+
+Help is launch-free. MCP returns `success/data/error`; CLI errors add `type`. Read private journal `details.phase` for unknown outcomes.
+
+Read [Runtime health and cleanup diagnostics](references/cli-and-service.md#runtime-health-and-cleanup-diagnostics) before maintenance, expiry diagnosis or unknown-effect interpretation. Preserve peers and scrub exported URLs.
+Uncorrelated displays stay protected: missing Service State proves no ownership or cleanup authority.
+
+CDP-free idle close uses verified original OS identity and exit confirmation.
+Explicit handoff can supersede idle cleanup after its worker ends and the exact
+original is verified alive. Attempt history stays intact; this retention decision
+requires a schema-5-capable runtime.
+Deleted handoff links cannot be restored by concurrent lifetime edits.
+Closed-task links offer **Reopen task** on the same URL. GET is read-only;
+missing disposable storage needs a separate disclosed fresh-profile choice.
+Never substitute a named profile. Read [closed-task reopening](references/cli-and-service.md#closed-task-reopening)
+for software operations, retry and human-control semantics.
+
+Idle-closed CDP-free handoffs reopen through the owner, preserving task/tab/link
+and profile, but not unsaved page state. Unknown proof or changed scope defers;
+never reset the profile as a workaround.
+
+CLI fallback: use installed help, exact profile and named session; preserve peers.
+
+Read [CLI commands](references/commands.md) for examples.
+
+## Optional command latency diagnostics
+
+Ordinary commands do not request timing observations. For diagnosis, select one of routing, state_read, readiness, startup_lock, cdp, persistence or queue through `AGENT_BROWSER_LATENCY_PHASE`. Supply an absolute supported client config in `AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT` and optionally its executable in `AGENT_BROWSER_LATENCY_STABLE_TIME_BINARY` (default stable-time). Response operation data retains `latencyPhases`, including supported failed operations; timing never enters request fingerprints. Each helper exchange is bounded to five seconds. Unavailable configuration/helper/service observations are diagnostic failures and preserve the browser result. Sampling adds overhead. Compare equivalent persistent addressed MCP and direct CDP reads on the same target; report cold opening and fresh CLI startup separately. StableTime service brackets include delivery and give operation elapsed only a zero-to-upper-bound interval.
+
+## Continued login and scoped override capacity
+
+Login input budgets use optional `maximumLoginSteps` in the existing task-operation capacity policy (default 32). Update it at runtime with the other three required capacity fields. Settled episodes can renew; unresolved input in any prior episode must be reconciled first. Native Saved Login `resolve({allowAcknowledgedResume:true,steps:[...]})` can extend a settled plan after fresh observation while preserving its acknowledged prefix. Supported control kinds, account/frame/process checks and no-replay rules remain enforced.
+
+`browser_policy` also supports `override_capacity` with current `expectedRevision`, `actor`, `reason`, `scope: "app" | "task"` and `capacity: {activeLimit:256}`. Task settings override app defaults. Old grants archive automatically and resolve under identical exact task/action/request/current-policy checks. This is a working-set bound, not a permission ceiling or policy-document size optimization. Capacity updates preserve grants; effective permission-policy changes revoke both active and archived grants. Read `overrideCapacity` in status, or use `override_lookup` with `overrideId` to inspect an original without mutation attribution. Neither operation expands permission.
+
+## Ordinary task reconnect
+
+Ordinary managed tasks support `browser_reconnect` operations `status` and `reconnect` without a hosted attachment. Status distinguishes retained metadata, an ended task (including `terminalReason: explicit_close`) and unavailable metadata, and returns a concrete fresh-facade command. Reconnect freshly observes the same retained task/page; it never opens a replacement browser, reopens a closed task or replays an uncertain request. Transport failures retain the sanitized cause and original request for inspection/reconciliation. Hosted lifecycle operations below keep their existing revision requirements.
+
+Artifact reference admission uses optional `maximumArtifactReferences` in the same live task-operation capacity policy (default 256). Capacity status reports `artifactReferenceCount` and `artifactReferenceLimit`; raise the limit on the retained task before another capture. Existing originals remain available. Completed file effects always retain their completion metadata, including if another caller lowered the budget during capture. Updating this admission budget does not delete artifacts or expand destination permissions.
+
+## Native freshness time
+
+Native checkbox, login and image input uses owner-minted StableTime `serviceTime` evidence with service measurement bounds, epoch and counter continuity. Guest wall/boot clocks do not establish freshness. Existing age budgets remain 10 seconds for checkbox/login and 60 seconds for image input. Expired evidence, excessive uncertainty, changed time domain and helper/service failures have distinct recourse. Legacy unqualified evidence requires a fresh supported `native_capture`; original uncertain input is never replayed. A timing failure remains visible in `timeQualificationFailure` on a capture, while freshness-dependent input pauses. Ordinary CDP and read-only task inspection continue.
+
+`AGENT_BROWSER_STABLE_TIME_CLIENT` selects an absolute supported client configuration (default `~/.local/share/stable-time/client.json`); `AGENT_BROWSER_STABLE_TIME_BINARY` selects its executable (default `stable-time`). Credentials remain inside that private supported client. Each helper exchange is bounded to five seconds. Helper/configuration failure is not proof that the StableTime service is down. No local host-counter bridge or guest-clock extrapolation is used.
+
+## Running job deadline evidence
+
+Running job readback may include `deadlineEvidence.state: "unqualified_legacy_start"` and `automaticTerminalization: false`. Legacy guest-clock timestamps cannot prove elapsed execution time and no longer cause automatic terminalization. Inspect the exact original job with `agent-browser --json service jobs --id JOB`. Active-owner cancellation and positive process-exit reconciliation keep their existing proof requirements; inspection does not authorize replay. Persisted qualified deadline auto-finalization is not implemented by this change.
+
+
+Finite handoffs and new Auth/challenge deadlines retain a trusted service-time origin. Ordinary status and original completed-result replay remain available during time-client failure. Legacy finite handoffs require an explicit owner-reviewed `set_link_lifetime` on the same handoff; neither inspection nor an outage extends permission. A finite link whose deadline is not qualified reports `time_unqualified`, not expired. Explicit inspection returns `timeError` and typed `timeRecovery` without recording another refusal occurrence. Returning an existing authenticated viewer's own control remains available without renewing the link. First qualified handoff retention publishes runtime schema 8 atomically; older readers must refuse that database.
+
+Profile recovery/reset plans keep their sealed absolute deadline. New defaults use trusted service time; apply requires the entire current time interval before the deadline. An overlapping interval is uncertain; only a lower bound at or beyond the deadline proves expiry. Authenticated, sealed completed receipts replay before time-client or current-route availability checks. Repairing time qualification never renews the plan or permits replay of unknown input.
+
+Cold runtime startup uses a persistent kernel-owned admission lock. A healthy exact warm continuation bypasses unrelated cold admission. A legacy marker's age never proves its owner absent: preserve live or unqualified ownership and use the reported startup diagnosis/replacement plan rather than deleting markers or killing processes.

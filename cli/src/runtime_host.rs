@@ -18,6 +18,7 @@ pub(crate) const SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD: &str =
     "_agentBrowserServiceRequestExplicitProfileRouting";
 pub(crate) const RUNTIME_HOST_ENV: &str = "AGENT_BROWSER_RUNTIME_HOST";
 pub(crate) const RUNTIME_HOST_PROCESS_ENV: &str = "AGENT_BROWSER_RUNTIME_HOST_PROCESS";
+#[cfg(test)]
 pub(crate) const DEFAULT_MAX_RUNTIME_LANES: usize = 64;
 
 pub(crate) fn admission_enabled() -> bool {
@@ -200,7 +201,18 @@ pub(crate) struct RuntimeHostManifest {
     pub(crate) executable_generation: String,
     pub(crate) socket_identity: String,
     pub(crate) authentication_record: String,
+    /// Informational startup snapshot; live admission reads system defaults.
     pub(crate) max_lanes: usize,
+    #[serde(default = "startup_capacity_scope")]
+    pub(crate) max_lanes_scope: String,
+}
+fn startup_capacity_scope() -> String {
+    "startup_snapshot".into()
+}
+/// Global host capacity deliberately ignores per-task overrides.
+pub(crate) fn current_lane_capacity() -> Result<(usize, &'static str), String> {
+    crate::native::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?
+        .runtime_lane_capacity_policy()
 }
 
 pub(crate) fn write_manifest(
@@ -216,7 +228,8 @@ pub(crate) fn write_manifest(
         executable_generation,
         socket_identity: runtime_host_socket_identity(&socket_path)?,
         authentication_record: format!("{RUNTIME_HOST_ENDPOINT_KEY}.token"),
-        max_lanes: DEFAULT_MAX_RUNTIME_LANES,
+        max_lanes: current_lane_capacity()?.0,
+        max_lanes_scope: startup_capacity_scope(),
     };
     let bytes = serde_json::to_vec_pretty(&manifest)
         .map_err(|error| format!("runtime_host_manifest_encode_failed: {error}"))?;
@@ -261,6 +274,12 @@ pub(crate) struct RuntimeLaneRegistry<T> {
     lanes: RwLock<BTreeMap<String, T>>,
 }
 
+/// Admission is minted before lane construction under the router creation lock.
+/// A later policy reduction cannot discard an already constructed owner lane.
+pub(crate) struct RuntimeLaneAdmission {
+    lane: String,
+}
+
 impl<T: Clone> RuntimeLaneRegistry<T> {
     pub(crate) fn new(max_lanes: usize) -> Self {
         Self {
@@ -286,6 +305,51 @@ impl<T: Clone> RuntimeLaneRegistry<T> {
         }
         lanes.insert(lane, value.clone());
         Ok(value)
+    }
+
+    pub(crate) fn admit_new_lane(
+        &self,
+        lane: &str,
+        limit: usize,
+        policy_source: &str,
+    ) -> Result<RuntimeLaneAdmission, String> {
+        let lanes = self
+            .lanes
+            .read()
+            .map_err(|_| "runtime_host_lane_registry_poisoned".to_string())?;
+        if !lanes.contains_key(lane) && lanes.len() >= limit {
+            return Err(format!("runtime_host_lane_capacity_exhausted:activeCount={};limit={limit};policySource={policy_source}; inspect task_operation capacity scope=defaults and increase maximumRuntimeLanes, or explicitly close an owned lane; existing lanes retained; no new lane constructed",lanes.len()));
+        }
+        Ok(RuntimeLaneAdmission {
+            lane: lane.to_owned(),
+        })
+    }
+
+    /// Reconfiguring an existing lane does not consume new lane capacity.
+    pub(crate) fn admit_existing_lane(&self, lane: &str) -> Result<RuntimeLaneAdmission, String> {
+        let lanes = self
+            .lanes
+            .read()
+            .map_err(|_| "runtime_host_lane_registry_poisoned".to_string())?;
+        if !lanes.contains_key(lane) {
+            return Err("runtime_host_bootstrap_lane_disappeared".to_string());
+        }
+        Ok(RuntimeLaneAdmission {
+            lane: lane.to_owned(),
+        })
+    }
+
+    /// Consume an admitted snapshot, without a post-construction policy veto.
+    pub(crate) fn insert_admitted(
+        &self,
+        admission: RuntimeLaneAdmission,
+        value: T,
+    ) -> Result<T, String> {
+        let mut lanes = self
+            .lanes
+            .write()
+            .map_err(|_| "runtime_host_lane_registry_poisoned".to_string())?;
+        Ok(lanes.entry(admission.lane).or_insert(value).clone())
     }
 
     pub(crate) fn remove(&self, lane: &str) -> Option<T> {
@@ -523,6 +587,34 @@ mod tests {
         assert_eq!(registry.snapshot(), vec!["alpha", "beta"]);
         assert_eq!(registry.remove("alpha"), Some(1));
         assert_eq!(registry.get("beta"), Some(3));
+    }
+
+    #[test]
+    fn live_lane_admission_extends_and_lowering_preserves_originals() {
+        let registry = RuntimeLaneRegistry::new(1);
+        let first = registry
+            .admit_new_lane("original", 1, "system_default")
+            .unwrap();
+        registry.insert_admitted(first, 1).unwrap();
+        let refusal = registry
+            .admit_new_lane("next", 1, "system_default")
+            .err()
+            .unwrap();
+        assert!(refusal.contains("activeCount=1;limit=1;policySource=system_default"));
+        let admitted = registry
+            .admit_new_lane("next", 2, "system_default")
+            .unwrap();
+        // A subsequent lower policy does not invalidate the pre-effect admission.
+        assert!(registry
+            .admit_new_lane("third", 1, "system_default")
+            .is_err());
+        registry.insert_admitted(admitted, 2).unwrap();
+        let duplicate = registry
+            .admit_new_lane("original", 1, "system_default")
+            .unwrap();
+        assert_eq!(registry.insert_admitted(duplicate, 99).unwrap(), 1);
+        assert_eq!(registry.get("next"), Some(2));
+        assert_eq!(registry.snapshot(), vec!["next", "original"]);
     }
 
     #[test]

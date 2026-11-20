@@ -344,23 +344,56 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
                     && root.pid == browser.pid
                     && root.cdp_endpoint == browser.cdp_endpoint
                     && root.profile_id == browser.profile_id
-                    && root.desktop == browser.desktop
+                    && root
+                        .desktop
+                        .as_ref()
+                        .map(|desktop| (&desktop.desktop_id, desktop.generation))
+                        == browser
+                            .desktop
+                            .as_ref()
+                            .map(|desktop| (&desktop.desktop_id, desktop.generation))
             })
         };
-        if !same_browser(expected)
-            || !same_browser(&actual)
-            || actual.idle_closed_browsers.contains_key(&browser.id)
-            || records.activities.contains_key(id)
-            || records.records.values().any(|record| {
-                !record.is_terminal()
-                    && record
-                        .intent
-                        .scopes
-                        .iter()
-                        .any(|scope| scope.browser.profile_id == browser.profile_id)
+        use agent_browser_service_model::BrowserActivityAdmissionConflict as Cause;
+        let conflict = if !same_browser(expected) {
+            Some(Cause::ExpectedIdentityChanged)
+        } else if !same_browser(&actual) {
+            Some(match actual.browsers.get(&browser.id) {
+                None => Cause::CurrentBrowserMissing,
+                Some(root) if root.pid != browser.pid => Cause::CurrentProcessChanged,
+                Some(root) if root.cdp_endpoint != browser.cdp_endpoint => {
+                    Cause::CurrentEndpointChanged
+                }
+                Some(root) if root.profile_id != browser.profile_id => Cause::CurrentProfileChanged,
+                Some(root)
+                    if root.desktop.as_ref().map(|d| (&d.desktop_id, d.generation))
+                        != browser
+                            .desktop
+                            .as_ref()
+                            .map(|d| (&d.desktop_id, d.generation)) =>
+                {
+                    Cause::CurrentDesktopChanged
+                }
+                _ => Cause::CurrentIdentityChanged,
             })
-        {
-            return Err(Error::Conflict);
+        } else if actual.idle_closed_browsers.contains_key(&browser.id) {
+            Some(Cause::BrowserRetired)
+        } else if records.activities.contains_key(id) {
+            Some(Cause::RequestAlreadyRecorded)
+        } else if records.records.values().any(|record| {
+            !record.is_terminal()
+                && record
+                    .intent
+                    .scopes
+                    .iter()
+                    .any(|scope| scope.browser.profile_id == browser.profile_id)
+        }) {
+            Some(Cause::RetirementActive)
+        } else {
+            None
+        };
+        if let Some(cause) = conflict {
+            return Err(Error::ActivityAdmission(cause));
         }
         let root = actual.browsers.get(&browser.id).ok_or(Error::Conflict)?;
         let process_identity =
@@ -810,6 +843,14 @@ mod tests {
         let mut peer = fixture.open(false);
         let mut metadata = baseline.clone();
         metadata.next_session_sequence += 1;
+        metadata
+            .browsers
+            .get_mut("browser-a")
+            .unwrap()
+            .desktop
+            .as_mut()
+            .unwrap()
+            .friendly_route_label = "Current friendly label".into();
         peer.compare_and_save_session_state(&baseline, &metadata)
             .unwrap();
         owner
@@ -849,7 +890,14 @@ mod tests {
                     &intent.scopes[0].browser,
                     &baseline,
                 ),
-                Err(Error::Conflict),
+                Err(Error::ActivityAdmission(match change {
+                    "pid" => BrowserActivityAdmissionConflict::CurrentProcessChanged,
+                    "endpoint" => BrowserActivityAdmissionConflict::CurrentEndpointChanged,
+                    "profile" => BrowserActivityAdmissionConflict::CurrentProfileChanged,
+                    "desktop" => BrowserActivityAdmissionConflict::CurrentDesktopChanged,
+                    "removed" => BrowserActivityAdmissionConflict::CurrentBrowserMissing,
+                    _ => unreachable!(),
+                })),
                 "must reject changed current {change}"
             );
             assert!(owner.browser_activity_records().unwrap().is_empty());

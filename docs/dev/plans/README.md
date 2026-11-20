@@ -1,5 +1,7 @@
 # Active plan index
 
+[P307 recoverable browser work](0307-2026-11-19-recoverable-work749.md), spec749:750–758/760–769, source accepted through PR759: configured capacity, actionable logged refusal recovery, Native activity coordination and measured latency. One review/one remediation; no deployment.
+
 [P306 evidence-backed login progress](0306-2026-11-18-login-progress-739.md), spec739:740 owns the public result contract;741–745 follow the validated dependency frontier. Source-only; no live login or installation.
 
 [P300 compact workspace, Profiles and SiteGuides](0300-2026-11-01-workspace-siteguides-523.md), spec523:524–528 CLOSED; workspace and PR543 cleanup repair are integrated/installed. Actual portability has 3 of 4 passing rows with exact cleanup;530 awaits human donor readiness for the final row.529 needs narrated context/principal mapping. Final review/remediation remain0. [Native control repair](../maintenance/native-control-proof-798.md) is installed accepted with eight same-browser cycles, reconnect, continued automation and cleanup.

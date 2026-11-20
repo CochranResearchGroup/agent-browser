@@ -231,3 +231,134 @@ fn managed_service_tab_and_focus_routes_cannot_bypass_the_same_dispatch_rule() {
         )
         .unwrap();
 }
+
+#[test]
+fn scoped_override_archival_preserves_exact_authorization_and_policy_revocation() {
+    let mut policies = BrowserHostPolicies::default();
+    policies
+        .update(
+            0,
+            "app",
+            "task",
+            "set_task",
+            Some(denied("click")),
+            "operator",
+            "Restrict task",
+        )
+        .unwrap();
+    policies
+        .configure_override_capacity(
+            1,
+            "app",
+            "task",
+            "task",
+            BrowserOverrideCapacity { active_limit: 2 },
+            "operator",
+            "Bound active working set",
+        )
+        .unwrap();
+    for index in 0..5 {
+        policies
+            .issue_override(
+                2,
+                format!("grant-{index}"),
+                "app",
+                "task",
+                "click",
+                &format!("request-{index}"),
+                "operator",
+                "Permit one original request",
+            )
+            .unwrap();
+    }
+    assert_eq!(policies.operator_overrides.len(), 1);
+    assert_eq!(policies.archived_operator_overrides.len(), 4);
+    let policies: BrowserHostPolicies =
+        serde_json::from_slice(&serde_json::to_vec(&policies).unwrap()).unwrap();
+    policies
+        .check("app", "task", "click", "request-0", Some("grant-0"))
+        .unwrap();
+    assert!(policies
+        .check("app", "task", "click", "another-request", Some("grant-0"))
+        .is_err());
+    assert!(policies
+        .check("another-app", "task", "click", "request-0", Some("grant-0"))
+        .is_err());
+    let mut policies = policies;
+    policies
+        .configure_override_capacity(
+            2,
+            "app",
+            "task",
+            "app",
+            BrowserOverrideCapacity { active_limit: 16 },
+            "operator",
+            "Change only capacity",
+        )
+        .unwrap();
+    policies
+        .check("app", "task", "click", "request-0", Some("grant-0"))
+        .unwrap();
+    assert_eq!(
+        policies.override_capacity("app", "task").0.active_limit,
+        2,
+        "Task capacity override survives app default change"
+    );
+    policies
+        .update(
+            3,
+            "app",
+            "task",
+            "set_task",
+            Some(denied("navigate")),
+            "operator",
+            "Change policy",
+        )
+        .unwrap();
+    policies
+        .update(
+            4,
+            "app",
+            "task",
+            "set_task",
+            Some(denied("click")),
+            "operator",
+            "Restore policy shape",
+        )
+        .unwrap();
+    assert!(
+        policies
+            .check("app", "task", "click", "request-0", Some("grant-0"))
+            .is_err(),
+        "Restoring an equal policy must not resurrect revoked archived grants"
+    );
+    assert!(policies
+        .issue_override(
+            5,
+            "grant-0".into(),
+            "app",
+            "task",
+            "click",
+            "request-0",
+            "operator",
+            "Never replace an original identity"
+        )
+        .is_err());
+    policies
+        .configure_override_capacity(
+            5,
+            "app",
+            "task",
+            "task",
+            BrowserOverrideCapacity { active_limit: 8 },
+            "operator",
+            "Increase working set",
+        )
+        .unwrap();
+    assert!(
+        policies
+            .check("app", "task", "click", "new-request", None)
+            .is_err(),
+        "Capacity updates cannot broaden effective permission"
+    );
+}

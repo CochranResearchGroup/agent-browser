@@ -243,5 +243,25 @@ try {
  const nullableDecision=await (await fetch(origin+'/decisions',{method:'POST',headers:{authorization:'Bearer synthetic-human',origin:'https://operator.test'},body:JSON.stringify(nullableRequest)})).json();
  const nullableReviewed=await reopened.recordDecision({taskId:'task',guideId:nullable.guideId,expectedSha256:nullableView.sha256,operationId:'nullable-review',decisionRef:nullableDecision.decisionId});
  assert.equal(nullableReviewed.status,'saved');
+
+ // Live capacity extends the same append-only lineage past the former256 ceiling.
+ const capacityGuide=structuredClone(original);capacityGuide.guideId='capacity-review-root';
+ await writeTeachingDraftCandidate({candidateDirectory:directory,candidateOnly:true,guide:capacityGuide});
+ const capacityClient=createTeachingReviewClient(options);assert.equal(capacityClient.capacity().policy.maximumLineageRevisions,256);
+ let capacityHead={guideId:capacityGuide.guideId,sha256:hash(await readFile(join(directory,capacityGuide.guideId+'.json')))};
+ for(let revision=2;revision<=256;revision++){
+  const next=JSON.parse(await readFile(join(directory,capacityHead.guideId+'.json'),'utf8'));next.teaching.routines[0].steps[0].expectedResult='Capacity revision '+revision;
+  capacityHead=await capacityClient.save({taskId:'task',guideId:capacityHead.guideId,expectedSha256:capacityHead.sha256,operationId:'capacity-edit-'+revision,guide:next});
+ }
+ const extensionGuide=JSON.parse(await readFile(join(directory,capacityHead.guideId+'.json'),'utf8'));extensionGuide.teaching.routines[0].steps[0].expectedResult='Capacity revision257';
+ const extensionInput={taskId:'task',guideId:capacityHead.guideId,expectedSha256:capacityHead.sha256,operationId:'capacity-extension-257',guide:extensionGuide};
+ await assert.rejects(capacityClient.save(extensionInput),/teaching_review_lineage_capacity/);
+ const capacityUpdate=capacityClient.capacity({maximumLineageRevisions:257});assert.equal(capacityUpdate.permissionChanged,false);assert.equal(capacityUpdate.requiresRestart,false);
+ const extended=await capacityClient.save(extensionInput);assert.equal(extended.revision,257);assert.equal(extended.ordinaryReuseAllowed,false);
+ const duplicate=await capacityClient.save(extensionInput);assert.equal(duplicate.guideId,extended.guideId);assert.equal(duplicate.recoveredOriginal,true);
+ const conflict=await capacityClient.save({...extensionInput,guide:{...extensionGuide,name:'changed-intent'}});assert.equal(conflict.status,'conflict');
+ capacityClient.capacity({maximumLineageRevisions:1});
+ const historical=await capacityClient.lookupOperation({rootGuideId:capacityGuide.guideId,operationId:'capacity-extension-257'});assert.equal(historical.guideId,extended.guideId,'a smaller future budget never hides original history');
+ assert.equal((await capacityClient.save(extensionInput)).guideId,extended.guideId,'original duplicate lookup remains available below the new-intent ceiling');
  console.log('Teaching review public client: edit/reopen/version lineage, explicit review and accepted/peer/source preservation pass');
 } finally {await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}

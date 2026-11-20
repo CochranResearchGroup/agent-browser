@@ -12,5 +12,6 @@ export interface WorkspaceSiteGuidesOptions extends TeachingReviewOptions {
  resolveSelection?:(request:{taskId:string;sourceKey:string})=>Promise<TeachingSelection>;
 }
 export function createWorkspaceSiteGuides(options:WorkspaceSiteGuidesOptions):{
+ capacity:import('./teaching-capacity.js').TeachingCapacityControl;
  dispatch(request:Record<string,any>):Promise<any>;
 };

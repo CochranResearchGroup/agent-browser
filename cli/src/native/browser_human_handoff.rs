@@ -94,24 +94,8 @@ fn begin(control: &mut Control, id: &str, digest: &str) -> Result<(), String> {
     if control.human {
         return Err("browser_handoff_control_already_held".into());
     }
-    // Match ordinary cooperative takeover: preserve dispatched uncertainty;
-    // human assistance may be needed to finish that very operation.
-    for outcome in control
-        .flights
-        .values_mut()
-        .filter(|state| state.as_str() == "dispatched")
-    {
-        *outcome = "uncertain_in_flight".into();
-    }
-    control.epoch = control
-        .epoch
-        .checked_add(1)
-        .ok_or("browser_control_epoch_exhausted")?;
-    control.human = true;
-    control.awaiting_observation = false;
-    control.pause_reads = true;
-    control.actor = "browser_handoff".into();
-    control.reason = "Explicit human assistance requested".into();
+    // Interactive capability is an invitation, not evidence of human activity.
+    // A Native viewer's explicit takeover claims control through the private callback.
     let handoff = HumanHandoff {
         id: id.into(),
         target_digest: digest.into(),
@@ -138,12 +122,7 @@ fn invitation(control: &Control, id: &str) -> Option<HumanHandoff> {
 
 fn intent(control: &Control, id: &str, digest: &str) -> &'static str {
     if invitation(control, id).is_some_and(|handoff| {
-        handoff.id == id
-            && handoff.target_digest == digest
-            && handoff.epoch == control.epoch
-            && handoff.returned_by.is_none()
-            && control.human
-            && control.pause_reads
+        handoff.id == id && handoff.target_digest == digest && handoff.returned_by.is_none()
     }) {
         "interactive"
     } else {
@@ -157,6 +136,205 @@ pub(crate) fn handoff_intent(
     digest: &str,
 ) -> Result<&'static str, String> {
     Ok(intent(&read(browser)?, id, digest))
+}
+
+/// The authenticated Native owner calls this only after explicit Take control.
+/// Opening or reconnecting an interactive-capable viewer never calls it.
+pub(crate) fn take_handoff(
+    browser: &str,
+    id: &str,
+    digest: &str,
+    request: &str,
+) -> Result<(), String> {
+    transaction(&path(browser)?, |control| {
+        claim(control, id, digest, request, true)
+    })
+}
+
+/// A real Native viewer event pauses automation without asserting an explicit
+/// indefinite takeover. The provider owns the qualified quiet continuation.
+pub(crate) fn activity_handoff(
+    browser: &str,
+    id: &str,
+    digest: &str,
+    request: &str,
+) -> Result<(), String> {
+    transaction(&path(browser)?, |control| {
+        claim(control, id, digest, request, false)
+    })
+}
+
+pub(crate) fn return_activity(
+    browser: &str,
+    id: &str,
+    digest: &str,
+    request: &str,
+) -> Result<(), String> {
+    transaction(&path(browser)?, |control| {
+        let (viewer, _) = viewer_request(request).ok_or("browser_activity_viewer_required")?;
+        let latest = control
+            .audit
+            .iter()
+            .rev()
+            .find(|event| event["humanViewerId"] == viewer)
+            .ok_or("browser_activity_claim_missing")?;
+        if latest["humanViewerReturnRequestId"] == request {
+            return Ok(());
+        }
+        if latest["humanViewerOperation"] != "activity"
+            || latest["humanHandoffClaimRequestId"] != request
+        {
+            return Err("browser_activity_claim_promoted_or_changed".into());
+        }
+        relinquish(control, id, digest, request)?;
+        // Quiet activity returns automation, but does not revoke this viewer's
+        // interactive capability. A later real event starts a new soft pause.
+        if let Some(mut handoff) = invitation(control, id) {
+            handoff.returned_by = None;
+            control.audit.push(
+                json!({"epoch":control.epoch,"operation":"human_activity_quiet",
+                "humanHandoff":handoff}),
+            );
+        }
+        Ok(())
+    })
+}
+
+pub(super) fn coordination_metadata(control: &Control) -> Value {
+    let mut modes = BTreeMap::new();
+    for event in &control.audit {
+        if let (Some(viewer), Some(operation)) = (
+            event["humanViewerId"].as_str(),
+            event["humanViewerOperation"].as_str(),
+        ) {
+            modes.insert(viewer, operation);
+        }
+    }
+    json!({"explicitViewerCount":modes.values().filter(|mode| **mode == "takeover").count(),
+        "activityViewerCount":modes.values().filter(|mode| **mode == "activity").count(),
+        "scope":"instrumented_native_viewer_input"})
+}
+
+fn viewer_request(request: &str) -> Option<(&str, &str)> {
+    let (viewer, operation) = request.split_once(':')?;
+    (!viewer.is_empty()
+        && viewer.len() <= 64
+        && !operation.is_empty()
+        && viewer
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-'))
+    .then_some((viewer, operation))
+}
+
+/// Ordinary public return cannot release independently authenticated Native
+/// viewers. The private viewer callback retires only its own recorded claim.
+pub(super) fn ordinary_return_allowed(control: &Control) -> Result<(), String> {
+    if !viewer_claims(control).is_empty() {
+        return Err("browser_control_active_native_viewers: return each active viewer to view-only using its retained Remote View handoff; for recent input wait for quiet and re-read browser_control status; an attributable override remains a separate explicit operation".into());
+    }
+    Ok(())
+}
+
+fn viewer_claims(control: &Control) -> BTreeMap<String, (String, String)> {
+    let mut claims = BTreeMap::new();
+    for event in &control.audit {
+        let Some(viewer) = event["humanViewerId"].as_str() else {
+            continue;
+        };
+        match event["humanViewerOperation"].as_str() {
+            Some("takeover" | "activity") => {
+                if let (Some(id), Some(digest)) =
+                    (event["handoffId"].as_str(), event["targetDigest"].as_str())
+                {
+                    claims.insert(viewer.into(), (id.into(), digest.into()));
+                }
+            }
+            Some("return") => {
+                claims.remove(viewer);
+            }
+            _ => {}
+        }
+    }
+    claims
+}
+
+fn claim(
+    control: &mut Control,
+    id: &str,
+    digest: &str,
+    request: &str,
+    explicit: bool,
+) -> Result<(), String> {
+    if request.is_empty() || request.len() > 128 {
+        return Err("browser_handoff_takeover_request_invalid".into());
+    }
+    if control
+        .audit
+        .iter()
+        .any(|event| event["humanHandoffClaimRequestId"] == request)
+    {
+        return if control.human && intent(control, id, digest) == "interactive" {
+            Ok(())
+        } else {
+            Err("browser_handoff_takeover_request_stale".into())
+        };
+    }
+    if intent(control, id, digest) != "interactive" {
+        return Err("browser_handoff_target_changed".into());
+    }
+    if control.human && viewer_claims(control).is_empty() {
+        return Err("browser_handoff_control_already_held".into());
+    }
+    // A newly admitted real activity sample supersedes only the earlier soft
+    // activity pause. Explicit independent viewer claims are never discarded.
+    if !explicit {
+        let current_viewer = viewer_request(request).map(|(viewer, _)| viewer);
+        let mut latest = BTreeMap::new();
+        for event in &control.audit {
+            if let (Some(viewer), Some(mode)) = (
+                event["humanViewerId"].as_str(),
+                event["humanViewerOperation"].as_str(),
+            ) {
+                latest.insert(viewer.to_owned(), mode.to_owned());
+            }
+        }
+        if current_viewer
+            .is_some_and(|viewer| latest.get(viewer).is_some_and(|mode| mode == "takeover"))
+        {
+            return Ok(());
+        }
+        for (viewer, mode) in latest {
+            if mode == "activity" && current_viewer != Some(viewer.as_str()) {
+                control
+                    .audit
+                    .push(json!({"operation":"human_activity_superseded",
+                    "humanViewerId":viewer,"humanViewerOperation":"return"}));
+            }
+        }
+    }
+    let mut handoff = invitation(control, id).ok_or("browser_handoff_target_changed")?;
+    for outcome in control
+        .flights
+        .values_mut()
+        .filter(|state| state.as_str() == "dispatched")
+    {
+        *outcome = "uncertain_in_flight".into();
+    }
+    control.epoch = control
+        .epoch
+        .checked_add(1)
+        .ok_or("browser_control_epoch_exhausted")?;
+    control.human = true;
+    control.pause_reads = false;
+    control.awaiting_observation = false;
+    handoff.epoch = control.epoch;
+    control.audit.push(
+        json!({"epoch":control.epoch,"operation":"human_handoff_takeover",
+        "humanHandoffClaimRequestId":request,"humanHandoff":handoff,
+        "humanViewerId":viewer_request(request).map(|(viewer, _)| viewer),
+        "humanViewerOperation":if explicit {"takeover"} else {"activity"},"handoffId":id,"targetDigest":digest}),
+    );
+    Ok(())
 }
 
 pub(crate) fn return_handoff(
@@ -179,6 +357,39 @@ fn relinquish(control: &mut Control, id: &str, digest: &str, request: &str) -> R
     }
     if handoff.returned_by.as_deref() == Some(request) {
         return Ok(());
+    }
+    if let Some((viewer, _)) = viewer_request(request) {
+        if control
+            .audit
+            .iter()
+            .any(|event| event["humanViewerReturnRequestId"] == request)
+        {
+            return Ok(());
+        }
+        let mut claims = viewer_claims(control);
+        let returning_legacy = claims.is_empty() && control.human && handoff.epoch == control.epoch;
+        if !returning_legacy
+            && claims.remove(viewer).as_ref() != Some(&(id.to_string(), digest.to_string()))
+        {
+            return Err("browser_handoff_viewer_claim_missing".into());
+        }
+        control.epoch = control
+            .epoch
+            .checked_add(1)
+            .ok_or("browser_control_epoch_exhausted")?;
+        control.human = !claims.is_empty();
+        control.pause_reads = false;
+        control.awaiting_observation = !control.human;
+        handoff.epoch = control.epoch;
+        handoff.returned_by =
+            (!claims.values().any(|(claim, _)| claim == id)).then(|| request.into());
+        control.audit.push(json!({"epoch":control.epoch,"operation":"human_handoff_return",
+            "humanViewerReturnRequestId":request,"humanViewerId":viewer,"humanViewerOperation":"return",
+            "humanHandoff":handoff}));
+        return Ok(());
+    }
+    if !viewer_claims(control).is_empty() {
+        return Err("browser_handoff_viewer_identity_required".into());
     }
     // A proof-backed replacement can retain a returned, passive invitation.
     // A later Native-only return has no cooperative hold to clear. Require its
@@ -204,9 +415,8 @@ fn relinquish(control: &mut Control, id: &str, digest: &str, request: &str) -> R
         .ok_or("browser_control_epoch_exhausted")?;
     control.human = false;
     control.pause_reads = false;
-    // The private callback freshly rejoined the same process and target.
-    // Native input is relinquished before this cooperative resume.
-    control.awaiting_observation = false;
+    // Returning Native input proves ownership, not fresh page contents.
+    control.awaiting_observation = true;
     handoff.returned_by = Some(request.into());
     control.audit.push(
         json!({"epoch":control.epoch,"operation":"human_handoff_return","requestId":request,"humanHandoff":handoff}),
@@ -220,7 +430,7 @@ pub(crate) fn prepare_handoff(
     state: &BrowserSessionState,
     task_id: &str,
     interaction: &str,
-    now_ms: u64,
+    _now_ms: u64,
 ) -> Result<agent_browser_service_model::RemoteViewTabHandoff, String> {
     let task = state
         .sessions
@@ -235,17 +445,15 @@ pub(crate) fn prepare_handoff(
         .remote_view_tab_handoffs
         .values()
         .find(|link| {
-            !link.id.starts_with("human-")
-                && link.session_id == task_id
-                && link.tab_id == tab_id
-                && link.check_link_at(now_ms).is_ok()
+            !link.id.starts_with("human-") && link.session_id == task_id && link.tab_id == tab_id
         })
         .ok_or("remote_view_tab_handoff_missing")?;
+    crate::native::browser_session_remote_view::check_handoff_time(template)?;
     let retained = if interaction == "interactive" {
         let active = state.remote_view_tab_handoffs.values().find(|link| {
             link.session_id == task_id
                 && link.tab_id == tab_id
-                && link.check_link_at(now_ms).is_ok()
+                && crate::native::browser_session_remote_view::check_handoff_time(link).is_ok()
                 && agent_browser_service_model::resolve_remote_view_tab_handoff(state, &link.id)
                     .and_then(|target| {
                         agent_browser_service_model::remote_view_native_target_digest(
@@ -296,7 +504,7 @@ pub(crate) fn reconcile_recovered_handoff(
     database: &Path,
     expected: &BrowserSessionState,
     id: &str,
-    now_ms: u64,
+    _now_ms: u64,
 ) -> Result<(), String> {
     use crate::native::browser_session_store::{load_optional_document, SESSION_STATE_DOCUMENT};
     use agent_browser_service_model::{
@@ -316,6 +524,12 @@ pub(crate) fn reconcile_recovered_handoff(
     if !interactive && (before.human || before.pause_reads) {
         return Err("browser_handoff_control_changed".into());
     }
+    let retention_now = crate::native::browser_session_remote_view::handoff_time(
+        expected
+            .remote_view_tab_handoffs
+            .get(id)
+            .ok_or("remote_view_tab_handoff_missing")?,
+    )?;
     let mut connection = rusqlite::Connection::open_with_flags(
         database,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -340,7 +554,7 @@ pub(crate) fn reconcile_recovered_handoff(
         .remote_view_tab_handoffs
         .get(id)
         .ok_or("remote_view_tab_handoff_missing")?
-        .check_link_at(now_ms)?;
+        .check_link_with_time(retention_now.as_ref())?;
     let mode_proof =
         crate::native::browser_session_host::browser_mode_host::completed_mode_handoff_proof(
             &transaction,
@@ -426,9 +640,77 @@ fn transaction_control_rebind(
 mod tests {
     use super::*;
     #[test]
+    fn opening_interactive_handoff_does_not_claim_human_control() {
+        let mut state = Control::default();
+        state.flights.insert("original".into(), "dispatched".into());
+        begin(&mut state, "invitation", "target").unwrap();
+        assert_eq!(intent(&state, "invitation", "target"), "interactive");
+        assert!(!state.human);
+        assert!(!state.pause_reads);
+        assert_eq!(state.epoch, 0);
+        assert_eq!(state.flights["original"], "dispatched");
+        assert!(permits(&state, "click").is_ok());
+        begin(&mut state, "invitation", "target").unwrap();
+        assert_eq!(state.epoch, 0);
+    }
+
+    #[test]
+    fn returning_one_viewer_preserves_another_viewers_explicit_claim() {
+        let mut state = Control::default();
+        begin(&mut state, "invitation", "target").unwrap();
+        claim(&mut state, "invitation", "target", "viewer-a:take-a", true).unwrap();
+        claim(&mut state, "invitation", "target", "viewer-b:take-b", true).unwrap();
+        relinquish(&mut state, "invitation", "target", "viewer-a:return-a").unwrap();
+        assert!(state.human);
+        assert!(permits(&state, "click").is_err());
+        assert_eq!(viewer_claims(&state).len(), 1);
+        relinquish(&mut state, "invitation", "target", "viewer-b:return-b").unwrap();
+        assert!(!state.human);
+        assert!(state.awaiting_observation);
+        assert!(permits(&state, "click").is_err());
+    }
+
+    #[test]
+    fn newer_soft_viewer_activity_supersedes_only_soft_claims() {
+        let mut state = Control::default();
+        begin(&mut state, "invitation", "target").unwrap();
+        claim(
+            &mut state,
+            "invitation",
+            "target",
+            "viewer-a:activity-a",
+            false,
+        )
+        .unwrap();
+        claim(
+            &mut state,
+            "invitation",
+            "target",
+            "viewer-b:activity-b",
+            false,
+        )
+        .unwrap();
+        assert_eq!(viewer_claims(&state).len(), 1);
+        assert_eq!(coordination_metadata(&state)["activityViewerCount"], 1);
+        claim(&mut state, "invitation", "target", "viewer-a:take-a", true).unwrap();
+        claim(
+            &mut state,
+            "invitation",
+            "target",
+            "viewer-b:activity-c",
+            false,
+        )
+        .unwrap();
+        assert_eq!(coordination_metadata(&state)["explicitViewerCount"], 1);
+        assert_eq!(coordination_metadata(&state)["activityViewerCount"], 1);
+        assert!(state.human);
+    }
+
+    #[test]
     fn explicit_reopen_rebinds_its_own_hold_without_taking_another_hold() {
         let mut state = Control::default();
         begin(&mut state, "same-link", "closed-target").unwrap();
+        claim(&mut state, "same-link", "closed-target", "takeover-1", true).unwrap();
         let epoch = state.epoch;
         begin_reopen(&mut state, "same-link", "reopened-target", "reopen-request").unwrap();
         assert_eq!(state.epoch, epoch + 1);
@@ -464,18 +746,19 @@ mod tests {
     }
 
     #[test]
-    fn invitation_pauses_same_browser_and_return_is_idempotent() {
+    fn explicit_takeover_pauses_same_browser_and_return_is_idempotent() {
         let mut state = Control::default();
         state
             .flights
             .insert("pending-operation".into(), "dispatched".into());
         begin(&mut state, "invitation", "target").unwrap();
         assert_eq!(intent(&state, "invitation", "target"), "interactive");
+        claim(&mut state, "invitation", "target", "takeover-1", true).unwrap();
         assert_eq!(state.flights["pending-operation"], "uncertain_in_flight");
         assert_eq!(intent(&state, "passive", "target"), "view");
         assert_eq!(intent(&state, "invitation", "replacement"), "view");
         assert!(permits(&state, "click").is_err());
-        assert!(permits(&state, "url").is_err());
+        assert!(permits(&state, "url").is_ok());
         let epoch = state.epoch;
         begin(&mut state, "invitation", "target").unwrap();
         assert_eq!(state.epoch, epoch);
@@ -485,7 +768,8 @@ mod tests {
         assert_eq!(intent(&state, "invitation", "target"), "view");
         assert!(!state.human);
         assert_eq!(state.flights["pending-operation"], "uncertain_in_flight");
-        assert!(permits(&state, "click").is_ok());
+        assert!(state.awaiting_observation);
+        assert!(permits(&state, "click").is_err());
         assert!(permits(&state, "url").is_ok());
         relinquish(&mut state, "invitation", "target", "return-1").unwrap();
         assert_eq!(state.epoch, epoch + 1);

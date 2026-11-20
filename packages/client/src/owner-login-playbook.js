@@ -1,3 +1,6 @@
+import {withClientResultRecovery} from './client-recovery.js';
+import {withClientErrorRecovery} from './client-recovery.js';
+import { clientArgumentError } from './client-argument-error.js';
 // @ts-check
 /** @typedef {import('./owner-login-playbook.d.ts').OwnerLoginOptions} OwnerLoginOptions */
 /** @typedef {import('./owner-login-playbook.d.ts').OwnerLoginDependencies} OwnerLoginDependencies */
@@ -20,7 +23,7 @@ const errorCode=error=>error&&typeof error==='object'&&'code' in error&&typeof e
  * @param {OwnerLoginDependencies} dependencies
  */
 export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
- if(!browser||(/** @type {const} */ (['verifyLogin','prepareLogin','validatePlan'])).some(method=>typeof browser[method]!=='function')||!auth||(/** @type {const} */ (['requestLogin','advanceLogin','helper'])).some(method=>typeof auth[method]!=='function')||!nonempty(auth.callerTaskId)||!checkpoints?.load||!checkpoints?.save)throw new TypeError('owner_login_dependencies_required');
+ if(!browser||(/** @type {const} */ (['verifyLogin','prepareLogin','validatePlan'])).some(method=>typeof browser[method]!=='function')||!auth||(/** @type {const} */ (['requestLogin','advanceLogin','helper'])).some(method=>typeof auth[method]!=='function')||!nonempty(auth.callerTaskId)||!checkpoints?.load||!checkpoints?.save)throw clientArgumentError('owner_login_dependencies_required', "packages/client/src/owner-login-playbook.js", "createOwnerLoginPlaybook", ["browser", "auth", "checkpoints"]);
  const busy=new Set();
  return {
   /** Advance the original owner request once. Returned request IDs can be used
@@ -28,17 +31,17 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
    * @param {OwnerLoginOptions} options
    */
   async advance(options){
-   if(!options||intentFields.filter(field=>field!=='organizationRef').some(field=>field==='expiresAt'?!Number.isSafeInteger(options[field]):!nonempty(options[field])))throw Error('owner_login_options_invalid');
-   if(options.organizationRef!==undefined&&!nonempty(options.organizationRef))throw Error('owner_login_options_invalid');
-   if(options.reconcile!==undefined&&typeof options.reconcile!=='boolean')throw Error('owner_login_options_invalid');
-   try{if(new URL(options.origin).origin!==options.origin||!options.origin.startsWith('https://'))throw 0;}catch{throw Error('owner_login_origin_invalid');}
+   if(!options||intentFields.filter(field=>field!=='organizationRef').some(field=>field==='expiresAt'?!Number.isSafeInteger(options[field]):!nonempty(options[field])))throw withClientErrorRecovery(Error('owner_login_options_invalid'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_login_options_invalid');
+   if(options.organizationRef!==undefined&&!nonempty(options.organizationRef))throw withClientErrorRecovery(Error('owner_login_options_invalid'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_login_options_invalid');
+   if(options.reconcile!==undefined&&typeof options.reconcile!=='boolean')throw withClientErrorRecovery(Error('owner_login_options_invalid'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_login_options_invalid');
+   try{if(new URL(options.origin).origin!==options.origin||!options.origin.startsWith('https://'))throw 0;}catch{throw withClientErrorRecovery(Error('owner_login_origin_invalid'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_login_origin_invalid');}
    const key=`owner:${options.taskId}/${options.guideId}`;
-   if(busy.has(key))throw Error('owner_login_busy');busy.add(key);
+   if(busy.has(key))throw withClientErrorRecovery(Error('owner_login_busy'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_login_busy');busy.add(key);
    const intent=JSON.stringify({...Object.fromEntries(intentFields.map(field=>[field,options[field]])),callerTaskId:auth.callerTaskId});
    /** @type {OwnerLoginCheckpoint|null} */ let checkpoint=null;
    /** @type {Record<string,any>|undefined} */ let request;
    /** @param {string} status @param {string} reasonCode @param {string} effectState */
-   const result=(status,reasonCode,effectState)=>({schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(request?.browserActionEvidence?{browserActionEvidence:request.browserActionEvidence}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,...checkpoint.receiving}:{}),contract});
+   const result=(status,reasonCode,effectState)=>withClientResultRecovery(({schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId:options.taskId,guideId:options.guideId,status,reasonCode,effectState,...(request?.browserActionEvidence?{browserActionEvidence:request.browserActionEvidence}:{}),...(checkpoint?{requestId:checkpoint.requestId,actionId:checkpoint.requestId,...checkpoint.receiving}:{}),contract}),{source:"packages/client/src/owner-login-playbook.js",owningFunction:'result'});
    /** @param {Record<string,any>} value */
    const scopeBound=value=>{
     const e=value?.browserActionEvidence;
@@ -63,62 +66,62 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
    };
    try{
     checkpoint=await checkpoints.load(key);
-    if(checkpoint&&(checkpoint.contract!==contract||checkpoint.intent!==intent))throw Error('checkpoint_binding_mismatch');
-    if(checkpoint&&(checkpoint.issuer!==undefined&&checkpoint.issuer!=='auth-receipts'||checkpoint.callerTaskId!==undefined&&checkpoint.callerTaskId!==auth.callerTaskId))throw Error('checkpoint_binding_mismatch');
-    if(checkpoint){const current=checkpoint;if(receivingFields.some(field=>options[field]!==undefined&&options[field]!==current.receiving[field]))throw Error('checkpoint_binding_mismatch');}
+    if(checkpoint&&(checkpoint.contract!==contract||checkpoint.intent!==intent))throw withClientErrorRecovery(Error('checkpoint_binding_mismatch'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'checkpoint_binding_mismatch');
+    if(checkpoint&&(checkpoint.issuer!==undefined&&checkpoint.issuer!=='auth-receipts'||checkpoint.callerTaskId!==undefined&&checkpoint.callerTaskId!==auth.callerTaskId))throw withClientErrorRecovery(Error('checkpoint_binding_mismatch'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'checkpoint_binding_mismatch');
+    if(checkpoint){const current=checkpoint;if(receivingFields.some(field=>options[field]!==undefined&&options[field]!==current.receiving[field]))throw withClientErrorRecovery(Error('checkpoint_binding_mismatch'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'checkpoint_binding_mismatch');}
     if(!checkpoint){
-     if(await checkpoints.load(`${options.taskId}/${options.guideId}`))return result('waiting','legacy_checkpoint_requires_reconciliation','unknown');
-     if(options.reconcile)return result('waiting','checkpoint_required_for_reconciliation','no_effect');
-     let observed;try{observed=await browser.verifyLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
-     if(receivingFields.some(field=>!nonempty(observed[field])||options[field]!==undefined&&options[field]!==observed[field]))return result('adaptation_required','receiving_binding_required','no_effect');
-     if(observed.status==='completed')return {...observed,...result('completed',observed.reasonCode,'verified')};
-     if(!['identifier_required','password_required','login_required'].includes(observed.reasonCode))return {...observed,...result(observed.status,observed.reasonCode,'no_effect')};
-     let preparation;try{preparation=await browser.prepareLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
-     if(!preparation.plan)return {...preparation,...result(preparation.status,preparation.reasonCode,'no_effect')};
-     let discovery;try{discovery=await auth.helper('discover_credentials',{query:options.query,accountHint:options.accountHint});}catch(error){return result('waiting',errorCode(error)??'auth_unavailable','no_effect');}
+     if(await checkpoints.load(`${options.taskId}/${options.guideId}`))return withClientResultRecovery(await (result('waiting','legacy_checkpoint_requires_reconciliation','unknown')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+     if(options.reconcile)return withClientResultRecovery(await (result('waiting','checkpoint_required_for_reconciliation','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+     let observed;try{observed=await browser.verifyLogin(options);}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});}
+     if(receivingFields.some(field=>!nonempty(observed[field])||options[field]!==undefined&&options[field]!==observed[field]))return withClientResultRecovery(await (result('adaptation_required','receiving_binding_required','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+     if(observed.status==='completed')return withClientResultRecovery(await ({...observed,...result('completed',observed.reasonCode,'verified')}),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+     if(!['identifier_required','password_required','login_required'].includes(observed.reasonCode))return withClientResultRecovery(await ({...observed,...result(observed.status,observed.reasonCode,'no_effect')}),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+     let preparation;try{preparation=await browser.prepareLogin(options);}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});}
+     if(!preparation.plan)return withClientResultRecovery(await ({...preparation,...result(preparation.status,preparation.reasonCode,'no_effect')}),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+     let discovery;try{discovery=await auth.helper('discover_credentials',{query:options.query,accountHint:options.accountHint});}catch(error){return withClientResultRecovery(await (result('waiting',errorCode(error)??'auth_unavailable','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance",ownerError:error});}
      if(discovery?.state!=='unique'||!discovery.selected){
       let reason='credential_unavailable';
       if(discovery?.state==='choice_required'||discovery?.state==='ambiguous')reason='account_ambiguous';
       else if(discovery?.state==='not_found')reason='credential_not_found';
       else if(discovery?.state==='partial')reason=Array.isArray(discovery.unavailable)&&discovery.unavailable.length?'credential_source_unavailable':'credential_discovery_incomplete';
-      return result('waiting',reason,'no_effect');
+      return withClientResultRecovery(await (result('waiting',reason,'no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
      }
      const selected=discovery.selected;
-     if(selected.origin!==options.origin||!nonempty(selected.sourceId)||!nonempty(selected.recordId))return result('waiting','credential_recipient_mismatch','no_effect');
+     if(selected.origin!==options.origin||!nonempty(selected.sourceId)||!nonempty(selected.recordId))return withClientResultRecovery(await (result('waiting','credential_recipient_mismatch','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
      checkpoint={contract,issuer:'auth-receipts',callerTaskId:auth.callerTaskId,intent,receiving:Object.fromEntries(receivingFields.map(field=>[field,observed[field]])),selected:{sourceId:selected.sourceId,recordId:selected.recordId},preparedPlan:preparation.plan};
      await checkpoints.save(key,checkpoint);
     }
     if(!checkpoint.requestId){
-     if(options.reconcile)return result('waiting','request_required_for_reconciliation','no_effect');
-     let requested;try{requested=await auth.requestLogin({...checkpoint.selected,idempotencyKey:options.idempotencyKey,origin:options.origin,targetId:options.targetId,purpose:options.purpose,expiresAt:options.expiresAt});}catch(error){return result('waiting',errorCode(error)??'auth_unavailable','no_effect');}
+     if(options.reconcile)return withClientResultRecovery(await (result('waiting','request_required_for_reconciliation','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+     let requested;try{requested=await auth.requestLogin({...checkpoint.selected,idempotencyKey:options.idempotencyKey,origin:options.origin,targetId:options.targetId,purpose:options.purpose,expiresAt:options.expiresAt});}catch(error){return withClientResultRecovery(await (result('waiting',errorCode(error)??'auth_unavailable','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance",ownerError:error});}
      checkpoint={...checkpoint,requestId:requested.requestId,...(requested.state==='pending'&&requested.decisionPending===true&&requested.decisionExpiresAt===null&&!requested.attemptId?{pendingDecisionObserved:true}:{})};
-     if(!bound(requested))throw Error('owner_request_binding_mismatch');
+     if(!bound(requested))throw withClientErrorRecovery(Error('owner_request_binding_mismatch'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_request_binding_mismatch');
      await checkpoints.save(key,checkpoint);
     }
-    const requestId=checkpoint.requestId;if(!requestId)throw Error('owner_request_binding_mismatch');
-    try{request=await auth.helper('inspect_credential_request',{requestId:checkpoint.requestId});}catch(error){return result('waiting',errorCode(error)??'auth_unavailable',checkpoint.advanceIntent?'unknown':'no_effect');}
-    if(!bound(request)){await admitApprovedWindow(request);if(!bound(request))throw Error('owner_request_binding_mismatch');}
+    const requestId=checkpoint.requestId;if(!requestId)throw withClientErrorRecovery(Error('owner_request_binding_mismatch'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_request_binding_mismatch');
+    try{request=await auth.helper('inspect_credential_request',{requestId:checkpoint.requestId});}catch(error){return withClientResultRecovery(await (result('waiting',errorCode(error)??'auth_unavailable',checkpoint.advanceIntent?'unknown':'no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance",ownerError:error});}
+    if(!bound(request)){await admitApprovedWindow(request);if(!bound(request))throw withClientErrorRecovery(Error('owner_request_binding_mismatch'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_request_binding_mismatch');}
     if(request.state==='pending'&&request.decisionPending===true&&request.decisionExpiresAt===null&&!request.attemptId&&!checkpoint.advanceIntent&&!checkpoint.outcomeUnknown){checkpoint={...checkpoint,pendingDecisionObserved:true};await checkpoints.save(key,checkpoint);}
-    if(['denied','revoked','cancelled','expired'].includes(request.state))return result('failed',`auth_${request.state}`,request.attemptId||checkpoint.advanceIntent||checkpoint.outcomeUnknown?'unknown':'no_effect');
+    if(['denied','revoked','cancelled','expired'].includes(request.state))return withClientResultRecovery(await (result('failed',`auth_${request.state}`,request.attemptId||checkpoint.advanceIntent||checkpoint.outcomeUnknown?'unknown':'no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
     if(request.attemptId||request.state==='unknown'||request.authentication!==undefined){
      if(request.authentication!=='verified'){
-      try{request=await auth.helper('reconcile_credential_request',{requestId:checkpoint.requestId});}catch{return result('waiting','auth_reconciliation_unavailable','unknown');}
-      if(!bound(request))throw Error('owner_request_binding_mismatch');
+      try{request=await auth.helper('reconcile_credential_request',{requestId:checkpoint.requestId});}catch{return withClientResultRecovery(await (result('waiting','auth_reconciliation_unavailable','unknown')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});}
+      if(!bound(request))throw withClientErrorRecovery(Error('owner_request_binding_mismatch'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_request_binding_mismatch');
      }
-     return request.authentication==='verified'?verify():result('waiting','authentication_required','unknown');
+     return withClientResultRecovery(await (request.authentication==='verified'?verify():result('waiting','authentication_required','unknown')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
     }
     if(options.reconcile||checkpoint.outcomeUnknown||checkpoint.advanceIntent){
      // The process may have died between durable intent and acknowledgement.
      // Approved state and absent attempt/running fields are not no-effect proof.
-     try{request=await auth.helper('reconcile_credential_request',{requestId});}catch{return result('waiting','auth_reconciliation_unavailable','unknown');}
-     if(!bound(request))throw Error('owner_request_binding_mismatch');
-     if(request.authentication==='verified')return verify();
+     try{request=await auth.helper('reconcile_credential_request',{requestId});}catch{return withClientResultRecovery(await (result('waiting','auth_reconciliation_unavailable','unknown')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});}
+     if(!bound(request))throw withClientErrorRecovery(Error('owner_request_binding_mismatch'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_request_binding_mismatch');
+     if(request.authentication==='verified')return withClientResultRecovery(await (verify()),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
      // Current Auth exposes no positive no-effect readback for a thrown refusal.
      // Retain the typed reason without manufacturing eligibility for another use.
-     return result('waiting',checkpoint.refusalCode?'auth_no_effect_proof_unavailable':options.reconcile?'auth_reconciliation_pending':'auth_outcome_uncertain','unknown');
+     return withClientResultRecovery(await (result('waiting',checkpoint.refusalCode?'auth_no_effect_proof_unavailable':options.reconcile?'auth_reconciliation_pending':'auth_outcome_uncertain','unknown')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
     }
-    let validation;try{validation=await browser.validatePlan({...options,plan:checkpoint.preparedPlan});}catch{return result('waiting','receiving_unavailable','no_effect');}
-    if(!sameTarget(validation))return result('adaptation_required','task_target_changed','no_effect');
+    let validation;try{validation=await browser.validatePlan({...options,plan:checkpoint.preparedPlan});}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});}
+    if(!sameTarget(validation))return withClientResultRecovery(await (result('adaptation_required','task_target_changed','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
     if(validation.status==='adaptation_required'&&validation.reasonCode==='plan_stale'){
      const retained=checkpoint.preparedPlan;
      const semanticFields=/** @type {const} */ (['guideId','guideDigest','bindingDigest','controlFingerprint','expectedState','taskId','profileId','browserId','tabId']);
@@ -127,39 +130,39 @@ export function createOwnerLoginPlaybook({browser,auth,checkpoints}){
       * @param {Record<string,any>} plan */
      const complete=plan=>semanticFields.every(field=>nonempty(plan[field]))&&nonempty(plan.planId)&&Number.isSafeInteger(plan.preparedAtMs)&&plan.preparedAtMs>=0&&Number.isSafeInteger(plan.maximumAgeMs)&&plan.maximumAgeMs>=1&&plan.maximumAgeMs<=60000&&plan.guideId===options.guideId&&['taskId','profileId','browserId','tabId'].every(field=>plan[field]===checkpoint?.receiving[field]);
      if(complete(retained)){
-      let preparation;try{preparation=await browser.prepareLogin(options);}catch{return result('waiting','receiving_unavailable','no_effect');}
-      if(!sameTarget(preparation))return result('adaptation_required','task_target_changed','no_effect');
+      let preparation;try{preparation=await browser.prepareLogin(options);}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});}
+      if(!sameTarget(preparation))return withClientResultRecovery(await (result('adaptation_required','task_target_changed','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
       const renewed=preparation.plan;
       if(preparation.status==='completed'&&renewed&&complete(renewed)&&semanticFields.every(field=>renewed[field]===retained[field])){
-       try{validation=await browser.validatePlan({...options,plan:renewed});}catch{return result('waiting','receiving_unavailable','no_effect');}
-       if(!sameTarget(validation))return result('adaptation_required','task_target_changed','no_effect');
+       try{validation=await browser.validatePlan({...options,plan:renewed});}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});}
+       if(!sameTarget(validation))return withClientResultRecovery(await (result('adaptation_required','task_target_changed','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
        if(validation.status==='completed'){
         checkpoint={...checkpoint,preparedPlan:renewed};await checkpoints.save(key,checkpoint);
        }
       }
      }
     }
-    if(validation.status!=='completed')return {...validation,...result(validation.status,validation.reasonCode,'no_effect')};
+    if(validation.status!=='completed')return withClientResultRecovery(await ({...validation,...result(validation.status,validation.reasonCode,'no_effect')}),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
     // Receiving an owner response is not private-input dispatch. Observe and
     // durably bind a fresh approved window before writing the input intent.
     if(request.state==='pending'&&request.decisionPending===true&&request.decisionExpiresAt===null){
-     try{request=await auth.helper('receive_credential_approval',{requestId});}catch(error){return result('waiting',errorCode(error)??'auth_review_unavailable','no_effect');}
-     if(!bound(request)){await admitApprovedWindow(request);if(!bound(request))throw Error('owner_request_binding_mismatch');}
-     if(request.attemptId||request.running||request.releasedAt||request.dispatchedAt||request.authentication!==undefined){checkpoint={...checkpoint,outcomeUnknown:true};await checkpoints.save(key,checkpoint);return result('waiting','auth_reconciliation_pending','unknown');}
-     if(request.state==='pending'){checkpoint={...checkpoint,advanceIntent:false};await checkpoints.save(key,checkpoint);return result('waiting','approval_required','no_effect');}
-     if(['denied','revoked','cancelled','expired'].includes(request.state))return result('failed',`auth_${request.state}`,'no_effect');
-     if(request.state!=='approved'||request.attemptId||request.authentication!==undefined)return result('waiting','auth_reconciliation_pending','unknown');
-     let approvedPlan;try{approvedPlan=await browser.validatePlan({...options,plan:checkpoint.preparedPlan});}catch{return result('waiting','receiving_unavailable','no_effect');}
-     if(!sameTarget(approvedPlan))return result('adaptation_required','task_target_changed','no_effect');
-     if(approvedPlan.status!=='completed')return result(approvedPlan.status,approvedPlan.reasonCode,'no_effect');
+     try{request=await auth.helper('receive_credential_approval',{requestId});}catch(error){return withClientResultRecovery(await (result('waiting',errorCode(error)??'auth_review_unavailable','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance",ownerError:error});}
+     if(!bound(request)){await admitApprovedWindow(request);if(!bound(request))throw withClientErrorRecovery(Error('owner_request_binding_mismatch'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_request_binding_mismatch');}
+     if(request.attemptId||request.running||request.releasedAt||request.dispatchedAt||request.authentication!==undefined){checkpoint={...checkpoint,outcomeUnknown:true};await checkpoints.save(key,checkpoint);return withClientResultRecovery(await (result('waiting','auth_reconciliation_pending','unknown')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});}
+     if(request.state==='pending'){checkpoint={...checkpoint,advanceIntent:false};await checkpoints.save(key,checkpoint);return withClientResultRecovery(await (result('waiting','approval_required','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});}
+     if(['denied','revoked','cancelled','expired'].includes(request.state))return withClientResultRecovery(await (result('failed',`auth_${request.state}`,'no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+     if(request.state!=='approved'||request.attemptId||request.authentication!==undefined)return withClientResultRecovery(await (result('waiting','auth_reconciliation_pending','unknown')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+     let approvedPlan;try{approvedPlan=await browser.validatePlan({...options,plan:checkpoint.preparedPlan});}catch{return withClientResultRecovery(await (result('waiting','receiving_unavailable','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});}
+     if(!sameTarget(approvedPlan))return withClientResultRecovery(await (result('adaptation_required','task_target_changed','no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+     if(approvedPlan.status!=='completed')return withClientResultRecovery(await (result(approvedPlan.status,approvedPlan.reasonCode,'no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
     }
     checkpoint={...checkpoint,advanceIntent:true};await checkpoints.save(key,checkpoint);
-    try{request=await auth.advanceLogin({requestId});}catch(error){const code=errorCode(error);checkpoint={...checkpoint,outcomeUnknown:true,...(['auth_capture_held','auth_target_busy','auth_not_authorized'].includes(code??'')?{refusalCode:code}:{})};await checkpoints.save(key,checkpoint);return result('waiting',code??'auth_outcome_uncertain','unknown');}
-    if(!bound(request))throw Error('owner_request_binding_mismatch');
+    try{request=await auth.advanceLogin({requestId});}catch(error){const code=errorCode(error);checkpoint={...checkpoint,outcomeUnknown:true,...(['auth_capture_held','auth_target_busy','auth_not_authorized'].includes(code??'')?{refusalCode:code}:{})};await checkpoints.save(key,checkpoint);return withClientResultRecovery(await (result('waiting',code??'auth_outcome_uncertain','unknown')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance",ownerError:error});}
+    if(!bound(request))throw withClientErrorRecovery(Error('owner_request_binding_mismatch'),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"},'owner_request_binding_mismatch');
     checkpoint={...checkpoint,advanceIntent:!!request.attemptId};await checkpoints.save(key,checkpoint);
-    if(request.authentication==='verified')return verify();
-    if(['denied','revoked','cancelled','expired'].includes(request.state))return result('failed',`auth_${request.state}`,request.attemptId?'unknown':'no_effect');
-    return result('waiting',request.state==='pending'?'approval_required':request.heldFor==='notification'?'notification_required':request.attemptId?'authentication_required':'auth_not_ready',request.attemptId?'unknown':'no_effect');
+    if(request.authentication==='verified')return withClientResultRecovery(await (verify()),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+    if(['denied','revoked','cancelled','expired'].includes(request.state))return withClientResultRecovery(await (result('failed',`auth_${request.state}`,request.attemptId?'unknown':'no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
+    return withClientResultRecovery(await (result('waiting',request.state==='pending'?'approval_required':request.heldFor==='notification'?'notification_required':request.attemptId?'authentication_required':'auth_not_ready',request.attemptId?'unknown':'no_effect')),{source:"packages/client/src/owner-login-playbook.js",owningFunction:"createOwnerLoginPlaybook.advance"});
    }finally{busy.delete(key);}
   }
  };

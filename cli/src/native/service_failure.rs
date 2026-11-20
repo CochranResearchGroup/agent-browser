@@ -2,6 +2,11 @@
 
 use serde_json::Value;
 
+mod public;
+mod recovery_registry;
+pub(crate) mod recovery_state;
+pub(crate) use public::attach_public_failure;
+
 pub(crate) use agent_browser_service_model::{
     child_access_failure_evidence, operator_focus_failure_code, profile_child_denial_error,
 };
@@ -10,12 +15,18 @@ pub use agent_browser_service_model::{
     ServiceFailureRecourse, ServiceRetryDisposition,
 };
 
+/// Project the exact-code contract without recording a new refusal occurrence.
+/// Historical owner outcomes and recovery lookups use this read-only adapter.
+pub(crate) fn enrich_recovery_contract(failure: &mut Value, command: &Value) {
+    recovery_registry::enrich(failure, command);
+}
+
 /// Add machine-readable recourse to a failed Service response while preserving
 /// the legacy error field. Successful responses and already-decorated failures
 /// are left unchanged.
 pub fn attach_service_failure_recourse(response: &mut Value) {
     if response.get("success").and_then(Value::as_bool) != Some(false)
-        || response.get("failure").is_some()
+        || response.get("failure").is_some_and(Value::is_object)
     {
         return;
     }

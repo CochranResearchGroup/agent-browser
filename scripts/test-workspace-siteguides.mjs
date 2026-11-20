@@ -36,5 +36,15 @@ try {
  const original=await owner.dispatch({operation:'open',taskId:'task',guideId:guide.guideId});assert.equal(original.view.guide.name,'Daily sales teaching candidate');
  await assert.rejects(owner.dispatch({operation:'record_decision',taskId:'task',guideId:saved.guideId,expectedSha256:saved.sha256,operationId:'review-1',decisionRef:'client-approval',approved:true}),/teaching_operator_authority_unconfigured/);
  await assert.rejects(owner.dispatch({operation:'record_repeat',taskId:'fresh-task',guideId:saved.guideId,expectedSha256:saved.sha256,operationId:'repeat-1',validationRef:'client-pass',passed:true}),/teaching_repeat_authority_unconfigured/);
+
+ owner.capacity({maximumCatalogEntries:1});await assert.rejects(owner.dispatch({operation:'list'}),/siteguides_catalog_limit/);
+ owner.capacity({maximumCatalogEntries:2,maximumLineageRevisions:2});assert.equal((await owner.dispatch({operation:'list'})).guides.length,1);
+ const capacityView=(await owner.dispatch({operation:'open',taskId:'task',guideId:saved.guideId})).view;
+ const capacityGuide=structuredClone(capacityView.guide);capacityGuide.name='Capacity extended guide';
+ const capacityRequest={operation:'save',taskId:'task',guideId:saved.guideId,expectedSha256:saved.sha256,operationId:'extend-workspace-capacity',guide:capacityGuide};
+ await assert.rejects(owner.dispatch(capacityRequest),/teaching_review_lineage_capacity/);
+ owner.capacity({maximumLineageRevisions:3,maximumCatalogEntries:3});const capacitySaved=await owner.dispatch(capacityRequest);assert.equal(capacitySaved.revision,3);
+ assert.equal((await owner.dispatch({operation:'lookup_operation',taskId:'task',rootGuideId:guide.guideId,operationId:'edit-1'})).guideId,saved.guideId);
+ assert.deepEqual(await denied.dispatch({operation:'list'}),{guides:[]},'capacity changes never grant task read permission');
  console.log('Workspace SiteGuides public catalog/open keeps purpose, progress, source uncertainty and immutable history.');
 } finally {await rm(directory,{recursive:true,force:true});}

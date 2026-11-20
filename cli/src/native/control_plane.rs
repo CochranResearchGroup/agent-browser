@@ -119,6 +119,8 @@ pub struct ControlRequest {
     pub cancellation: RunningJobCancel,
     pub submitted_at_wall: String,
     pub submitted_at_mono: Instant,
+    latency_queue: Option<crate::connection::latency::PhaseCapture>,
+    latency_samples: Vec<Value>,
     pub profile_lease_wait_started_at: Option<Instant>,
     pub profile_lease_wait_profile_id: Option<String>,
     pub profile_lease_wait_conflict_session_ids: Vec<String>,
@@ -144,6 +146,8 @@ impl ControlRequest {
             cancellation: self.cancellation.clone(),
             submitted_at_wall: self.submitted_at_wall.clone(),
             submitted_at_mono: self.submitted_at_mono,
+            latency_queue: None,
+            latency_samples: self.latency_samples.clone(),
             profile_lease_wait_started_at: self.profile_lease_wait_started_at,
             profile_lease_wait_profile_id: self.profile_lease_wait_profile_id.clone(),
             profile_lease_wait_conflict_session_ids: self
@@ -487,7 +491,7 @@ impl ControlPlaneHandle {
             connection_instance_id,
             &self.runtime_lane_id,
         );
-        let request = ControlRequest {
+        let mut request = ControlRequest {
             id: id.clone(),
             job_id,
             action: action.clone(),
@@ -502,6 +506,8 @@ impl ControlPlaneHandle {
             cancellation: RunningJobCancel::new(),
             submitted_at_wall: current_timestamp(),
             submitted_at_mono: Instant::now(),
+            latency_queue: None,
+            latency_samples: Vec::new(),
             profile_lease_wait_started_at: None,
             profile_lease_wait_profile_id: None,
             profile_lease_wait_conflict_session_ids: Vec::new(),
@@ -512,6 +518,7 @@ impl ControlPlaneHandle {
 
         self.status.queue_depth.fetch_add(1, Ordering::Relaxed);
         persist_service_job_queued(&request);
+        request.latency_queue = Some(crate::connection::latency::PhaseCapture::start("queue"));
         match self.tx.try_send(WorkerMessage::Request(Box::new(request))) {
             Ok(()) => {}
             Err(mpsc::error::TrySendError::Full(WorkerMessage::Request(request))) => {
@@ -1263,6 +1270,9 @@ fn finalize_service_request(
     state: ServiceTerminalState,
     phase: ServiceTerminalPhase,
 ) -> Value {
+    if !request.latency_samples.is_empty() {
+        crate::connection::latency::append(&mut response["data"], request.latency_samples.clone());
+    }
     // Recipe execution can fail inside a successfully transported response.
     // Preserve its diagnostic payload while making job/event/trace outcomes
     // reflect the operation, rather than the outer transport envelope.
@@ -1377,51 +1387,75 @@ fn persist_service_job_terminal(
         }
     });
     if outcome.state != ServiceTerminalState::Succeeded {
-        let category =
-            failure_category_for_action(&request.action, request.service_name.as_deref());
-        let code = outcome
-            .failure
-            .as_ref()
-            .map(|failure| failure.code.as_str())
-            .filter(|code| !code.trim().is_empty())
-            .unwrap_or("service_request_failed");
-        let handoff_id_hash = service_job_optional_command_string(request, "handoffId")
-            .or_else(|| service_job_optional_command_string(request, "remoteViewHandoffId"))
-            .map(|id| opaque_identifier_hash(&id));
-        let record = ServiceFailureRecord::new(
-            category,
-            "service_control_plane",
-            format!("{:?}", outcome.phase).to_ascii_lowercase(),
-            code,
-            response
-                .get("error")
-                .and_then(Value::as_str)
-                .unwrap_or("service request reached a non-success terminal state"),
-        )
-        .with_action(request.action.clone())
-        .with_references(ServiceFailureReferences {
-            runtime_environment_id: request.provenance.runtime_environment_id.clone(),
-            runtime_lane_id: request.provenance.runtime_lane_id.clone(),
-            request_id: Some(request.provenance.request_id.clone()),
-            job_id: Some(job_id),
-            trace_id: request.provenance.trace_id.clone(),
-            browser_id: request.provenance.browser_id.clone(),
-            profile_id: request.provenance.profile_id.clone(),
-            session_id: request.provenance.session_id.clone(),
-            route_id: allocation_refs.remote_view_route_id,
-            display_id: allocation_refs.display_allocation_id,
-            handoff_id_hash,
-        })
-        .with_details(json!({
-            "terminalState": outcome.state,
-            "effectState": outcome.effect_state,
-            "retryDisposition": outcome.retry_disposition,
-            "childAccessEvidence": outcome.failure.as_ref().and_then(
-                super::service_failure::child_access_failure_evidence),
-            "recommendedAction": outcome.failure.as_ref().map(|failure| &failure.recommended_action),
-        }));
+        let record = terminal_failure_journal_record(request, outcome, allocation_refs, job_id);
         append_service_failure_best_effort(&record);
     }
+}
+
+/// Build the actual queued-owner journal record without accepting a response
+/// body. Caller/job error retention remains separate from forensic metadata.
+fn terminal_failure_journal_record(
+    request: &ControlRequest,
+    outcome: &ServiceTerminalOutcome,
+    allocation_refs: ServiceJobAllocationRefs,
+    job_id: String,
+) -> ServiceFailureRecord {
+    let category = failure_category_for_action(&request.action, request.service_name.as_deref());
+    let owning_code = outcome
+        .failure
+        .as_ref()
+        .map(|failure| failure.code.as_str())
+        .filter(|code| !code.trim().is_empty())
+        .unwrap_or("service_operation_failed");
+    // Only the compiled exact registry can supply a source-owned summary.
+    // Arbitrary page/protocol text and unknown owner tokens stay in the
+    // existing caller/private job response, never the failure journal.
+    let mut qualification = json!({"code":owning_code});
+    super::service_failure::enrich_recovery_contract(
+        &mut qualification,
+        &json!({"action":request.action}),
+    );
+    let registered = qualification["recoveryRegistry"]["coverage"] == "registered";
+    let (code, summary) = if registered {
+        (owning_code, owning_code)
+    } else {
+        (
+            "service_operation_failed",
+            "service request reached a non-success terminal state",
+        )
+    };
+    let handoff_id_hash = service_job_optional_command_string(request, "handoffId")
+        .or_else(|| service_job_optional_command_string(request, "remoteViewHandoffId"))
+        .map(|id| opaque_identifier_hash(&id));
+    ServiceFailureRecord::new(
+        category,
+        "service_control_plane",
+        format!("{:?}", outcome.phase).to_ascii_lowercase(),
+        code,
+        summary,
+    )
+    .with_action(request.action.clone())
+    .with_references(ServiceFailureReferences {
+        runtime_environment_id: request.provenance.runtime_environment_id.clone(),
+        runtime_lane_id: request.provenance.runtime_lane_id.clone(),
+        request_id: Some(request.provenance.request_id.clone()),
+        job_id: Some(job_id),
+        trace_id: request.provenance.trace_id.clone(),
+        browser_id: request.provenance.browser_id.clone(),
+        profile_id: request.provenance.profile_id.clone(),
+        session_id: request.provenance.session_id.clone(),
+        route_id: allocation_refs.remote_view_route_id,
+        display_id: allocation_refs.display_allocation_id,
+        handoff_id_hash,
+    })
+    .with_details(json!({
+        "terminalState": outcome.state,
+        "effectState": outcome.effect_state,
+        "retryDisposition": outcome.retry_disposition,
+        "childAccessEvidence": outcome.failure.as_ref().and_then(
+            super::service_failure::child_access_failure_evidence),
+        "recommendedAction": outcome.failure.as_ref().map(|failure| &failure.recommended_action),
+    }))
 }
 
 fn failure_category_for_action(action: &str, service_name: Option<&str>) -> ServiceFailureCategory {
@@ -1532,6 +1566,8 @@ fn enqueue_due_monitor_run(
         cancellation: RunningJobCancel::new(),
         submitted_at_wall: current_timestamp(),
         submitted_at_mono: Instant::now(),
+        latency_queue: None,
+        latency_samples: Vec::new(),
         profile_lease_wait_started_at: None,
         profile_lease_wait_profile_id: None,
         profile_lease_wait_conflict_session_ids: Vec::new(),
@@ -1958,6 +1994,9 @@ async fn run_worker(
                 match message {
                     WorkerMessage::Request(request) => {
                         let mut request = *request;
+                        if let Some(capture) = request.latency_queue.take() {
+                            crate::connection::latency::finish(capture, "control queue enqueue attempt through first dequeue", &mut request.latency_samples);
+                        }
                         let queue_wait_ms = u64::try_from(
                             request.submitted_at_mono.elapsed().as_millis(),
                         )
@@ -3041,6 +3080,8 @@ mod tests {
             cancellation: RunningJobCancel::new(),
             submitted_at_wall: current_timestamp(),
             submitted_at_mono: Instant::now(),
+            latency_queue: None,
+            latency_samples: Vec::new(),
             profile_lease_wait_started_at: None,
             profile_lease_wait_profile_id: None,
             profile_lease_wait_conflict_session_ids: Vec::new(),
@@ -5277,6 +5318,90 @@ mod tests {
             }
             _ => panic!("cancellation must retain the coordinator future through compensation"),
         }
+    }
+
+    #[test]
+    fn terminal_failure_journal_excludes_private_page_and_protocol_text() {
+        let home = temp_home("terminal-journal-764");
+        let guard = EnvGuard::new(&["HOME", "AGENT_BROWSER_HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_HOME", home.to_str().unwrap());
+        let journal_path = home.join("journal.jsonl");
+        for (error, expected) in [
+            (
+                "Evaluation error: Error: PRIVATE_PAGE_EXCEPTION_CANARY764",
+                "browser_action_evaluation_exception",
+            ),
+            (
+                "CDP error (Runtime.evaluate): PRIVATE_PROTOCOL_BODY_CANARY764",
+                "browser_action_cdp_protocol_failed",
+            ),
+        ] {
+            let request = control_request_for_mode_test(
+                json!({"action":"evaluate","script":"PRIVATE_SCRIPT_CANARY764"}),
+            );
+            let mut response = json!({"success":false,"error":error});
+            attach_service_failure_recourse_for_action(&mut response, &request.action);
+            let outcome = ServiceTerminalOutcome::from_response(
+                &request.provenance,
+                &response,
+                ServiceTerminalState::Failed,
+                ServiceTerminalPhase::Execution,
+                "2026-11-20T00:00:00Z".into(),
+            );
+            let record = terminal_failure_journal_record(
+                &request,
+                &outcome,
+                service_job_allocation_refs(&request, Some(&response)),
+                service_job_id(&request),
+            );
+            assert_eq!(record.code, expected);
+            assert_eq!(record.summary, expected);
+            assert_eq!(
+                record.references.request_id.as_deref(),
+                Some(request.provenance.request_id.as_str())
+            );
+            assert_eq!(response["error"], error, "Caller provenance is preserved");
+            super::super::service_failure_journal::append_service_failure_at(
+                &journal_path,
+                &record,
+            )
+            .unwrap();
+            let raw = std::fs::read_to_string(&journal_path).unwrap();
+            for canary in [
+                "PRIVATE_PAGE_EXCEPTION_CANARY764",
+                "PRIVATE_PROTOCOL_BODY_CANARY764",
+                "PRIVATE_SCRIPT_CANARY764",
+            ] {
+                assert!(!raw.contains(canary));
+            }
+            let mut unknown = outcome.clone();
+            unknown.failure.as_mut().unwrap().code = "unclassified_private_code_canary764".into();
+            let record = terminal_failure_journal_record(
+                &request,
+                &unknown,
+                service_job_allocation_refs(&request, Some(&response)),
+                service_job_id(&request),
+            );
+            assert_eq!(record.code, "service_operation_failed");
+            assert_eq!(
+                record.summary,
+                "service request reached a non-success terminal state"
+            );
+            assert!(!serde_json::to_string(&record)
+                .unwrap()
+                .contains("unclassified_private_code_canary764"));
+            assert_eq!(
+                unknown.failure.as_ref().unwrap().code,
+                "unclassified_private_code_canary764"
+            );
+        }
+        let readback =
+            super::super::service_failure_journal::read_service_failures_at(&journal_path, 10)
+                .unwrap();
+        assert_eq!(readback.records.len(), 2);
+        drop(guard);
+        let _ = std::fs::remove_dir_all(home);
     }
 
     #[test]

@@ -275,3 +275,6 @@ assert.match(
 );
 
 console.log('Dashboard profile allocation lookup smoke passed');
+
+const nestedFailure={code:'browser_profile_denied',occurrenceId:'allocation-owner-occurrence',recourse:{recoveryRegistry:{recipe:'owner'}}};
+assert.throws(()=>profileAllocationFromLookupPayload({success:true,data:{ok:false,failure:nestedFailure,profileAllocation:fresh}},fallback),error=>error.code===nestedFailure.code&&error.occurrenceId===nestedFailure.occurrenceId&&error.failure===nestedFailure&&error.clientRecovery.ownerRecoveryAvailable===true);

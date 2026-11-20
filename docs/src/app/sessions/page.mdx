@@ -1,5 +1,31 @@
 # Sessions
 
+### Task operation capacity
+
+Inspect or update capacity through the existing task-operation interface:
+
+```json
+{"name":"browser_command","arguments":{"taskId":"session:report","action":"task_operation","params":{"operation":"capacity","scope":"task","policy":{"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096}}}}
+```
+
+Omit `policy` to inspect usage and the effective policy. Use `scope:"defaults"`
+for default policy and `scope:"task"` for a retained task override. Updates do not
+restart or rename the task. The initial default is 256, the default increment
+is 256 and the default maximum is 4,096 active records.
+
+Admission archives acknowledged completed operations before extending active
+capacity. Original operation lookup and duplicate detection include archived
+records. Pending and uncertain operations remain active. Native episode and
+attempt checks include archived history. Archival retains evidence; it does not
+delete records or reset an attempt budget.
+
+If unsettled operations fill the configured maximum, inspect and reconcile the
+originals or increase the appropriate configured capacity through this interface.
+Changing a request ID does not make an uncertain effect safe to repeat.
+The first archive promotes the runtime database to schema 6; older binaries
+must not consume that database and silently forget archived duplicate protection.
+
+
 Run multiple isolated browser instances.
 
 Ordinary continuation reconnects to the current live profile browser and
@@ -636,8 +662,10 @@ or repeat an action. `pending` and `uncertain` require inspection; they never
 permit an automatic retry. `owner_acknowledged` records the owner's successful
 reply and does not prove the site's business outcome. Receipts expose identifiers,
 status and selected evidence references, without raw fill values, scripts, page
-bodies or private command fingerprints. Each task retains at most 256 operations;
-capacity exhaustion preserves history and rejects further effects.
+bodies or private command fingerprints. Active history starts at 256 records by default. Completed operations archive
+before configured extension; archived originals preserve lookup and duplicate
+protection. Unsettled operations at the configured maximum return actionable
+capacity recourse while inspection remains available.
 
 Software can call `getTaskOperation({baseUrl, taskId, requestId, headers})` from
 `@agent-browser/client/task-briefing`, using the existing dashboard session cookie.
@@ -675,3 +703,15 @@ The local pre-push gate uses the existing validation selector to run the public 
 
 
 For a Native control observation, pass the addressed browser task ID rather than the Auth caller ID: the progress summary returns a read-only `browser_command` / `task_briefing` action. Missing binding is explicit as `addressed_browser_task_required`. Continuation preserves sanitized incomplete verifier categories, evidence, qualification and supported next reads. Broad executable, dependency and selector changes select the workflow and gate checks as well; the gate is not duplicated inside the tooling aggregate.
+
+## Continued login and override working sets
+
+Login input budgets use optional `maximumLoginSteps` in the existing task-operation capacity policy (default 32). Update it at runtime with the other three required capacity fields. Settled episodes can renew; unresolved input in any prior episode must be reconciled first. Native Saved Login `resolve({allowAcknowledgedResume:true,steps:[...]})` can extend a settled plan after fresh observation while preserving its acknowledged prefix. Supported control kinds, account/frame/process checks and no-replay rules remain enforced.
+
+`browser_policy` also supports `override_capacity` with current `expectedRevision`, `actor`, `reason`, `scope: "app" | "task"` and `capacity: {activeLimit:256}`. Task settings override app defaults. Old grants archive automatically and resolve under identical exact task/action/request/current-policy checks. This is a working-set bound, not a permission ceiling or policy-document size optimization. Capacity updates preserve grants; effective permission-policy changes revoke both active and archived grants. Read `overrideCapacity` in status, or use `override_lookup` with `overrideId` to inspect an original without mutation attribution. Neither operation expands permission.
+
+## Retained task transport recovery
+
+Ordinary managed tasks support `browser_reconnect` operations `status` and `reconnect` without a hosted attachment. Status distinguishes retained metadata, an ended task (including `terminalReason: explicit_close`) and unavailable metadata, and returns a concrete fresh-facade command. Reconnect freshly observes the same retained task/page; it never opens a replacement browser, reopens a closed task or replays an uncertain request. Transport failures retain the sanitized cause and original request for inspection/reconciliation. Hosted lifecycle operations below keep their existing revision requirements.
+
+Artifact reference admission uses optional `maximumArtifactReferences` in the same live task-operation capacity policy (default 256). Capacity status reports `artifactReferenceCount` and `artifactReferenceLimit`; raise the limit on the retained task before another capture. Existing originals remain available. Completed file effects always retain their completion metadata, including if another caller lowered the budget during capture. Updating this admission budget does not delete artifacts or expand destination permissions.

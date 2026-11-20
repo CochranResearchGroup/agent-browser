@@ -108,3 +108,13 @@ test('Auth completion read failure reports the gap without inventing provider fa
   assert.equal(result.qualification.applicationAccess,'verified');
   assert.equal(JSON.stringify(result).includes('private transport detail'),false);
 });
+
+test('verification retains owner failure identity and distinguishes application helper failure',async()=>{
+ const f=fixture();f.access={...f.access,state:'verified',accountMatched:true};
+ const base=f.client.call;const failure={code:'auth_not_authorized',occurrenceId:'auth-verification-760',recommendedAction:'Inspect original owner enrollment'};
+ f.client.call=async(operation,args)=>{if(operation==='inspect_authentication_completion')throw Object.assign(Error('Owner denied'),{code:failure.code,failure});return base(operation,args)};
+ const owner=await createLoginVerifier({client:f.client,verifyAccess:f.verifyAccess,callerTaskId:'caller-1'}).verify(input);
+ assert.equal(owner.failure,failure);assert.equal(owner.dependencyFailure.component,'auth_owner');assert.equal(owner.dependencyFailure.occurrenceId,failure.occurrenceId);
+ const app=await createLoginVerifier({client:fixture().client,verifyAccess:async()=>{throw Object.assign(Error('Application helper failed'),{code:'auth_unavailable'})},callerTaskId:'caller-1'}).verify(input);
+ assert.equal(app.dependencyFailure.component,'application_verifier');assert.equal(app.clientRecovery.code,'client_application_verification_unavailable');assert.equal(app.failure,undefined);
+});

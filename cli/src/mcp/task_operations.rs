@@ -5,13 +5,30 @@ use agent_browser_service_model::BrowserTaskOperation;
 use serde_json::{json, Value};
 
 pub(super) fn projection(operation: &BrowserTaskOperation) -> Value {
+    let references = operation
+        .evidence_references
+        .iter()
+        .filter(|(key, _)| {
+            !matches!(
+                key.as_str(),
+                "nativeOwnerNoEffectProof"
+                    | "nativeOwnerNoEffectSignature"
+                    | "callerCommandFingerprint"
+            )
+        })
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let no_effect = operation.state
+        == agent_browser_service_model::BrowserTaskOperationState::OwnerRefusedNoEffect;
     json!({"requestId":operation.request_id,"taskId":operation.task_id,
         "profileId":operation.profile_id,"browserId":operation.browser_id,
         "tabId":operation.tab_id,"targetId":operation.target_id,
         "processPid":operation.process_pid,"controlEpoch":operation.control_epoch,
         "action":operation.action,"state":operation.state,
         "createdAtMs":operation.created_at_ms,"completedAtMs":operation.completed_at_ms,
-        "evidenceReferences":operation.evidence_references,"retryAllowed":false,
+        "evidenceReferences":references,"retryAllowed":false,
+        "effectStatus":if no_effect {"no_effect"} else if operation.state == agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged {"acknowledged"} else {"uncertain"},
+        "originalResponse":crate::native::browser_task_operations::original_no_effect_failure(operation).map(|error| json!({"success":false,"error":error})),
         "siteOutcome":"unverified"})
 }
 
@@ -23,8 +40,11 @@ pub(super) fn lookup(task_id: &str, request_id: &str) -> Result<Value, String> {
         .task_operations
         .get(task_id)
         .and_then(|rows| rows.get(request_id))
+        .cloned()
+        .or(store.archived_task_operation(task_id, request_id)?)
         .filter(|row| row.task_id == task_id && row.request_id == request_id)
         .ok_or("browser_task_operation_not_found")?;
+    crate::native::browser_task_operations::validate_no_effect_outcome(&operation)?;
     let current = state.sessions.get(task_id);
     let unchanged = current.is_some_and(|task| {
         task.browser_id == operation.browser_id
@@ -45,7 +65,7 @@ pub(super) fn lookup(task_id: &str, request_id: &str) -> Result<Value, String> {
         && crate::native::browser_host_control::read(&operation.browser_id)?.epoch
             == operation.control_epoch;
     Ok(
-        json!({"schemaVersion":"agent-browser.task-operation.v1","operation":projection(operation),
+        json!({"schemaVersion":"agent-browser.task-operation.v1","operation":projection(&operation),
         "currentContext":if unchanged {"retained_matches"} else {"changed_or_missing"},
         "liveObservation":"not_performed","nextAction":"inspect_current_task_do_not_replay_original"}),
     )
@@ -53,8 +73,27 @@ pub(super) fn lookup(task_id: &str, request_id: &str) -> Result<Value, String> {
 
 pub(super) fn call(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
     let task_id = required_string_argument(arguments, "taskId")?;
-    let request_id = required_string_argument(&arguments["params"], "requestId")?;
-    let data = lookup(task_id, request_id).map_err(|error| JsonRpcError::invalid_params(&error))?;
+    let data = if arguments["params"]["operation"] == "reconcile" {
+        let request = required_string_argument(&arguments["params"], "requestId")?;
+        crate::native::browser_task_operations::reconcile_native_no_effect(task_id, request)
+            .map_err(|error| JsonRpcError::invalid_params(&error))?;
+        lookup(task_id, request).map_err(|error| JsonRpcError::invalid_params(&error))?
+    } else if arguments["params"]["operation"] == "capacity" {
+        let policy = arguments["params"]
+            .get("policy")
+            .map(|value| serde_json::from_value(value.clone()))
+            .transpose()
+            .map_err(|_| {
+                JsonRpcError::invalid_params("browser_task_operation_capacity_policy_invalid")
+            })?;
+        let scope = arguments["params"]["scope"].as_str().unwrap_or("task");
+        BrowserSessionSqliteStore::default_sqlite()
+            .and_then(|mut store| store.task_operation_capacity(task_id, scope, policy))
+            .map_err(|error| JsonRpcError::invalid_params(&error))?
+    } else {
+        let request_id = required_string_argument(&arguments["params"], "requestId")?;
+        lookup(task_id, request_id).map_err(|error| JsonRpcError::invalid_params(&error))?
+    };
     Ok(super::tool_response_from_payload(
         "browser_command",
         session,
@@ -168,6 +207,83 @@ fn response_data(
     response.data = Some(Value::Object(data));
 }
 
+/// Read a settled original before current-state admission. This path has no
+/// transport/time/process effects and cannot make an unknown request runnable.
+pub(super) fn settled_native_refusal(
+    arguments: &Value,
+) -> Result<Option<JsonRpcError>, JsonRpcError> {
+    if arguments["action"] != "native_input" {
+        return Ok(None);
+    }
+    let Some(request) = super::optional_string_argument(arguments, "requestId")? else {
+        return Ok(None);
+    };
+    let task = required_string_argument(arguments, "taskId")?;
+    let Some(original) = crate::native::browser_task_operations::exact_original(task, request)
+        .map_err(|error| JsonRpcError::invalid_params(&error))?
+    else {
+        return Ok(None);
+    };
+    if original.state
+        != agent_browser_service_model::BrowserTaskOperationState::OwnerRefusedNoEffect
+    {
+        return Ok(None);
+    }
+    crate::native::browser_task_operations::validate_no_effect_outcome(&original)
+        .map_err(|error| JsonRpcError::invalid_params(&error))?;
+    let mut command = Value::Object(
+        super::optional_object_argument(arguments, "params")?
+            .cloned()
+            .unwrap_or_default(),
+    );
+    command["action"] = json!("native_input");
+    command["id"] = json!(request);
+    super::forward_native_request_context(arguments, &mut command)?;
+    let tag = crate::native::browser_task_operations::native_caller_fingerprint(task, &command)
+        .map_err(|error| JsonRpcError::invalid_params(&error))?;
+    if original.evidence_references.get("callerCommandFingerprint") != Some(&tag) {
+        return Err(JsonRpcError::invalid_params(
+            "browser_task_operation_request_conflict: inspect the original request; no replay",
+        ));
+    }
+    let response = existing_response(&original);
+    Ok(Some(JsonRpcError {
+        code: -32603,
+        message: "Original browser operation refused",
+        data: Some(json!({
+            "message":response.error,"requestId":response.id,"operation":response.data,"originalReplay":true,"dispatchAttempted":false
+        })),
+    }))
+}
+
+fn existing_response(original: &BrowserTaskOperation) -> crate::connection::Response {
+    let mut response = crate::connection::Response {
+        success: original.state
+            == agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged,
+        id: Some(original.request_id.clone()),
+        error: (original.state
+            != agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged)
+            .then(|| {
+                crate::native::browser_task_operations::original_no_effect_failure(original)
+                    .unwrap_or_else(|| {
+                        "browser_task_operation_uncertain: inspect original; no retry".into()
+                    })
+            }),
+        ..Default::default()
+    };
+    if let Some(error) =
+        crate::native::browser_task_operations::original_no_effect_failure(original)
+    {
+        response.failure = Some(
+            json!({"code":error.split(':').next().unwrap_or("browser_task_operation_owner_refused"),
+            "effectState":"no_effect","originalRequestId":original.request_id,
+            "recommendedAction":"fresh_observation_and_new_explicit_intent_without_replaying_original"}),
+        );
+    }
+    response_data(&mut response, original, true);
+    response
+}
+
 /// Return only reviewed static completion diagnostics. Store errors can contain
 /// SQL, paths or private values; their details never enter the public envelope.
 pub(super) fn completion_failure_cause(error: &str) -> &'static str {
@@ -253,85 +369,140 @@ pub(super) fn completion_failure_clock(error: &str) -> Option<Value> {
     )
 }
 
-fn bind_native_owner_allowance(command: &mut Value, admitted_at_ms: u64) {
-    if matches!(
-        command["action"].as_str(),
-        Some("native_input" | "native_capture")
-    ) && command.get("ownerTimeoutMs").is_some()
-    {
-        command["_nativeOwnerAdmittedAtMs"] = json!(admitted_at_ms);
+/// Static transport cause only: raw socket errors can contain private endpoints.
+fn transport_failure_cause(error: &str) -> &'static str {
+    let error = error.to_ascii_lowercase();
+    if error.contains("transport closed") || error.contains("connection closed") {
+        "transport_closed"
+    } else if error.contains("timed out") || error.contains("timeout") {
+        "transport_timeout"
+    } else if error.contains("connection refused") {
+        "transport_connection_refused"
+    } else if error.contains("connection reset") || error.contains("broken pipe") {
+        "transport_connection_lost"
+    } else if error.contains("workflow_transport_start_failed") {
+        "transport_start_failed"
+    } else {
+        "transport_failure_unclassified"
     }
 }
 
 /// The marker is durable before this closure can ensure a transport or send.
 pub(super) fn transport(
-    mut command: Value,
+    command: Value,
     run: impl FnOnce(Value) -> Result<crate::connection::Response, String>,
 ) -> Result<crate::connection::Response, String> {
-    use crate::native::browser_task_operations::{self as operations, Admission};
-    let context = REQUEST_CONTEXT.with(|context| context.borrow().clone());
-    let Some(context) = context.filter(|_| {
-        operations::eligible_action(command["action"].as_str().unwrap_or_default())
-            || operations::eligible_native(command["action"].as_str().unwrap_or_default(), &command)
-    }) else {
-        if matches!(
-            command["action"].as_str(),
-            Some("native_input" | "native_capture")
-        ) && command.get("ownerTimeoutMs").is_some()
-        {
-            let admitted = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| "browser_native_owner_clock_invalid")?
-                .as_millis() as u64;
-            bind_native_owner_allowance(&mut command, admitted);
-        }
-        return run(command);
-    };
-    if let Some(request_id) = context.request_id {
-        command["id"] = json!(request_id);
+    let (mut result, samples) = transport_with_latency(command, run);
+    if let Ok(response) = &mut result {
+        crate::connection::latency::append_response(&mut response.data, samples);
     }
-    super::workflow::address_task_command(&mut command, &context.task_id)?;
-    let admitted =
-        if operations::eligible_native(command["action"].as_str().unwrap_or_default(), &command) {
+    result
+}
+
+pub(super) fn transport_with_latency(
+    mut command: Value,
+    run: impl FnOnce(Value) -> Result<crate::connection::Response, String>,
+) -> (Result<crate::connection::Response, String>, Vec<Value>) {
+    // These are adapter-owned admission evidence, never caller authority.
+    if let Some(fields) = command.as_object_mut() {
+        fields.remove("_nativeOwnerAdmittedServiceTime");
+        fields.remove("_nativeOwnerAdmittedAtMs");
+    }
+    let mut samples = Vec::new();
+    let result = (|| {
+        use crate::native::browser_task_operations::{self as operations, Admission};
+        let context = REQUEST_CONTEXT.with(|context| context.borrow().clone());
+        let Some(context) = context.filter(|_| {
+            operations::eligible_action(command["action"].as_str().unwrap_or_default())
+                || operations::eligible_native(
+                    command["action"].as_str().unwrap_or_default(),
+                    &command,
+                )
+        }) else {
+            if command["action"] == "native_input" && command.get("ownerTimeoutMs").is_some() {
+                command["_nativeOwnerAdmittedServiceTime"] =
+                    serde_json::to_value(crate::connection::stable_time::native_now()?)
+                        .map_err(|_| "browser_native_time_evidence_invalid")?;
+            }
+            return run(command);
+        };
+        if let Some(request_id) = context.request_id {
+            command["id"] = json!(request_id);
+        }
+        if command["action"] == "native_input"
+            && operations::eligible_native("native_input", &command)
+        {
+            // Historical failed originals are read before any current routing or
+            // process probe. Only our normalized actual caller args mint the tag.
+            let request = command["id"]
+                .as_str()
+                .ok_or("browser_task_operation_request_id_invalid")?;
+            let original = operations::exact_original(&context.task_id, request)?;
+            if original.as_ref().is_none_or(|row| {
+                row.evidence_references
+                    .contains_key("callerCommandFingerprint")
+            }) {
+                let tag = operations::native_caller_fingerprint(&context.task_id, &command)?;
+                if let Some(row) = original.as_ref().filter(|row| row.state == agent_browser_service_model::BrowserTaskOperationState::OwnerRefusedNoEffect) {
+                    operations::validate_no_effect_outcome(row)?;
+                    if row.evidence_references.get("callerCommandFingerprint") != Some(&tag) {
+                        return Err("browser_task_operation_request_conflict: inspect the original request; no replay".into());
+                    }
+                    return Ok(existing_response(row));
+                }
+                command["_taskOperationCallerFingerprint"] = json!(tag);
+            }
+        }
+        let routing = crate::connection::latency::PhaseCapture::start("routing");
+        let addressed = super::workflow::address_task_command_with_latency(
+            &mut command,
+            &context.task_id,
+            &mut samples,
+        );
+        crate::connection::latency::finish(
+            routing,
+            "task identity to transport lane join",
+            &mut samples,
+        );
+        addressed?;
+        let admitted = if operations::eligible_native(
+            command["action"].as_str().unwrap_or_default(),
+            &command,
+        ) {
             operations::begin_native(&context.task_id, &mut command)?
         } else {
             operations::begin(&context.task_id, &mut command)?
         };
-    match admitted {
-        Admission::Existing(original) => {
-            let mut response = crate::connection::Response {
-                success: original.state
-                    == agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged,
-                id: Some(original.request_id.clone()),
-                error: (original.state
-                    != agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged)
-                    .then(|| "browser_task_operation_uncertain: inspect original; no retry".into()),
-                ..Default::default()
-            };
-            response_data(&mut response, &original, true);
-            Ok(response)
-        }
-        Admission::Dispatch(original) => {
-            bind_native_owner_allowance(&mut command, original.created_at_ms);
-            match run(command) {
+        match admitted {
+            Admission::Existing(original) => Ok(existing_response(&original)),
+            Admission::Dispatch(original) => match run(command) {
                 Ok(mut response) => {
-                    let completed=operations::finish(&original,Some(&response)).map_err(|error| {
+                    let persistence =
+                        crate::connection::latency::PhaseCapture::start("persistence");
+                    let completed = operations::finish(&original, Some(&response));
+                    crate::connection::latency::finish(
+                        persistence,
+                        "task operation completion store transaction",
+                        &mut samples,
+                    );
+                    let completed=completed.map_err(|error| {
                     let clock=completion_failure_clock(&error).map(|value|format!(";observationClock={value}")).unwrap_or_default();
                     format!("browser_task_operation_completion_unavailable:{}:inspect original; no retry;cause={}{}",original.request_id,completion_failure_cause(&error),clock)
                 })?;
                     response_data(&mut response, &completed, false);
                     Ok(response)
                 }
-                Err(_) => {
+                Err(error) => {
                     let _ = operations::finish(&original, None);
                     Err(format!(
-                        "browser_task_operation_uncertain:{}:inspect original; no retry",
-                        original.request_id
-                    ))
+                            "browser_task_operation_uncertain:{}:inspect original; no retry;cause={}; taskId={}; use browser_command task_operation with original requestId, then browser_reconnect status on the same task through an initialized or fresh facade",
+                            original.request_id, transport_failure_cause(&error), original.task_id
+                        ))
                 }
-            }
+            },
         }
-    }
+    })();
+    (result, samples)
 }
 
 pub(super) fn send(mut command: Value, route: &str) -> Result<crate::connection::Response, String> {

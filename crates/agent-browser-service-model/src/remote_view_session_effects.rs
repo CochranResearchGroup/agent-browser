@@ -116,7 +116,27 @@ impl<
         let id = (self.next_intent_id)();
         self.store
             .admit_browser_activity(&id, browser, expected)
-            .map_err(|_| "browser_session_activity_admission_conflict")?;
+            .map_err(|error| {
+                let cause = match error {
+                    BrowserIdleRetirementStoreError::ActivityAdmission(cause) => match cause {
+                        BrowserActivityAdmissionConflict::ExpectedIdentityChanged => "expected_identity_stale",
+                        BrowserActivityAdmissionConflict::CurrentIdentityChanged => "current_identity_changed",
+                        BrowserActivityAdmissionConflict::CurrentBrowserMissing => "current_browser_missing",
+                        BrowserActivityAdmissionConflict::CurrentProcessChanged => "current_process_changed",
+                        BrowserActivityAdmissionConflict::CurrentEndpointChanged => "current_endpoint_changed",
+                        BrowserActivityAdmissionConflict::CurrentProfileChanged => "current_profile_changed",
+                        BrowserActivityAdmissionConflict::CurrentDesktopChanged => "current_desktop_changed",
+                        BrowserActivityAdmissionConflict::BrowserRetired => "browser_retired",
+                        BrowserActivityAdmissionConflict::RequestAlreadyRecorded => "original_activity_recorded",
+                        BrowserActivityAdmissionConflict::RetirementActive => "retirement_in_progress",
+                    },
+                    BrowserIdleRetirementStoreError::Unavailable => "evidence_unavailable",
+                    BrowserIdleRetirementStoreError::InvalidRecord => "evidence_invalid",
+                    BrowserIdleRetirementStoreError::ActivityActive => "activity_active",
+                    BrowserIdleRetirementStoreError::Conflict => "current_conflict_unclassified",
+                };
+                format!("browser_session_activity_admission_conflict:{cause}: browser={} profile={}; inspect exact-task browser_reconnect status and task_briefing, then reconnect to freshly probe the original target; retain original uncertain operations without replay", browser.id, browser.profile_id)
+            })?;
         // Unknown effects retain the durable veto and are never replayed here.
         let result = effect(&mut self.effects)?;
         self.store

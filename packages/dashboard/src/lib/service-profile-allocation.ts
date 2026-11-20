@@ -1,3 +1,5 @@
+import {dashboardLocalFailure} from "./response-failure.ts";
+import {dashboardResponseFailureError,responseFailureMetadata} from "./response-failure.ts";
 export type ServiceProfileAllocationLookupPayload<TAllocation> = {
   success?: boolean;
   data?: {
@@ -10,10 +12,10 @@ export function serviceProfileAllocationLookupUrl(serviceBaseUrl: string, profil
   const trimmedBase = serviceBaseUrl.trim().replace(/\/+$/, "");
   const trimmedProfileId = profileId.trim();
   if (!trimmedBase) {
-    throw new TypeError("serviceProfileAllocationLookupUrl requires a service base URL");
+    throw dashboardLocalFailure(new TypeError("serviceProfileAllocationLookupUrl requires a service base URL"),"dashboard_argument_invalid","packages/dashboard/src/lib/service-profile-allocation.ts","serviceProfileAllocationLookupUrl");
   }
   if (!trimmedProfileId) {
-    throw new TypeError("serviceProfileAllocationLookupUrl requires a profile ID");
+    throw dashboardLocalFailure(new TypeError("serviceProfileAllocationLookupUrl requires a profile ID"),"dashboard_argument_invalid","packages/dashboard/src/lib/service-profile-allocation.ts","serviceProfileAllocationLookupUrl");
   }
   return `${trimmedBase}/profiles/${encodeURIComponent(trimmedProfileId)}/allocation`;
 }
@@ -22,8 +24,8 @@ export function profileAllocationFromLookupPayload<TAllocation>(
   payload: ServiceProfileAllocationLookupPayload<TAllocation>,
   fallback: TAllocation,
 ): TAllocation {
-  if (!payload.success) {
-    throw new Error(payload.error || "Service profile allocation lookup failed");
+  if (!payload.success || responseFailureMetadata(payload)) {
+    throw dashboardResponseFailureError(payload, "service_profile_allocation_failed");
   }
   return payload.data?.profileAllocation ?? fallback;
 }

@@ -11,6 +11,12 @@ struct LoginOwner {
     last_input: Option<Value>,
 }
 impl NativeOwner for LoginOwner {
+    fn image_observation_clock(
+        &mut self,
+    ) -> Result<super::super::browser_native_image::NativeImageClockReading, String> {
+        Ok(super::super::browser_native_image::NativeImageClockReading::fixture(1_000_000))
+    }
+
     fn request(&mut self, op: &str, body: &Value) -> Result<Value, String> {
         self.calls.push(op.into());
         match op {
@@ -137,7 +143,8 @@ fn native_login_perception_public_input_derives_single_click_and_fences_visual_c
         .contains("control_changed"));
     assert!(owner.last_input.is_none());
     owner.epoch = 4;
-    owner.observation.as_mut().unwrap()["binding"]["observedAtMs"] = json!(1);
+    owner.observation.as_mut().unwrap()["binding"]["serviceTime"] =
+        serde_json::to_value(crate::connection::stable_time::fixture_stamp(1)).unwrap();
     assert!(select(&mut owner, reference)
         .unwrap_err()
         .contains("expired"));

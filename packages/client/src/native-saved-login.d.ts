@@ -1,7 +1,7 @@
 export interface SavedLoginBinding {taskId:string;profileId:string;browserId:string;tabId:string;targetId:string;}
 export interface SavedLoginInput {requestId:string;kind:'username'|'credential_entry'|'submit';state:'intent'|'acknowledged'|'unknown';targetRef?:string;observationRequestId?:string;}
-export interface SavedLoginEpisode {schemaVersion:1;episodeId:string;taskId:string;accountDigest:string;createdAtMs:number;deadlineAtMs:number;timeoutMs?:number;inputs:SavedLoginInput[];captureSequence?:number;binding?:SavedLoginBinding;physical?:Record<string,unknown>;controlEpoch?:number;}
-export interface SavedLoginResult {taskId:string;episodeId:string;status:'verified_access_after_native_saved_login'|'human_required'|'uncertain';reason:string;retryAllowed:false;evidenceRef?:string;}
+export interface SavedLoginEpisode {schemaVersion:1;episodeId:string;taskId:string;accountDigest:string;/** Retained diagnostic wall projection, never trusted expiry authority. */createdAtMs:number;deadlineAtMs:number;timeoutMs?:number;inputs:SavedLoginInput[];captureSequence?:number;steps?:SavedLoginInput['kind'][];binding?:SavedLoginBinding;physical?:Record<string,unknown>;controlEpoch?:number;}
+export interface SavedLoginResult {taskId:string;episodeId:string;status:'verified_access_after_native_saved_login'|'human_required'|'uncertain'|'failed_no_effect';reason:string;retryAllowed:false;originalOperation?:Record<string,unknown>;clientRecovery?:import('./client-recovery.js').ClientRecovery;failure?:Record<string,unknown>;occurrenceId?:string|null;recovery?:{inspect:{interface:string;arguments:{taskId:string;requestId:string}};resumeCondition:string;newIntent?:{method:'resolve';requiredArguments:string[];instruction:string}};evidenceRef?:string;continuation?:{method:'resolve';arguments:{taskId:string;episodeId:string;allowAcknowledgedResume:boolean;steps:SavedLoginInput['kind'][]};instruction:string};}
 export interface NativeSavedLoginOptions {
  callTool:(name:string,args:Record<string,any>,context?:{signal:AbortSignal;timeoutMs:number})=>Promise<any>;
  /** Host-owned durable store. withEpisode serializes this identity across processes. */
@@ -10,10 +10,12 @@ export interface NativeSavedLoginOptions {
  verifyAccess:(context:{taskId:string;episodeId:string;binding:SavedLoginBinding;expectedAccount:string;signal:AbortSignal})=>Promise<SavedLoginBinding&{state:string;accountMatched:boolean;evidenceRef:string}>;
  /** Per invocation, including read-only proof. Defaults to 300000 ms. */
  timeoutMs?:number;
+ /** Diagnostic wall projection only. Owner input admission qualifies observation freshness. */
  expectedAccount:string;now?:()=>number;
 }
-export interface NativeSavedLoginClient {resolve(input:{taskId:string;episodeId:string;allowAcknowledgedResume?:boolean}):Promise<SavedLoginResult>;}
+export interface NativeSavedLoginClient {resolve(input:{taskId:string;episodeId:string;allowAcknowledgedResume?:boolean;steps?:SavedLoginInput['kind'][]}):Promise<SavedLoginResult>;}
 /** Covers the window with bounded owner tiles and freshly recaptures the selected tile.
- * At most three owner-guarded inputs. Explicit resume requires a publicly verified
+ * The default three-control plan can be extended through resolve.steps at runtime.
+ * Explicit resume requires a publicly verified
  * acknowledged prefix and preserves original episode clocks; unknown input never replays. */
 export function createNativeSavedLoginClient(options:NativeSavedLoginOptions):NativeSavedLoginClient;

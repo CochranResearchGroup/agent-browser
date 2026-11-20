@@ -447,11 +447,48 @@ pub fn read_service_failures(limit: usize) -> Result<ServiceFailureJournalReadba
     read_service_failures_at(&path, limit)
 }
 
+/// Filter before limiting so an occurrence cannot disappear behind unrelated
+/// polling failures. Long opaque task identities join through a private digest.
+pub fn read_task_failures(
+    task: &str,
+    occurrence: Option<&str>,
+    limit: usize,
+) -> Result<ServiceFailureJournalReadback, String> {
+    flush_failure_journal_best_effort();
+    let digest = format!("{:x}", Sha256::digest(task.as_bytes()));
+    read_service_failures_matching_at(&default_failure_journal_path()?, limit, |record| {
+        (record.references.session_id.as_deref() == Some(task)
+            || record
+                .details
+                .as_ref()
+                .and_then(|details| details["taskIdSha256"].as_str())
+                == Some(digest.as_str()))
+            && occurrence.is_none_or(|id| record.occurrence_id == id)
+    })
+}
+
+/// Locate a known occurrence even when admission failed before a task existed.
+pub fn read_failure_occurrence(occurrence: &str) -> Result<ServiceFailureJournalReadback, String> {
+    uuid::Uuid::parse_str(occurrence).map_err(|_| "failure_occurrence_id_invalid")?;
+    flush_failure_journal_best_effort();
+    read_service_failures_matching_at(&default_failure_journal_path()?, 1, |record| {
+        record.occurrence_id == occurrence
+    })
+}
+
 /// Read a coherent snapshot, allowing a short writer to finish. Lock admission
 /// is bounded so a stuck writer cannot indefinitely block diagnostic reads.
 pub fn read_service_failures_at(
     path: &Path,
     limit: usize,
+) -> Result<ServiceFailureJournalReadback, String> {
+    read_service_failures_matching_at(path, limit, |_| true)
+}
+
+fn read_service_failures_matching_at(
+    path: &Path,
+    limit: usize,
+    accepts: impl Fn(&ServiceFailureRecord) -> bool,
 ) -> Result<ServiceFailureJournalReadback, String> {
     let limit = limit.clamp(1, 1_000);
     if !path.exists() {
@@ -500,12 +537,13 @@ pub fn read_service_failures_at(
             }
         };
         match serde_json::from_str::<ServiceFailureRecord>(&line) {
-            Ok(record) => {
+            Ok(record) if accepts(&record) => {
                 if records.len() == limit {
                     records.pop_front();
                 }
                 records.push_back(record);
             }
+            Ok(_) => {}
             Err(_) => malformed_line_count += 1,
         }
     }

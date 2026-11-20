@@ -28,7 +28,9 @@ assert.equal(requested.contractVersion,2);assert.deepEqual(requested.receivingTa
 assert.notEqual(stored.callerTaskId,binding.taskId);assert.equal(stored.callerTaskId,callerTaskId);
 request.state='approved';
 const result=await playbook.advance(options);
-assert.equal(result.status,'completed');assert.equal(result.effectState,'verified');assert.equal(result.taskId,binding.taskId);assert.equal(result.requestId,request.requestId);assert.equal(submitted,1);
+assert.equal(result.reasonCode,'helper_grant_time_unqualified');assert.equal(result.taskId,binding.taskId);assert.equal(result.requestId,request.requestId);assert.equal(submitted,0);
+// Historical pre-upgrade use remains readback-only under the original identities.
+stored={...stored,attempted:true};await helper('begin_authentication');assert.equal((await playbook.advance(options)).status,'completed');assert.equal(submitted,1);
 console.log('Hosted version2 caller/receiving identity and independent receiving verification passed');
 
 for(const field of ['taskId','profileId','browserId','tabId']) {
@@ -41,7 +43,7 @@ await assert.rejects(playbook.advance(options),/helper_binding_mismatch/);reques
 const originalAccount=request.scope.account;request.scope.account='wrong-account';
 await assert.rejects(playbook.advance(options),/helper_binding_mismatch/);request.scope.account=originalAccount;
 request.state='uncertain';request.captureState='ready';
-assert.equal((await playbook.advance(options)).effectState,'no_effect');
+assert.equal((await playbook.advance(options)).effectState,'unknown');
 assert.equal((await playbook.advance(options)).reasonCode,'password_source_unavailable');
 request.captureState='held';
 assert.equal((await playbook.advance(options)).reasonCode,'helper_running_or_uncertain');
@@ -49,17 +51,18 @@ assert.equal(submitted,1);
 
 let interruptedStore=null,starts=0;
 request.state='approved';request.captureState='ready';verified=false;
-const interrupted=createLoginPlaybook({browser,checkpoints:{load:async()=>structuredClone(interruptedStore),save:async(_k,v)=>{interruptedStore=structuredClone(v);}},helper:async operation=>{
+const interruptedHelper=async operation=>{
  if(operation==='begin_authentication'){starts++;request.startedAt=Date.now();request.inputAttemptedAt=Date.now();throw Error('Connection ended before start acknowledgement');}
  return structuredClone(request);
-}});
-assert.equal((await interrupted.advance(options)).effectState,'unknown');
+};
+const interrupted=createLoginPlaybook({browser,checkpoints:{load:async()=>structuredClone(interruptedStore),save:async(_k,v)=>{interruptedStore=structuredClone(v);}},helper:interruptedHelper});
+assert.equal((await interrupted.advance(options)).reasonCode,'helper_grant_time_unqualified');interruptedStore={...interruptedStore,attempted:true};await assert.rejects(interruptedHelper('begin_authentication'),/Connection ended/);
 assert.equal((await interrupted.advance(options)).reasonCode,'helper_running_or_uncertain');assert.equal(starts,1);
 request.state='authenticated';request.captureState='ready';
 const wrongCompany=createLoginPlaybook({browser:{...browser,verifyLogin:async()=>({...binding,status:'failed',reasonCode:'organization_mismatch'})},checkpoints:{load:async()=>structuredClone(interruptedStore),save:async()=>{throw Error('No rebinding');}},helper:async()=>structuredClone(request)});
 assert.equal((await wrongCompany.advance(options)).status,'failed','Helper success cannot replace independent company proof');
 assert.equal(starts,1);
-console.log('Hosted wrong receiving/caller/account, no-effect, private hold, lost-ack no-replay and wrong-company checks passed');
+console.log('Hosted wrong receiving/caller/account, uncertainty, private hold, lost-ack no-replay and wrong-company checks passed');
 
 request.state='uncertain';request.captureState='held';request.running=false;verified=false;const recoveryCalls=[];
 const recovery=createLoginPlaybook({browser,checkpoints,helper:async operation=>{

@@ -1932,6 +1932,13 @@ fn run_browser_worker(
                         cdp_endpoint: manager.get_cdp_url().to_string(),
                         desktop,
                     };
+                    // Publish the immutable observation while the launch owner
+                    // still holds the original child. Headless tasks have no
+                    // Native launch-intent ledger to carry this evidence.
+                    if launch.desktop.is_none() {
+                        super::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?
+                            .retain_headless_launch_process(&profile.id, &launch)?;
+                    }
                     let mut state = DaemonState::new();
                     state.browser = Some(manager);
                     state.browser_session_manager_owned = true;

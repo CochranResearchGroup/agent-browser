@@ -56,7 +56,7 @@ assert.notEqual((await access.client.resolve({taskId:'task',requestId:'attempt'}
 const lost=fixture({lostReply:true});const unknown=await lost.client.resolve({taskId:'task',requestId:'attempt'});assert.equal(lost.inputs,1);assert.equal(unknown.originalOperation.state,'uncertain');assert(!unknown.reason.includes('canary'));assert.equal(unknown.retryAllowed,false);
 await lost.client.resolve({taskId:'task',requestId:'attempt'});assert.equal(lost.inputs,1);assert.equal(lost.selected,1);assert(!lost.calls.some(call=>call.name==='browser_continue'));
 console.log('Native image client image binding, policy, selection, access and uncertain no-replay negatives PASS');
-const timeout=fixture({nearExpiry:true,selectCandidates:async()=>new Promise(()=>{})});const timed=await timeout.client.resolve({taskId:'task',requestId:'attempt'});assert.equal(timed.reason,'native_image_selection_timeout');assert.equal(timeout.inputs,0);
+const timeout=fixture({nearExpiry:true,timeoutMs:20,selectCandidates:async()=>new Promise(()=>{})});const timed=await timeout.client.resolve({taskId:'task',requestId:'attempt'});assert.equal(timed.reason,'native_image_invocation_budget_exhausted');assert.equal(timeout.inputs,0);
 console.log('Native image selection port deadline refuses without input PASS');
 
 const roi=fixture({roi:true});const roiResult=await roi.client.resolve({taskId:'task',requestId:'attempt'});assert.equal(roiResult.status,'verified_access_after_native_image');assert.equal(roi.inputs,1);
@@ -85,7 +85,7 @@ async function roundsCase(fault) {
   const config=structuredClone(policy);config.provider.configRef='agent-browser:remote-view-native-image-static-3x3-two-round:v1';
   if(fault==='empty-policy')config.sitePolicy.allowedChallengeProviders=[];
   if(fault==='single-provider')config.provider.configRef=provider.configRef;
-  const client=createNativeImageRoundsChallengeClient({now:()=>clock,steadyNow:()=>steady,callTool:async(name,args)=>{
+  const client=createNativeImageRoundsChallengeClient({timeoutMs:fault==='wait-budget'?20:60000,now:()=>clock,steadyNow:()=>steady,callTool:async(name,args)=>{
     if(name==='browser_command'&&args.action==='task_operation'){const operation=records.get(args.params.requestId);if(!operation)throw {code:'browser_task_operation_not_found'};return payload({operation});}
     if(name==='browser_command'&&args.action==='task_briefing')return payload(binding);
     if(name==='browser_command'&&args.action==='native_capture'){if(!elapsedClock)clock=now+inputs;return payload(frame(),[{type:'image',mimeType:'image/png',data:frames[inputs].toString('base64')}]);}
@@ -105,17 +105,23 @@ async function roundsCase(fault) {
     if(fault==='cancel-second'&&selections===2)throw Error('selection cancelled');
     if(fault==='expired-second'&&selections===2)clock=now+60000;
     if(fault==='clock-expired'&&selections===2)steady=65000;
+    if(fault==='wait-budget'&&selections===2)await new Promise(resolve=>setTimeout(resolve,40));
     return {taskId:'task',observationRequestId:context.observationRequestId,frameSha256:context.observation.frameSha256,puzzleSha256:context.observation.puzzleSha256,selectedCandidateIds:[`tile:1:${hashes[fault==='stale-second'&&selections===2?0:selections-1].slice(0,16)}`]};
   },verifyClearance:async context=>{assert.equal(inputs,2);return {taskId:'task',state:'verified',frameSha256:context.frameSha256,evidenceRef:'independent-clearance'}},verifyAccess:async context=>{assert.equal(inputs,2);return {taskId:'task',state:fault==='denied'?'unknown':'verified',frameSha256:context.frameSha256,evidenceRef:'independent-protected-access'}}});
   const result=await client.resolve({taskId:'task',requestId:'round-attempt'});
-  if(fault==='clock-correction')assert.deepEqual(durations,[45000,40000],'Selectors receive remaining elapsed durations, never renewed wall budgets');
-  if(!fault||fault==='clock-correction'){assert.equal(result.status,'verified_access_after_native_image');assert.equal(inputs,2);assert.equal(result.roundOperations.length,2);assert.ok(deadlines.every(value=>value<=now+60000));}
-  else {assert.equal(result.status,'intervention');assert.equal(result.retryAllowed,false);assert.equal(inputs,['empty-policy','single-provider','clock-malformed'].includes(fault)?0:['lost-second','denied'].includes(fault)?2:1);}
+  if(fault==='clock-correction')assert.deepEqual(durations,[45000,45000],'Selection caps are caller waits; the aggregate OS abort budget is never inferred from guest counters');
+  if(!fault||['clock-correction','clock-expired','clock-boot','clock-malformed','expired-second'].includes(fault)){assert.equal(result.status,'verified_access_after_native_image');assert.equal(inputs,2);assert.equal(result.roundOperations.length,2);assert.ok(deadlines.every(value=>value<=now+60000));}
+  else {assert.equal(result.status,'intervention');assert.equal(result.retryAllowed,false);assert.equal(inputs,['empty-policy','single-provider'].includes(fault)?0:['lost-second','denied'].includes(fault)?2:1);}
   if(fault==='clock-correction')assert.ok(deadlines[1]<=deadlines[0],'Wall correction must not renew original selection deadline');
   const before=inputs;await client.resolve({taskId:'task',requestId:'round-attempt'});assert.equal(inputs,before);
 }
 await roundsCase();
 await roundsCase('clock-correction');
-for(const fault of ['clock-expired','clock-boot','clock-malformed'])await roundsCase(fault);
+for(const fault of ['clock-expired','clock-boot','clock-malformed','wait-budget'])await roundsCase(fault);
 for(const fault of ['partial','rejection','empty-policy','single-provider','stale-second','cancel-second','expired-second','lost-second','denied'])await roundsCase(fault);
 console.log('Two-round public image protocol PASS: fresh evidence, original deadline, stale/partial/rejected/cancelled/uncertain no-replay and independent protected access');
+
+let settledReadCalls760=0;
+const settledImage760=fixture({callTool:async(_name,args)=>{settledReadCalls760++;return {content:[{type:'text',text:JSON.stringify({success:true,data:{operation:{...identity,requestId:args.params.requestId,action:'native_input',state:'owner_refused_no_effect'}}})}]};}});
+const settledImageResult760=await settledImage760.client.resolve({taskId:'task',requestId:'settled-original'});
+assert.equal(settledImageResult760.status,'failed_no_effect');assert.equal(settledImageResult760.originalOperation.requestId,'settled-original');assert.equal(settledReadCalls760,1);assert.equal(settledImage760.inputs,0);assert.deepEqual(settledImageResult760.recovery.newIntent.requiredArguments,['newRequestId']);

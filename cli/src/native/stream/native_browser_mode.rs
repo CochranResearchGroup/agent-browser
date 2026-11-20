@@ -21,7 +21,10 @@ impl ModeRequest {
             && self.generation > 0
             && if matches!(self.choice.as_str(), "inspect" | "inspect_control") {
                 self.operation_id.is_none() && self.mode.is_none() && self.owner_confirmed.is_none()
-            } else if self.choice == "return_handoff" {
+            } else if matches!(
+                self.choice.as_str(),
+                "return_handoff" | "take_handoff" | "activity_handoff" | "return_activity"
+            ) {
                 self.operation_id
                     .as_ref()
                     .is_some_and(|id| !id.is_empty() && id.len() <= 128)
@@ -132,9 +135,27 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
     let slot = request.slot;
     let inspect = matches!(
         request.choice.as_str(),
-        "inspect" | "inspect_control" | "return_handoff"
+        "inspect"
+            | "inspect_control"
+            | "return_handoff"
+            | "take_handoff"
+            | "activity_handoff"
+            | "return_activity"
     );
     let generation = request.generation;
+    let release_only = matches!(
+        request.choice.as_str(),
+        "return_handoff" | "return_activity"
+    );
+    let returning_activity = (request.choice == "return_activity")
+        .then(|| request.operation_id.clone())
+        .flatten();
+    let activity = (request.choice == "activity_handoff")
+        .then(|| request.operation_id.clone())
+        .flatten();
+    let taking = (request.choice == "take_handoff")
+        .then(|| request.operation_id.clone())
+        .flatten();
     let returning = (request.choice == "return_handoff")
         .then(|| request.operation_id.clone())
         .flatten();
@@ -147,33 +168,32 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
             .remote_view_tab_handoffs
             .get(&handoff)
             .ok_or("remote_view_tab_handoff_missing")?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| "remote_view_clock_invalid")?
-            .as_millis() as u64;
-        link.check_link_at(now)?;
+        if !release_only {
+            crate::native::browser_session_remote_view::check_handoff_time(link)?;
+        }
         let target =
             agent_browser_service_model::resolve_remote_view_tab_handoff(&state, &handoff)?;
         let digest =
             agent_browser_service_model::remote_view_native_target_digest(&handoff, &target)?;
-        let route =
-            crate::native::browser_session_remote_view::resolve_handoff_desktop_route(&handoff)?;
+        let route = if release_only {
+            crate::native::browser_session_remote_view::release_handoff_desktop_route(&handoff)?
+        } else {
+            crate::native::browser_session_remote_view::resolve_handoff_desktop_route(&handoff)?
+        };
         if route != format!("/{slot}") {
             return Err("remote_view_native_mode_desktop_changed".to_string());
         }
         let current = store.load_session_state()?;
         let current_target =
             agent_browser_service_model::resolve_remote_view_tab_handoff(&current, &handoff)?;
-        current
-            .remote_view_tab_handoffs
-            .get(&handoff)
-            .ok_or("remote_view_tab_handoff_missing")?
-            .check_link_at(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|_| "remote_view_clock_invalid")?
-                    .as_millis() as u64,
-            )?;
+        if !release_only {
+            current
+                .remote_view_tab_handoffs
+                .get(&handoff)
+                .ok_or("remote_view_tab_handoff_missing")
+                .map_err(str::to_owned)
+                .and_then(crate::native::browser_session_remote_view::check_handoff_time)?;
+        }
         if agent_browser_service_model::remote_view_native_target_digest(&handoff, &current_target)?
             != digest
         {
@@ -194,12 +214,9 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
             .remote_view_tab_handoffs
             .get(&handoff)
             .ok_or("remote_view_tab_handoff_missing")?;
-        after_link.check_link_at(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| "remote_view_clock_invalid")?
-                .as_millis() as u64,
-        )?;
+        if !release_only {
+            crate::native::browser_session_remote_view::check_handoff_time(after_link)?;
+        }
         if agent_browser_service_model::remote_view_native_target_digest(&handoff, &after_target)?
             != digest
             || after_link.native_observation != link.native_observation
@@ -228,15 +245,36 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
         };
         if let Some(proof) = control_target.as_mut() {
             use crate::native::browser_host_control as control;
+            if let Some(request) = &returning_activity {
+                control::return_activity(&target.browser.id, &handoff, &digest, request)?;
+            }
+            if let Some(request) = &activity {
+                control::activity_handoff(&target.browser.id, &handoff, &digest, request)?;
+            }
+            if let Some(request) = &taking {
+                control::take_handoff(&target.browser.id, &handoff, &digest, request)?;
+            }
             if let Some(request) = &returning {
                 control::return_handoff(&target.browser.id, &handoff, &digest, request)?;
             }
-            proof["handoffIntent"] = json!(control::handoff_intent(
-                &target.browser.id,
-                &handoff,
-                &digest
-            )?);
-        } else if returning.is_some() {
+            proof["agentInteractionActive"] =
+                control::metadata(&target.browser.id)?["agentInteractionActive"].clone();
+            // This proof acknowledges only the authenticated exact claim's
+            // release. It never renews finite viewing or interactive capability.
+            proof["handoffIntent"] = if release_only {
+                json!("view")
+            } else {
+                json!(control::handoff_intent(
+                    &target.browser.id,
+                    &handoff,
+                    &digest
+                )?)
+            };
+        } else if returning.is_some()
+            || taking.is_some()
+            || activity.is_some()
+            || returning_activity.is_some()
+        {
             return Err("browser_handoff_target_unconfirmed".into());
         }
         Ok::<_, String>((target, mode, control_target))
@@ -325,12 +363,7 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
                             .remote_view_tab_handoffs
                             .get(&handoff)
                             .ok_or("remote_view_tab_handoff_missing")?;
-                        link.check_link_at(
-                            std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .map_err(|_| "remote_view_clock_invalid")?
-                                .as_millis() as u64,
-                        )?;
+                        crate::native::browser_session_remote_view::check_handoff_time(link)?;
                         let original = store.original_browser_identity(&state, &target.browser);
                         let mode = store.inspect_task_mode(&target.session.id)?;
                         let current = store.load_session_state()?;
@@ -399,7 +432,14 @@ async fn finish_current_inspection(
     control_target: Option<Value>,
     continuation: impl std::future::Future<Output = Result<Value, String>>,
 ) -> Result<Value, String> {
-    if matches!(choice, "inspect_control" | "return_handoff") {
+    if matches!(
+        choice,
+        "inspect_control"
+            | "return_handoff"
+            | "take_handoff"
+            | "activity_handoff"
+            | "return_activity"
+    ) {
         return Ok(json!({"success":true,"data":{
             "schemaVersion":"agent-browser.handoff-mode.v1",
             "mode":mode,"operations":[],"nativeControlTarget":control_target

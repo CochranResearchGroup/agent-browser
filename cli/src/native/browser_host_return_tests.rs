@@ -406,17 +406,91 @@ fn human_handoff_standalone_dispatch_and_reconnect_share_durable_custody() {
         let command = json!({"id":"before","action":"click","sessionId":"task"});
         admit_command(None, None, &command, false).unwrap().unwrap().finish(true).unwrap();
         begin_handoff("browser", "invitation", "exact-target").unwrap();
+        assert_eq!(metadata("browser").unwrap()["owner"], "agent");
+        let passive = json!({"id":"passive","action":"click","sessionId":"task"});
+        admit_command(None, None, &passive, false).unwrap().unwrap().finish(true).unwrap();
+        human_handoff::take_handoff("browser", "invitation", "exact-target", "viewer:take").unwrap();
         assert_eq!(metadata("browser").unwrap()["owner"], "human");
         assert_eq!(handoff_intent("browser", "invitation", "exact-target").unwrap(), "interactive");
         assert_eq!(handoff_intent("browser", "passive", "exact-target").unwrap(), "view");
         assert!(check_state(&state, "", &command).is_err());
         assert!(admit_command(None, None, &command, true).is_err());
-        assert!(return_handoff("browser", "invitation", "different-target", "return").is_err());
+        assert!(return_handoff("browser", "invitation", "different-target", "viewer:return").is_err());
         assert_eq!(metadata("browser").unwrap()["owner"], "human");
-        return_handoff("browser", "invitation", "exact-target", "return").unwrap();
-        return_handoff("browser", "invitation", "exact-target", "return").unwrap();
-        assert_eq!(metadata("browser").unwrap()["owner"], "agent");
+        return_handoff("browser", "invitation", "exact-target", "viewer:return").unwrap();
+        return_handoff("browser", "invitation", "exact-target", "viewer:return").unwrap();
+        assert_eq!(metadata("browser").unwrap()["owner"], "awaiting_observation");
         let command = json!({"id":"after","action":"click","sessionId":"task"});
+        assert!(admit_command(None, None, &command, false).is_err());
+        observed("browser", read("browser").unwrap().epoch).unwrap();
+        assert_eq!(metadata("browser").unwrap()["owner"], "agent");
         admit_command(None, None, &command, false).unwrap().unwrap().finish(true).unwrap();
+    });
+}
+
+#[test]
+fn ordinary_return_preserves_each_native_viewer_claim_and_override_is_explicit() {
+    fixture(|| {
+        use super::human_handoff as human;
+        human::begin_handoff("browser", "same-link", "target").unwrap();
+        human::take_handoff("browser", "same-link", "target", "viewer-a:take-a").unwrap();
+        human::take_handoff("browser", "same-link", "target", "viewer-b:take-b").unwrap();
+        let epoch = read("browser").unwrap().epoch;
+        let before = metadata("browser").unwrap();
+        for result in [
+            prepare_standalone_return("browser", epoch, "agent", "ordinary return"),
+            eligible_return_observation("browser", epoch, "agent", "ordinary return").map(|_| ()),
+            commit_observed_return("browser", epoch, "agent", "ordinary return").map(|_| ()),
+            change(
+                "browser",
+                "return",
+                epoch,
+                "agent",
+                "ordinary return",
+                false,
+            )
+            .map(|_| ()),
+        ] {
+            let error = result.unwrap_err();
+            assert!(error.contains("browser_control_active_native_viewers"));
+            assert!(error.contains("view-only"));
+        }
+        assert_eq!(metadata("browser").unwrap(), before);
+        human::return_handoff("browser", "same-link", "target", "viewer-a:return-a").unwrap();
+        let remaining = read("browser").unwrap();
+        assert!(remaining.human);
+        assert!(change(
+            "browser",
+            "return",
+            remaining.epoch,
+            "agent",
+            "ordinary return",
+            false
+        )
+        .is_err());
+        human::return_handoff("browser", "same-link", "target", "viewer-b:return-b").unwrap();
+        assert!(!read("browser").unwrap().human);
+        assert!(read("browser").unwrap().awaiting_observation);
+
+        human::begin_handoff("override-browser", "override-link", "target").unwrap();
+        human::take_handoff(
+            "override-browser",
+            "override-link",
+            "target",
+            "viewer-a:take-a",
+        )
+        .unwrap();
+        let epoch = read("override-browser").unwrap().epoch;
+        change(
+            "override-browser",
+            "override",
+            epoch,
+            "authorized operator",
+            "Explicit override",
+            false,
+        )
+        .unwrap();
+        assert!(!read("override-browser").unwrap().human);
+        assert!(read("override-browser").unwrap().awaiting_observation);
     });
 }

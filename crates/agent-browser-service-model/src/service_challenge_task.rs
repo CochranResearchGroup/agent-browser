@@ -67,6 +67,11 @@ pub struct ServiceChallengeTaskRecord {
     pub idempotency_key_sha256: String,
     pub created_at: String,
     pub deadline_at: String,
+    /// Immutable service provenance; absent on unqualified legacy records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deadline_origin: Option<crate::ServiceTimeOrigin>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_deadline_ms: Option<u64>,
     pub service_name: String,
     pub agent_name: String,
     pub task_name: String,
@@ -91,6 +96,35 @@ pub struct ServiceChallengeTaskRecord {
     /// as opaque JSON. Authority decisions decode it into typed evidence first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receipt: Option<Value>,
+}
+
+impl ServiceChallengeTaskRecord {
+    /// Validate an immutable relative origin against another qualified service
+    /// observation. This performs no I/O and does not trust caller/guest UTC.
+    pub fn require_qualified_deadline(&self, now: &crate::ServiceTimeOrigin) -> Result<(), String> {
+        let origin = self
+            .deadline_origin
+            .as_ref()
+            .ok_or("challenge_task_deadline_origin_unqualified")?;
+        let duration = self
+            .relative_deadline_ms
+            .ok_or("challenge_task_deadline_origin_unqualified")?;
+        let deadline = origin.deadline_ms(duration).map_err(str::to_owned)?;
+        now.validate().map_err(str::to_owned)?;
+        let retained = DateTime::parse_from_rfc3339(&self.deadline_at)
+            .map_err(|_| "challenge_task_deadline_evidence_invalid")?
+            .timestamp_millis();
+        if u64::try_from(retained).ok() != Some(deadline) {
+            return Err("challenge_task_deadline_evidence_invalid".into());
+        }
+        if now.earliest_utc_ms >= deadline {
+            return Err("challenge_task_deadline_exceeded".into());
+        }
+        if now.latest_utc_ms >= deadline || now.latest_utc_ms < origin.earliest_utc_ms {
+            return Err("challenge_task_deadline_time_uncertain".into());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -339,6 +373,8 @@ pub fn complete_service_challenge_task_start(
         idempotency_key_sha256: prepared.idempotency_key_sha256,
         created_at: created.to_rfc3339(),
         deadline_at: (created + Duration::milliseconds(deadline_delta)).to_rfc3339(),
+        deadline_origin: None,
+        relative_deadline_ms: None,
         service_name: prepared.input.service_name,
         agent_name: prepared.input.agent_name,
         task_name: prepared.input.task_name,

@@ -1,4 +1,7 @@
 "use client";
+import {dashboardLocalFailure} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import { useEffect, useRef, useState } from "react";
 import type { NativeBrowserWindow } from "@/lib/native-window-inventory";
@@ -31,10 +34,10 @@ export function NativeWindowViewport({ target, loading }: { target: NativeBrowse
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         if (cancelled) return;
-        if (!api?.isConnected()) throw new Error("native_viewer_unavailable");
+        if (!api?.isConnected()) throw dashboardLocalFailure(new Error("native_viewer_unavailable"),"native_viewer_unavailable","packages/dashboard/src/components/native-window-viewport.tsx","NativeWindowViewport");
         await api.activateWindow(generation, windowId);
         if (!cancelled) setView({ key, state: "opened" });
-      } catch { if (!cancelled) setView({ key, state: "failed" }); }
+      } catch (error) {void reportDashboardComponentFailure(error,"native-window-viewport.tsx"); if (!cancelled) setView({ key, state: "failed" }); }
     });
     return () => { cancelled = true; };
   }, [key, desktopId, windowId, generation, attempt]);

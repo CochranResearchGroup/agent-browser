@@ -269,3 +269,10 @@ await assert.rejects(recoverGuacamolePrimary({
   },
 }), /guacamole_primary_recovery_binding_changed \(occurrence 00000000-0000-4000-8000-000000000001\)/);
 console.log("Guacamole backend ownership, explicit terminal recovery and exact sharing custody passed");
+
+const nestedOwnerFailure={code:"guacamole_primary_recovery_binding_changed",occurrenceId:ownedId,recourse:{recoveryRegistry:{recipe:"owner_exact_binding"}}};
+const ownerPlan={step:"inspect_original"};let nestedCalls=0;
+await assert.rejects(recoverGuacamolePrimary({dashboardHref:"https://dashboard.example.test/",stream:{providerMode:"simultaneous_view",routeId:"route-1",connectionId:"17"} as Parameters<typeof recoverGuacamolePrimary>[0]["stream"],fetchImpl:async()=>{
+ nestedCalls++;return new Response(JSON.stringify(nestedCalls===1?{success:false,terminalOccurrenceId:ownedId}:{success:true,data:{ok:false,failure:nestedOwnerFailure,recoveryPlan:ownerPlan},primaryOwned:true,granted:false,activeConnectionId:"17"}),{status:nestedCalls===1?503:200});
+}}),(error:any)=>error.code===nestedOwnerFailure.code&&error.occurrenceId===ownedId&&JSON.stringify(error.failure)===JSON.stringify(nestedOwnerFailure)&&JSON.stringify(error.recoveryPlan)===JSON.stringify(ownerPlan));
+assert.equal(nestedCalls,2,"nested owner refusal cannot be accepted or trigger another recovery");

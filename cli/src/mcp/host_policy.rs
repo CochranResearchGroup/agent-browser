@@ -10,9 +10,10 @@ fn issue(error: impl Into<String>) -> JsonRpcError {
 }
 pub(super) fn tool() -> Value {
     json!({"name":"browser_policy","title":"Configure optional app/task rules","description":"App defaults and explicit per-task replacement/clear. Unrestricted operations need no additional grant. Scoped operator override is attributable and bound to one task/action/request and current effective policy; it never bypasses human takeover or peer custody.","inputSchema":{"type":"object","additionalProperties":false,"properties":{
-        "taskId":{"type":"string"},"operation":{"type":"string","enum":["status","set_app","set_task","clear_app","clear_task","override"]},"expectedRevision":{"type":"integer","minimum":0},"actor":{"type":"string"},"reason":{"type":"string"},
+        "taskId":{"type":"string"},"operation":{"type":"string","enum":["status","set_app","set_task","clear_app","clear_task","override","override_capacity","override_lookup"]},"expectedRevision":{"type":"integer","minimum":0},"actor":{"type":"string"},"reason":{"type":"string"},
         "policy":{"type":"object","additionalProperties":false,"properties":{"version":{"const":1},"deniedActions":{"type":"array","items":{"type":"string"},"maxItems":128},"artifactDestinations":{"type":"object","additionalProperties":{"type":"string"}}},"required":["version"]},
-        "overrideAction":{"type":"string"},"requestId":{"type":"string"}},"required":["taskId","operation"]}})
+        "scope":{"type":"string","enum":["app","task"]},"capacity":{"type":"object","additionalProperties":false,"properties":{"activeLimit":{"type":"integer","minimum":1}},"required":["activeLimit"]},
+        "overrideId":{"type":"string"},"overrideAction":{"type":"string"},"requestId":{"type":"string"}},"required":["taskId","operation"]}})
 }
 pub(super) fn artifact_tool() -> Value {
     json!({"name":"browser_artifact","title":"Capture or download to an app-authorized handle","description":"Write a screenshot or triggered download to one new file below the task's configured artifact handle. Returns local metadata only; does not publish/share the file. Existing files and symlinked destinations are refused.","inputSchema":{"type":"object","additionalProperties":false,"properties":{
@@ -49,12 +50,13 @@ pub(super) fn artifact(arguments: &Value, transport: &str) -> Result<Value, Json
         .sessions
         .get(task_id)
         .ok_or_else(|| issue("browser_artifact_task_missing"))?;
+    let limit = store.artifact_reference_limit(task_id).map_err(issue)?;
     if state
         .task_artifact_references
         .get(task_id)
-        .is_some_and(|rows| rows.len() >= 256)
+        .is_some_and(|rows| rows.len() >= limit)
     {
-        return Err(issue("browser_artifact_reference_capacity_reached"));
+        return Err(issue(format!("browser_artifact_reference_capacity_reached:maximumArtifactReferences={limit}; inspect browser_command action=task_operation params={{\"operation\":\"capacity\"}} and increase this task's policy.maximumArtifactReferences before capture; retained originals are preserved")));
     }
     let id = arguments["requestId"]
         .as_str()

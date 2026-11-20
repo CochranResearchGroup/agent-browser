@@ -1,4 +1,7 @@
 "use client";
+import {dashboardConfirmationFailure,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import { Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -26,9 +29,9 @@ export function NativeHandoffDelete({ record, onDeleted }: { record: ServiceMana
           params: { handoffId: record.handoffId, handoffOperation: "delete" } },
       }));
       const data = response.data as Record<string, unknown> | undefined;
-      if (data?.handoffId !== record.handoffId || data.status !== "deleted") throw new Error("unconfirmed_link_delete_receipt");
+      if ((data?.handoffId !== record.handoffId || data.status !== "deleted") || responseFailureMetadata(response)) throw dashboardConfirmationFailure(response,"unconfirmed_link_delete_receipt",{source:"packages/dashboard/src/components/native-handoff-delete.tsx",owningFunction:"remove",...{handoffId:record.handoffId}});
       confirmed.current = true; setOpen(false); onDeleted(record.handoffId);
-    } catch { setFailed(true); }
+    } catch (error) {void reportDashboardComponentFailure(error,"native-handoff-delete.tsx"); setFailed(true); }
     finally { pending.current = false; setBusy(false); }
   };
   return <>

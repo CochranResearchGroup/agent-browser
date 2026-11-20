@@ -1,3 +1,4 @@
+import {dashboardLocalFailure} from "./response-failure.ts";
 export type ServiceProfileLeaseAction = "acquire" | "rejoin" | "renew" | "release" | "reconcile" | "recover";
 
 export type ServiceProfileLeaseRecord = {
@@ -102,7 +103,7 @@ export function defaultProfileLeaseExpiry(now = new Date()): string {
 export function profileLeaseExpiryToIso(value: string): string {
   const parsed = new Date(value);
   if (!value.trim() || Number.isNaN(parsed.getTime())) {
-    throw new TypeError("Enter a valid lease expiry time");
+    throw dashboardLocalFailure(new TypeError("Enter a valid lease expiry time"),"dashboard_argument_invalid","packages/dashboard/src/lib/service-profile-leases.ts","profileLeaseExpiryToIso");
   }
   return parsed.toISOString();
 }

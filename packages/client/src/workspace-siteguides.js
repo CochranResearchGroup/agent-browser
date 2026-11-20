@@ -1,3 +1,5 @@
+import {clientFailureError} from './client-recovery.js';
+import {createTeachingCapacity} from './teaching-capacity.js';
 // @ts-check
 import {readdir,readFile,lstat} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -6,7 +8,7 @@ import {createTeachingReviewClient,resolveTeachingAcceptedBaseline} from './teac
 import {createTeachingGrillingClient} from './teaching-grilling.js';
 import {writeTeachingDraftCandidate,createTeachingAgentSubmissionOwner} from './teaching-draft.js';
 const sha=value=>createHash('sha256').update(value).digest('hex');
-const fail=reason=>{throw Error(reason);};
+const fail=reason=>{throw clientFailureError(reason,{source:'packages/client/src/workspace-siteguides.js',owningFunction:'fail'});};
 
 /**
  * Composition of the existing candidate directory and teaching owners. Trusted
@@ -16,14 +18,15 @@ const fail=reason=>{throw Error(reason);};
  */
 export function createWorkspaceSiteGuides(options) {
  const {candidateDirectory,browser,evidence,resolveSelection,authorizeTask}=options;
- const submissions=createTeachingAgentSubmissionOwner({candidateDirectory});
- const review=createTeachingReviewClient(options);
+ const capacity=createTeachingCapacity(options.teachingCapacity);
+ const submissions=createTeachingAgentSubmissionOwner({candidateDirectory,teachingCapacity:capacity});
+ const review=createTeachingReviewClient({...options,teachingCapacity:capacity});
  const grilling=createTeachingGrillingClient({review,readOperatorAnswer:options.readOperatorAnswer});
  async function records() {
   const stat=await lstat(candidateDirectory);
   if(!stat.isDirectory()||stat.isSymbolicLink()||(process.getuid&&stat.uid!==process.getuid())||(process.platform!=='win32'&&(stat.mode&0o077)))fail('teaching_review_directory_invalid');
   const names=(await readdir(candidateDirectory)).filter(name=>/^[a-z0-9][a-z0-9-]{0,119}\.json$/.test(name));
-  if(names.length>4096)fail('siteguides_catalog_limit');
+  if(names.length>capacity().policy.maximumCatalogEntries)fail('siteguides_catalog_limit');
   const result=[];
   for(const name of names) {
    const path=join(candidateDirectory,name),entry=await lstat(path);
@@ -49,7 +52,7 @@ export function createWorkspaceSiteGuides(options) {
   if(!record?.guide.teaching)fail('teaching_draft_required');
   const root=record.guide.teaching.lineage?.rootGuideId??guideId;
   const original=await submissions.read({taskId:record.guide.teaching.sourceTaskId,rootGuideId:root,operationId:root});
-  const currentReview=createTeachingReviewClient({...options,sourceStatus:options.sourceStatus?input=>options.sourceStatus(Object.assign({},input,{rootGuideId:root})):undefined,acceptedVersion:original.acceptedVersion??options.acceptedVersion});
+  const currentReview=createTeachingReviewClient({...options,teachingCapacity:capacity,sourceStatus:options.sourceStatus?input=>options.sourceStatus(Object.assign({},input,{rootGuideId:root})):undefined,acceptedVersion:original.acceptedVersion??options.acceptedVersion});
   return {original,review:currentReview,grilling:createTeachingGrillingClient({review:currentReview,readOperatorAnswer:options.readOperatorAnswer})};
  }
  async function agentIntent(request) {
@@ -68,7 +71,7 @@ export function createWorkspaceSiteGuides(options) {
   const history=(await records()).filter(item=>(item.guide.teaching?.lineage?.rootGuideId??item.guide.guideId)===view.rootGuideId).map(item=>({guideId:item.guide.guideId,sha256:item.sha256,revision:item.guide.teaching?.lineage?.revision??1,operationId:item.guide.teaching?.lineage?.operationId})).sort((a,b)=>a.revision-b.revision);
   return {view:{...view,teachingContext:owners.original.context??options.context,mediaReferences:owners.original.references},history};
  }
- return {async dispatch(request) {
+ return {capacity,async dispatch(request) {
   if(!request||typeof request!=='object')fail('siteguides_request_required');
   switch(request.operation) {
    case 'list': {
@@ -145,7 +148,7 @@ export function createWorkspaceSiteGuides(options) {
     let staged=(await records()).find(item=>item.guide.guideId===request.rootGuideId);
     if(staged){if(JSON.stringify(staged.guide)!==JSON.stringify(guide))fail('teaching_agent_published_content_changed');}
     else {const written=await writeTeachingDraftCandidate({candidateDirectory,candidateOnly:true,guide});staged={guide,sha256:written.sha256};}
-    if(response.questions?.length){const scopedReview=createTeachingReviewClient({...options,acceptedVersion:original.acceptedVersion});const scopedGrilling=createTeachingGrillingClient({review:scopedReview,readOperatorAnswer:options.readOperatorAnswer});const prepared=await scopedGrilling.prepare({taskId:request.taskId,guideId:guide.guideId,expectedSha256:staged.sha256,operationId:request.operationId+'-questions',questions:response.questions});return {...prepared,rootGuideId:request.rootGuideId,agentOperationId:request.operationId};}
+    if(response.questions?.length){const scopedReview=createTeachingReviewClient({...options,teachingCapacity:capacity,acceptedVersion:original.acceptedVersion});const scopedGrilling=createTeachingGrillingClient({review:scopedReview,readOperatorAnswer:options.readOperatorAnswer});const prepared=await scopedGrilling.prepare({taskId:request.taskId,guideId:guide.guideId,expectedSha256:staged.sha256,operationId:request.operationId+'-questions',questions:response.questions});return {...prepared,rootGuideId:request.rootGuideId,agentOperationId:request.operationId};}
     return {status:'saved',guideId:guide.guideId,rootGuideId:request.rootGuideId,sha256:staged.sha256,agentOperationId:request.operationId,ordinaryReuseAllowed:false};
    }
    case 'list_sources':await allowed(request.taskId,'use');if(!options.listSources)fail('teaching_source_configuration_unavailable');return {sources:await options.listSources(request.taskId)};

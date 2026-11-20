@@ -21,8 +21,9 @@ use super::browser_session_store::BrowserSessionSqliteStore;
 #[path = "browser_human_handoff.rs"]
 mod human_handoff;
 pub(crate) use human_handoff::{
-    begin_handoff, begin_reopened_handoff, handoff_intent, prepare_handoff,
-    reconcile_recovered_handoff, recovery_rebind_pending, return_handoff,
+    activity_handoff, begin_handoff, begin_reopened_handoff, handoff_intent, prepare_handoff,
+    reconcile_recovered_handoff, recovery_rebind_pending, return_activity, return_handoff,
+    take_handoff,
 };
 
 #[path = "browser_handoff_reopen_control.rs"]
@@ -213,6 +214,8 @@ pub(crate) fn metadata(browser_id: &str) -> Result<Value, String> {
     Ok(
         json!({"epoch":control.epoch,"owner":if control.human {"human"} else if control.awaiting_observation {"awaiting_observation"} else {"agent"},
         "pauseReads":control.pause_reads,"cooperativeOnly":true,"actor":control.actor,
+        "agentInteractionActive":!control.human && control.flights.values().any(|state| state == "dispatched"),
+        "humanCoordination":human_handoff::coordination_metadata(&control),
         "pendingOutcomeCount":pending.len(),"pendingOutcomes":pending.iter().take(32).map(|(id,state)|json!({"requestId":id,"state":state})).collect::<Vec<_>>(),"outcomesTruncated":pending.len()>32,"lastChange":control.audit.last()}),
     )
 }
@@ -291,7 +294,7 @@ fn permits(control: &Control, action: &str) -> Result<(), String> {
         return Err("browser_control_human: explicitly return control before automation".into());
     }
     if control.awaiting_observation {
-        return Err("browser_control_fresh_observation_required".into());
+        return Err("browser_control_fresh_observation_required: observe the retained task with browser_continue or Native capture, then continue; reconcile any original uncertain dispatch without replay".into());
     }
     Ok(())
 }
@@ -347,6 +350,7 @@ pub(crate) fn prepare_standalone_return(
         if control.epoch != expected {
             return Err("browser_control_epoch_changed".into());
         }
+        human_handoff::ordinary_return_allowed(control)?;
         if !control.human || control.awaiting_observation || !flight_clear(control) {
             return Err("browser_control_return_observation_unavailable".into());
         }
@@ -367,6 +371,7 @@ pub(crate) fn eligible_return_observation(
     if control.epoch != expected {
         return Err("browser_control_epoch_changed".into());
     }
+    human_handoff::ordinary_return_allowed(&control)?;
     Ok(control.human
         && !control.awaiting_observation
         && flight_clear(&control)
@@ -490,6 +495,7 @@ pub(crate) fn commit_observed_return(
         if control.epoch != expected {
             return Err("browser_control_epoch_changed".into());
         }
+        human_handoff::ordinary_return_allowed(control)?;
         if !control.human || control.awaiting_observation || !flight_clear(control) {
             return Err("browser_control_return_observation_unavailable".into());
         }
@@ -555,6 +561,9 @@ pub(crate) fn change(
         if control.epoch != expected {
             return Err("browser_control_epoch_changed".into());
         }
+        if operation == "return" {
+            human_handoff::ordinary_return_allowed(control)?;
+        }
         match operation {
             "takeover" => {
                 // Best effort only: unavailable private provenance retains the
@@ -610,7 +619,10 @@ pub(crate) fn observed(browser_id: &str, expected: u64) -> Result<(), String> {
 
 /// Read existing producer provenance; never create a completion or accept caller
 /// supplied evidence. Restrict the live-supervisor exception to terminal ordinary
-/// click/evaluate requests. Native/private input uncertainty retains positive-dispatcher-exit rules.
+/// journal-eligible requests. Native input and unjournaled uncertainty retain
+/// positive-dispatcher-exit rules.
+/// Completion presence is producer bookkeeping, not trusted guest elapsed time;
+/// the terminal dispatcher flight, exact original and fresh observation remain required.
 fn completed_ordinary_request(
     browser_id: &str,
     caller_task_id: &str,
@@ -644,12 +656,13 @@ fn completed_ordinary_request(
         return false;
     };
     original.task_id == caller_task_id
-        && matches!(original.action.as_str(), "click" | "evaluate")
+        && super::browser_task_operations::eligible_action(&original.action)
         && original.state == agent_browser_service_model::BrowserTaskOperationState::Uncertain
-        && original
-            .completed_at_ms
-            .is_some_and(|at| at >= original.created_at_ms)
-        && original.control_epoch == expected
+        && original.completed_at_ms.is_some()
+        // Current expected epoch is already matched to the current control
+        // generation by reconcile_ready. Historical completed originals keep
+        // their immutable earlier epoch across actual human takeover/return.
+        && original.control_epoch <= expected
         && original.browser_id == browser_id
         && original.request_id == request_id
         && original.profile_id == task.profile_id
@@ -761,9 +774,13 @@ pub(crate) fn reconcile(
 pub(crate) struct Admission {
     path: PathBuf,
     id: String,
+    observation_epoch: Option<u64>,
 }
 impl Admission {
     pub(crate) fn undispatched(self) -> Result<(), String> {
+        if self.observation_epoch.is_some() {
+            return Ok(());
+        }
         transaction(&self.path, |control| {
             control.flights.remove(&self.id);
             control.owners.remove(&self.id);
@@ -772,6 +789,15 @@ impl Admission {
     }
     pub(crate) fn finish(self, success: bool) -> Result<(), String> {
         transaction(&self.path, |control| {
+            if let Some(expected) = self.observation_epoch {
+                if success && control.epoch == expected && !control.human && flight_clear(control) {
+                    control.awaiting_observation = false;
+                    control
+                        .audit
+                        .push(json!({"epoch":expected,"operation":"fresh_page_observation"}));
+                }
+                return Ok(());
+            }
             control.flights.insert(
                 self.id.clone(),
                 if success {
@@ -788,7 +814,29 @@ impl Admission {
 /// Each cooperating route calls this immediately before actual page dispatch.
 pub(crate) fn admit(browser_id: &str, action: &str, id: &str) -> Result<Option<Admission>, String> {
     if status(action) || observation(action) {
-        check(browser_id, action)?;
+        let control = read(browser_id)?;
+        permits(&control, action)?;
+        // Only an actual successful page/capture result may satisfy freshness;
+        // process/status proof and passive metadata never do.
+        if control.awaiting_observation
+            && !control.human
+            && matches!(
+                action,
+                "url"
+                    | "snapshot"
+                    | "screenshot"
+                    | "content"
+                    | "native_capture"
+                    | "desktop_capture"
+                    | "desktop_evidence_observe"
+            )
+        {
+            return Ok(Some(Admission {
+                path: path(browser_id)?,
+                id: String::new(),
+                observation_epoch: Some(control.epoch),
+            }));
+        }
         return Ok(None);
     }
     admit_mutation(browser_id, action, id, None)
@@ -848,7 +896,11 @@ fn admit_mutation(
             .insert(id.clone(), (std::process::id(), owner));
         Ok(())
     })?;
-    Ok(Some(Admission { path, id }))
+    Ok(Some(Admission {
+        path,
+        id,
+        observation_epoch: None,
+    }))
 }
 
 /// Last managed-runtime admission, before target activation or special operator
@@ -869,7 +921,13 @@ pub(crate) fn guarded(
         {
             admission.undispatched()?;
         } else {
-            admission.finish(result.as_ref().is_ok_and(|value| value["success"] != false))?;
+            let actual_observation = admission.observation_epoch.is_none()
+                || result.as_ref().is_ok_and(|value| {
+                    value["urlObserved"] != false && value["data"]["urlObserved"] != false
+                });
+            admission.finish(
+                actual_observation && result.as_ref().is_ok_and(|value| value["success"] != false),
+            )?;
         }
     }
     result
@@ -1046,6 +1104,43 @@ mod integration_tests {
         }
         std::fs::remove_dir_all(directory).unwrap();
     }
+    #[test]
+    fn returned_control_requires_successful_current_epoch_page_observation() {
+        fixture(|| {
+            let location = path("browser").unwrap();
+            transaction(&location, |control| {
+                control.awaiting_observation = true;
+                Ok(())
+            })
+            .unwrap();
+            assert!(admit("browser", "browser_pid", "status").unwrap().is_none());
+            assert!(read("browser").unwrap().awaiting_observation);
+            admit("browser", "url", "failed-observation")
+                .unwrap()
+                .unwrap()
+                .finish(false)
+                .unwrap();
+            assert!(check("browser", "click").is_err());
+            let stale = admit("browser", "native_capture", "stale-observation")
+                .unwrap()
+                .unwrap();
+            transaction(&location, |control| {
+                control.epoch += 1;
+                Ok(())
+            })
+            .unwrap();
+            stale.finish(true).unwrap();
+            assert!(check("browser", "click").is_err());
+            admit("browser", "native_capture", "fresh-observation")
+                .unwrap()
+                .unwrap()
+                .finish(true)
+                .unwrap();
+            assert!(!read("browser").unwrap().awaiting_observation);
+            assert!(check("browser", "click").is_ok());
+        });
+    }
+
     #[test]
     fn host_control_atomic_takeover_retains_dispatch_and_requires_fresh_return() {
         fixture(|| {

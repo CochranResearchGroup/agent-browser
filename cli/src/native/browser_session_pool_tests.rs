@@ -4547,6 +4547,132 @@ fn finite_pending_human_deadline_expires_exact_target_after_restart() {
 }
 
 #[test]
+fn finite_handoff_lifetime_uses_service_origin_instead_of_guest_activity_time() {
+    use crate::connection::stable_time::{fixture_stamp, Fixture as TimeFixture};
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/alice", "profileId":"profile-a", "activityAtMs":100,
+        "humanHandoff":true, "pendingHumanRetentionMs":0
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let before = consumer.state().clone();
+    let operations = provider.borrow().operations.clone();
+    let _time = TimeFixture::set(Ok(fixture_stamp(5_000)));
+    let finite = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_link_lifetime", "ttlMs":20, "activityAtMs":100
+    }));
+    assert_eq!(finite["success"], true, "{finite}");
+    assert_eq!(consumer.state().tabs, before.tabs);
+    assert_eq!(consumer.state().browsers, before.browsers);
+    assert_eq!(consumer.state().sessions, before.sessions);
+    assert_eq!(provider.borrow().operations, operations);
+    assert_eq!(
+        calls.get(),
+        1,
+        "Changing link retention never launches another browser"
+    );
+    assert_eq!(finite["data"]["handoffId"], id);
+    assert_eq!(finite["data"]["expiresAtMs"], 5_020,
+        "Finite retention starts at the qualified service observation; caller guest activity time cannot mint its deadline");
+    drop(consumer);
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let committed = consumer.state().clone();
+    {
+        let mut next_epoch = fixture_stamp(5_010);
+        next_epoch.epoch = "22222222-2222-4222-8222-222222222222".into();
+        let _time = TimeFixture::set(Ok(next_epoch));
+        let read = consumer.handle_command(&serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"inspect","activityAtMs":u64::MAX}));
+        assert_eq!(
+            read["data"]["status"], "active",
+            "Current qualified UTC, not guest activity or old service epoch, decides validity"
+        );
+        assert_eq!(read["data"]["expiresAtMs"], 5_020);
+    }
+    {
+        let mut overlap = fixture_stamp(5_019);
+        overlap.latest_utc_ns = 5_021_000_000;
+        let _time = TimeFixture::set(Ok(overlap));
+        let read = consumer.handle_command(&serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"inspect","activityAtMs":0}));
+        assert!(read["data"]["expired"].is_null());
+        assert_eq!(
+            read["data"]["timeError"],
+            "remote_view_handoff_time_uncertain"
+        );
+        assert_eq!(consumer.state(), &committed);
+    }
+    {
+        let _time = TimeFixture::set(Err("stable_time_client_start_failed".into()));
+        let read = consumer.handle_command(&serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"inspect"}));
+        assert_eq!(
+            read["success"], true,
+            "Independent retained metadata remains inspectable"
+        );
+        assert_eq!(read["data"]["timeError"], "stable_time_client_start_failed");
+        assert_eq!(
+            read["data"]["timeRecovery"]["code"],
+            "stable_time_client_start_failed"
+        );
+        assert!(
+            read["data"]["timeRecovery"].get("occurrenceId").is_none(),
+            "Independent metadata inspection does not manufacture a refusal occurrence"
+        );
+        let perpetual = consumer.handle_command(&serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"set_link_lifetime","ttlMs":0}));
+        assert_eq!(
+            perpetual["success"], true,
+            "Explicit perpetual policy requires no reliable clock"
+        );
+        assert_eq!(perpetual["data"]["handoffId"], id);
+    }
+    // Reopen a retained finite record without origin as an actual legacy input.
+    let prior = fixture.store(false).load_session_state().unwrap();
+    let mut legacy = prior.clone();
+    let link = legacy.remote_view_tab_handoffs.get_mut(id).unwrap();
+    link.expires_at_ms = Some(1);
+    link.retention_time = None;
+    fixture
+        .store(false)
+        .compare_and_save_session_state(&prior, &legacy)
+        .unwrap();
+    drop(consumer);
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    {
+        let _time = TimeFixture::set(Err("stable_time_client_start_failed".into()));
+        let read = consumer.handle_command(&serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"inspect","activityAtMs":u64::MAX}));
+        assert!(
+            read["data"]["expired"].is_null(),
+            "Legacy mint cannot become a proved expiry"
+        );
+        assert!(read["data"]["timeError"]
+            .as_str()
+            .unwrap()
+            .starts_with("remote_view_handoff_legacy_time_unqualified"));
+        assert_eq!(
+            read["data"]["timeRecovery"]["code"],
+            "remote_view_handoff_legacy_time_unqualified"
+        );
+    }
+    {
+        let _time = TimeFixture::set(Ok(fixture_stamp(6_000)));
+        let repaired = consumer.handle_command(&serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"set_link_lifetime","ttlMs":20,"activityAtMs":0}));
+        assert_eq!(
+            repaired["success"], true,
+            "Explicit same-link renewal repairs legacy timing"
+        );
+        assert_eq!(repaired["data"]["expiresAtMs"], 6_020);
+        assert_eq!(repaired["data"]["handoffId"], id);
+    }
+    assert_eq!(calls.get(), 1);
+    assert_eq!(consumer.state().tabs, before.tabs);
+    assert_eq!(consumer.state().browsers, before.browsers);
+    assert_eq!(consumer.state().sessions, before.sessions);
+    assert_eq!(provider.borrow().operations, operations);
+}
+
+#[test]
 fn existing_link_lifetime_switches_finite_and_perpetual_without_target_effects() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));

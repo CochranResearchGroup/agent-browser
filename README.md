@@ -4,6 +4,149 @@
 
 # agent-browser
 
+### Task operation capacity
+
+Inspect or update capacity through the existing task-operation interface:
+
+```json
+{"name":"browser_command","arguments":{"taskId":"session:report","action":"task_operation","params":{"operation":"capacity","scope":"task","policy":{"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096}}}}
+```
+
+Omit `policy` to inspect usage and the effective policy. Use `scope:"defaults"`
+for default policy and `scope:"task"` for a retained task override. Updates do not
+restart or rename the task. The initial default is 256, the default increment
+is 256 and the default maximum is 4,096 active records.
+
+Admission archives acknowledged completed operations before extending active
+capacity. Original operation lookup and duplicate detection include archived
+records. Pending and uncertain operations remain active. Native episode and
+attempt checks include archived history. Archival retains evidence; it does not
+delete records or reset an attempt budget.
+
+If unsettled operations fill the configured maximum, inspect and reconcile the
+originals or increase the appropriate configured capacity through this interface.
+Changing a request ID does not make an uncertain effect safe to repeat.
+The first archive promotes the runtime database to schema 6; older binaries
+must not consume that database and silently forget archived duplicate protection.
+
+
+Retention and popup admission use optional positive `maximumRetentionClaims`
+(default 4096) and `maximumPopupAdmissions` (default 64) in the same live policy.
+Retention admission counts all retained unreleased claims; released original
+history remains inspectable and does not consume admission. Guest expiry never
+releases a claim. Capacity status reports `retentionClaimActiveCount`,
+`retentionClaimReleasedHistoryCount`, `retentionClaimCountScope`,
+`retentionClaimLimit` and `popupAdmissionLimit` with the effective policy source.
+Popup refresh admits a bounded batch and reports `deferredEligibleTargetCount`
+instead of refusing the original task. Raise its live policy and refresh the same
+task to admit remaining eligible targets; no input replay or permission change.
+
+Reconnect receipts use optional positive `maximumReconnectRequests` (default 128).
+Runtime lanes use `maximumRuntimeLanes` (default 64) from system defaults only;
+task overrides do not change host-wide capacity. Update these fields through the
+existing `task_operation` capacity interface. Readback reports
+`reconnectRequestLimit`, `runtimeLaneLimit` and `runtimeLanePolicySource`.
+Increasing a limit admits new work without removing original reconnect receipts
+or existing lanes. Lowering a limit never evicts an existing lane. The runtime
+manifest reports its startup snapshot, not current policy.
+
+### Live teaching capacity
+
+Existing client teaching review, submission and workspace owners expose
+`capacity()` for effective policy and `capacity(partialPolicy)` for live updates.
+Pass initial `teachingCapacity` in client options or trusted installed host JSON:
+`{"maximumLineageRevisions":512,"maximumRetainedContexts":4096,"maximumCatalogEntries":4096}`.
+Defaults are 256 lineage revisions and 4096 working contexts/catalog entries.
+Values are positive safe integers. The host rereads private configuration each
+run. Increasing a limit preserves append-only history, duplicate detection and
+provenance. Lowering future admission does not truncate historical lookup or
+change task permissions. No restart, deletion or new approval interface is needed.
+
+### Deferred legacy expiry
+
+Automatic task/tab expiry and disposable-profile deletion are deferred when their
+starting timestamps have only guest-clock evidence. A clock jump cannot authorize
+those destructive effects. `browser_session_reap` reports `maintenanceEvidence`
+with `unqualified_legacy_start`; this does not claim qualified automatic cleanup.
+Use retained task status/briefing for inspection and explicit scoped close under
+existing authority when work is finished. Browser work and explicit close remain
+independent of this maintenance timing qualification.
+
+### Continue after a refusal
+
+Use the existing `browser_command` action `failure_recovery` with
+`params:{"operation":"inspect","occurrenceId":"RETURNED-UUID"}` and the original
+`taskId` when available. `packet` returns sanitized escalation context; `history`
+reads retained attempts. These reads do not dispatch browser input.
+
+`run` accepts a stable UUID `attemptId` and optionally one declared `remedy`
+containing `tool` and `arguments`. It performs registered inspection, one supported
+remedy and verification. Supported remedies use existing task-bound observation,
+reconnect, capacity or owner-proof reconciliation interfaces. Original input and
+permission overrides are excluded. The same attempt and arguments return its
+retained result; changed arguments conflict. After interruption, `reconcile`
+verifies the retained attempt without repeating its remedy.
+
+Configure budgets live with `params:{"operation":"configure","scope":"task",
+"actor":"AGENT","reason":"REVIEWED REPAIR","policy":{"maxAttempts":5,
+"maxNoProgress":3}}`. Use `scope:"defaults"` for defaults. Defaults are three
+attempts and two consecutive checks without progress; zero `maxAttempts` disables
+automatic recovery. Optional positive `maxDurationMs` checks supported StableTime
+observation bounds before subsequent remedy and verification dispatch. It does not
+promise delivery or completion by a deadline. Without it, ordinary recovery reads
+add no timing gate. An unqualified client, service bound or elapsed interval pauses
+only these budgeted steps; inspect, history and escalation remain available.
+Inspection and history remain available after exhaustion.
+Updates preserve prior attempts and require no restart or recompile. Configuration
+and actor labels do not grant new permissions or authenticate the caller.
+
+CLI clients use `agent-browser --json mcp failure-recovery '<JSON request containing
+taskId and params>'`. `agent-browser --json mcp task-operation TASK REQUEST reconcile`
+settles an original failure only from verified owner evidence of no dispatched
+input. Its state is `owner_refused_no_effect`, never a successful acknowledgement.
+A new input intent still needs fresh observation and existing authority. First
+such settlement promotes runtime schema to 7; older readers must refuse it.
+
+After ordinary work resumes, `record_resume` accepts the recovery `attemptId`,
+original occurrence, acknowledged new `requestId` and `actor`. It verifies that
+exact task operation's owner acknowledgement. The association is caller supplied;
+it does not establish website success or task completion. Attempt and outcome
+journal records link the original occurrence without copying private input.
+
+Legacy helper callbacks without owner-qualified executable expiry now return
+`helper_grant_time_unqualified` before new private input. Original request
+inspection/reconciliation and independently verified prior completion remain
+available. Continue through the existing authenticated owner SDK
+(`createOwnerLoginPlaybook` / `connectHostedAuthHelper`) under its current grants;
+caller timestamps or assertions cannot qualify a new credential use. Teaching
+sources with finite, unqualified expiry similarly use current recording-owner
+pin/qualified-read recourse; owner revocation and deletion still apply.
+
+### Recover a public refusal
+
+Workflow refusals preserve structured `failure` recourse alongside the original
+message, request and operation evidence. `failure.occurrenceId` identifies a
+private journal occurrence. `failure.logging.state=durable_pending` means the
+record is in durable custody awaiting journal projection; `failed` reports a
+logging failure separately from the original refusal. An uncertain effect is
+never permission to repeat input.
+
+Read recent task-scoped records without starting a browser:
+
+```json
+{"name":"browser_command","arguments":{"taskId":"session:report","action":"failure_log","params":{"occurrenceId":"RETURNED-OCCURRENCE-ID","limit":100}}}
+```
+
+A known `occurrenceId` can be looked up without `taskId`, including admission
+failures before task creation. HTTP clients can use
+`GET /api/service/failures?occurrenceId=RETURNED-OCCURRENCE-ID`.
+
+Omit `occurrenceId` for recent task records. Filtering occurs before the result limit, so unrelated polling failures do not
+hide the selected occurrence. At most `limit` matching records are returned. The authenticated
+`GET /api/service/failures` and private journal remain available for diagnostics.
+Use the returned `executableNextAction` for supported inspection. Inspection
+itself does not resolve an uncertain operation or establish that replay is safe.
+
 Make real browser work easier to complete, hand to a person, and continue afterward.
 
 Agent Browser provides reusable browser operation, task-appropriate disposable
@@ -81,11 +224,7 @@ Choose `profileMode: "existing"` to require an already registered profile. Choos
 
 Authenticated Native viewer use records operator-journey acceptance for the selected installation after the browser owner confirms the exact target. Opening a link or preparing a route alone does not qualify; inspect `operatorJourneyReady` and its generation-bound presentation receipt in workstation status.
 
-Human assistance defaults to `interaction: "interactive"`: cooperative automation
-pauses and the authorized recipient opens the same browser with input enabled.
-Use `interaction: "view"` for passive viewing. Give control back in the viewer
-before continuing automation; an interrupted return resumes its original request.
-Visibility (`operatorVisible`) and confirmed Native input readiness are separate.
+Human assistance defaults to `interaction: "interactive"`, which enables input without proving that a person is active. Actual Native viewer input temporarily pauses cooperative automation. Remote View returns control after a service-time-qualified quiet interval; explicit **Take control** instead holds control until that viewer selects view-only. Other viewers' activity or holds remain visible and continue to pause the agent. Agent input does not renew human activity. After return, automation requires a successful fresh observation of the retained page. Pending effects are reconciled without replay. Visibility (`operatorVisible`) and Native input readiness are separate.
 
 Call `browser_handoff` with `taskId` to focus the current page and obtain its durable authenticated HTTPS Remote View link. The MCP server completes the link using its configured `AGENT_BROWSER_PUBLIC_ORIGIN`, the public origin of this Agent Browser service. This differs from `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`, which locates the native desktop viewer. Set it in the process environment or the standard `~/.agent-browser/.env` (or `AGENT_BROWSER_ENV_FILE`). Explicit process settings take precedence. Restart existing MCP connections after changing startup configuration. A missing service origin reports `remote_view_public_origin_missing` with configuration guidance. Handoff preserves the task and current page.
 
@@ -105,6 +244,9 @@ After a newly recorded retained-browser recovery, the original interactive hando
 
 The connected MCP catalog has 17 workflow tools. Discover actual schemas before
 use; the source guide does not prove installed support.
+
+
+Ordinary managed tasks support `browser_reconnect` operations `status` and `reconnect` without a hosted attachment. Status distinguishes retained metadata, an ended task (including `terminalReason: explicit_close`) and unavailable metadata, and returns a concrete fresh-facade command. Reconnect freshly observes the same retained task/page; it never opens a replacement browser, reopens a closed task or replays an uncertain request. Transport failures retain the sanitized cause and original request for inspection/reconciliation. Hosted lifecycle operations below keep their existing revision requirements.
 
 `browser_reconnect` accepts taskId and operation status, disconnect, reconnect,
 rebind, configure or reopen. All changes require requestId and expectedRevision
@@ -145,6 +287,11 @@ Scoped overrideAction/requestId returns overrideId for policyOverrideId on that
 exact task/action/request/current policy, never to bypass human control or peers.
 Pass policyOverrideId and requestId at the top level of the supported page tool
 or browser_command; for example action fill with params selector/value.
+
+
+Login input budgets use optional `maximumLoginSteps` in the existing task-operation capacity policy (default 32). Update it at runtime with the other three required capacity fields. Settled episodes can renew; unresolved input in any prior episode must be reconciled first. Native Saved Login `resolve({allowAcknowledgedResume:true,steps:[...]})` can extend a settled plan after fresh observation while preserving its acknowledged prefix. Supported control kinds, account/frame/process checks and no-replay rules remain enforced.
+
+`browser_policy` also supports `override_capacity` with current `expectedRevision`, `actor`, `reason`, `scope: "app" | "task"` and `capacity: {activeLimit:256}`. Task settings override app defaults. Old grants archive automatically and resolve under identical exact task/action/request/current-policy checks. This is a working-set bound, not a permission ceiling or policy-document size optimization. Capacity updates preserve grants; effective permission-policy changes revoke both active and archived grants. Read `overrideCapacity` in status, or use `override_lookup` with `overrideId` to inspect an original without mutation attribution. Neither operation expands permission.
 
 `browser_artifact` takes taskId, kind screenshot/download, handle and relative
 name; download requires selector. Optional fullPage, requestId and policyOverrideId
@@ -3053,6 +3200,11 @@ On macOS, `AGENT_BROWSER_KEYCHAIN_PASSWORD` unlocks the login keychain before Ch
 | `AGENT_BROWSER_CONFIRM_ACTIONS`     | Action categories requiring confirmation |
 | `AGENT_BROWSER_CONFIRM_INTERACTIVE` | Enable interactive confirmation prompts  |
 | `AGENT_BROWSER_RUNTIME_HOST`        | Enable guarded single-host admission for named runtime lanes |
+| `AGENT_BROWSER_STABLE_TIME_CLIENT` | Absolute supported Native freshness client config; default ~/.local/share/stable-time/client.json |
+| `AGENT_BROWSER_STABLE_TIME_BINARY` | Supported Native freshness client executable, default stable-time |
+| `AGENT_BROWSER_LATENCY_PHASE` | Opt-in StableTime sampling: routing, state_read, readiness, startup_lock, cdp, persistence or queue; unset means no sampling |
+| `AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT` | Absolute supported StableTime MCP client configuration path for selected sampling |
+| `AGENT_BROWSER_LATENCY_STABLE_TIME_BINARY` | Optional supported StableTime executable, default stable-time |
 | `AGENT_BROWSER_ENV_FILE`            | Optional dotenv file for agent-browser secrets |
 | `AGENT_BROWSER_USE_REAL_KEYCHAIN`   | Use the real OS keychain for Chrome profile launches |
 | `AGENT_BROWSER_KEYCHAIN_PASSWORD`   | Password used to unlock the macOS login keychain or Linux GNOME Keyring |
@@ -7741,8 +7893,9 @@ getTaskOperation from @agent-browser/client/task-briefing.
 The software helper reads authenticated
 GET /api/browser/tasks/{task}/operations/{request} with the existing dashboard
 cookie. Pending/uncertain operations require observation; owner acknowledgement
-is separate from site completion. The 256-operation task limit retains history
-and refuses new effects when full. Continuation observes the retained current
+is separate from site completion. Configured active-history capacity archives completed operations before extending;
+original history and duplicate protection remain available. Unsettled records
+that fill the configured maximum return an actionable capacity refusal. Continuation observes the retained current
 target or returns intervention for lost/changed state without navigation restore.
 Legacy unscoped CLI effects and Native/Auth journals retain their own contracts.
 Operation-backed screenshot references require availability readback before reuse.
@@ -7890,3 +8043,26 @@ The local pre-push gate uses the existing validation selector to run the public 
 
 
 For a Native control observation, pass the addressed browser task ID rather than the Auth caller ID: the progress summary returns a read-only `browser_command` / `task_briefing` action. Missing binding is explicit as `addressed_browser_task_required`. Continuation preserves sanitized incomplete verifier categories, evidence, qualification and supported next reads. Broad executable, dependency and selector changes select the workflow and gate checks as well; the gate is not duplicated inside the tooling aggregate.
+
+### Optional command latency diagnostics
+
+Select one phase with `AGENT_BROWSER_LATENCY_PHASE` and configure the supported StableTime client with `AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT`. Returned `latencyPhases` stay outside command fingerprints and appear in operation data, including supported failure envelopes. Sampling adds clock-client overhead and cannot qualify ordinary command speed. Missing configuration, helper failure or unqualified time produces an unavailable sample without replacing the browser result; each helper exchange is bounded to five seconds. No selected phase means no added time-service call. Service-observation brackets include delivery overhead and bound actual operation elapsed time only from zero to their upper bound.
+
+Artifact reference admission uses optional `maximumArtifactReferences` in the same live task-operation capacity policy (default 256). Capacity status reports `artifactReferenceCount` and `artifactReferenceLimit`; raise the limit on the retained task before another capture. Existing originals remain available. Completed file effects always retain their completion metadata, including if another caller lowered the budget during capture. Updating this admission budget does not delete artifacts or expand destination permissions.
+
+### Native freshness time
+
+Native checkbox, login and image input uses owner-minted StableTime `serviceTime` evidence with service measurement bounds, epoch and counter continuity. Guest wall/boot clocks do not establish freshness. Existing age budgets remain 10 seconds for checkbox/login and 60 seconds for image input. Expired evidence, excessive uncertainty, changed time domain and helper/service failures have distinct recourse. Legacy unqualified evidence requires a fresh supported `native_capture`; original uncertain input is never replayed. A timing failure remains visible in `timeQualificationFailure` on a capture, while freshness-dependent input pauses. Ordinary CDP and read-only task inspection continue.
+
+`AGENT_BROWSER_STABLE_TIME_CLIENT` selects an absolute supported client configuration (default `~/.local/share/stable-time/client.json`); `AGENT_BROWSER_STABLE_TIME_BINARY` selects its executable (default `stable-time`). Credentials remain inside that private supported client. Each helper exchange is bounded to five seconds. Helper/configuration failure is not proof that the StableTime service is down. No local host-counter bridge or guest-clock extrapolation is used.
+
+### Running job deadline evidence
+
+Running job readback may include `deadlineEvidence.state: "unqualified_legacy_start"` and `automaticTerminalization: false`. Legacy guest-clock timestamps cannot prove elapsed execution time and no longer cause automatic terminalization. Inspect the exact original job with `agent-browser --json service jobs --id JOB`. Active-owner cancellation and positive process-exit reconciliation keep their existing proof requirements; inspection does not authorize replay. Persisted qualified deadline auto-finalization is not implemented by this change.
+
+
+Finite handoffs and new Auth/challenge deadlines retain a trusted service-time origin. Ordinary status and original completed-result replay remain available during time-client failure. Legacy finite handoffs require an explicit owner-reviewed `set_link_lifetime` on the same handoff; neither inspection nor an outage extends permission. A finite link whose deadline is not qualified reports `time_unqualified`, not expired. Explicit inspection returns `timeError` and typed `timeRecovery` without recording another refusal occurrence. Returning an existing authenticated viewer's own control remains available without renewing the link. First qualified handoff retention publishes runtime schema 8 atomically; older readers must refuse that database.
+
+Profile recovery/reset plans keep their sealed absolute deadline. New defaults use trusted service time; apply requires the entire current time interval before the deadline. An overlapping interval is uncertain; only a lower bound at or beyond the deadline proves expiry. Authenticated, sealed completed receipts replay before time-client or current-route availability checks. Repairing time qualification never renews the plan or permits replay of unknown input.
+
+Cold runtime startup uses a persistent kernel-owned admission lock. A healthy exact warm continuation bypasses unrelated cold admission. A legacy marker's age never proves its owner absent: preserve live or unqualified ownership and use the reported startup diagnosis/replacement plan rather than deleting markers or killing processes.

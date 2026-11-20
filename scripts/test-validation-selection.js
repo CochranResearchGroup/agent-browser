@@ -10,6 +10,17 @@ function selection(files, options) {
   return classifyValidationSelection(files, options);
 }
 
+for (const [file, job] of [
+  ['scripts/test-native-checkbox-assistance.js', 'serviceClient'],
+  ['scripts/test-native-saved-login.js', 'serviceClient'],
+  ['scripts/smoke-service-incident-summary-http.js', 'serviceClient'],
+  ['scripts/measure-command-latency.mjs', 'repositoryTooling'],
+]) {
+  const classified = selection([file]);
+  assert.deepEqual(classified.unknownFiles, [], `${file}: publication has declared coverage`);
+  assert.equal(classified.jobs[job], true, `${file}: owning validation lane selected`);
+}
+
 function expectSelection(name, files, expected) {
   const actual = selection(files, expected.options);
   assert.equal(actual.schemaVersion, VALIDATION_SELECTION_SCHEMA_VERSION, `${name}: schema version`);

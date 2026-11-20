@@ -9,7 +9,7 @@ fn issue(message: impl Into<String>) -> JsonRpcError {
 }
 pub(super) fn tool() -> Value {
     let open = super::workflow::tools().remove(0);
-    json!({"name":"browser_reconnect","title":"Reconnect or explicitly rebind a hosted browser task","description":"Status is compact metadata only. Disconnect preserves browser/task/control. Reconnect freshly observes without launch; changed desktop requires explicit rebind. Configure report_only (default) or reopen policy. Explicit reopen preserves logical task/profile/browser, never replays URLs or uncertain website effects. Borrowed reopen requires fresh trusted app attachment and preserves human control; managed reopen requires agent control. Unknown reopen remains pending and is never retried.","inputSchema":{"type":"object","additionalProperties":false,"properties":{
+    json!({"name":"browser_reconnect","title":"Reconnect an exact retained browser task","description":"Status is compact metadata only. Ordinary tasks support status/reconnect through the current or a fresh facade, observing the same original target without launch; intentionally closed tasks remain closed. Disconnect preserves browser/task/control. Reconnect freshly observes without launch; changed desktop requires explicit rebind. Configure report_only (default) or reopen policy. Explicit reopen preserves logical task/profile/browser, never replays URLs or uncertain website effects. Borrowed reopen requires fresh trusted app attachment and preserves human control; managed reopen requires agent control. Unknown reopen remains pending and is never retried.","inputSchema":{"type":"object","additionalProperties":false,"properties":{
  "taskId":{"type":"string"},"operation":{"type":"string","enum":["status","disconnect","reconnect","rebind","configure","reopen"]},
  "requestId":{"type":"string","minLength":1,"maxLength":128},"expectedRevision":{"type":"integer","minimum":0},
  "lossPolicy":{"type":"string","enum":["report_only","reopen"]},
@@ -24,12 +24,61 @@ pub(super) fn call(arguments: &Value, transport: &str) -> Result<Value, JsonRpcE
         .map_err(issue)?
         .load_session_state()
         .map_err(issue)?;
-    let task = before
-        .sessions
-        .get(id)
-        .ok_or_else(|| issue("browser_reconnect_task_missing"))?;
+    let Some(task) = before.sessions.get(id) else {
+        if !matches!(operation, "status" | "reconnect") {
+            return Err(issue("browser_reconnect_task_missing: inspect exact-task status; do not create or reopen a replacement implicitly"));
+        }
+        let terminal = before
+            .session_history
+            .iter()
+            .rev()
+            .find(|task| task.id == id);
+        if operation == "reconnect" {
+            let code = if terminal.is_some() {
+                "browser_reconnect_task_ended"
+            } else {
+                "browser_reconnect_task_metadata_unavailable"
+            };
+            let mut error = issue(format!("{code}: inspect exact task history through browser_reconnect status; do not recreate or replay original work"));
+            error.data.as_mut().unwrap()["taskId"] = json!(id);
+            error.data.as_mut().unwrap()["terminalReason"] =
+                json!(terminal.map(|task| task.reason));
+            error.data.as_mut().unwrap()["effectStatus"] = json!("no_effect");
+            error.data.as_mut().unwrap()["recovery"] = json!({"tool":"browser_reconnect","arguments":{"taskId":id,"operation":"status"},"replayAllowed":false});
+            return Err(error);
+        }
+        return Ok(super::tool_response_from_payload(
+            "browser_reconnect",
+            transport,
+            json!({}),
+            json!({"taskId":id,"status":if terminal.is_some() {"task_ended"}else{"task_metadata_unavailable"},
+                "terminalReason":terminal.map(|task| task.reason),
+                "effectStatus":"no_effect","replayAllowed":false,
+                "nextAction":"inspect_task_history_and_original_operation; explicitly closed tasks require a new separately intended task, never automatic reopen"}),
+            false,
+        ));
+    };
     if !before.host_bindings.contains_key(id) {
-        return Err(issue("browser_reconnect_hosted_task_required"));
+        if !matches!(operation, "status" | "reconnect") {
+            return Err(issue("browser_reconnect_ordinary_task_operation_unsupported: use status or reconnect for this exact task; no replacement browser is created"));
+        }
+        let briefing = super::workflow::inspect_briefing(id).map_err(issue)?;
+        if operation == "status" {
+            return Ok(super::tool_response_from_payload(
+                "browser_reconnect",
+                transport,
+                json!({}),
+                json!({"taskId":id,"status":"task_retained","connectionScope":"current_facade_only",
+                    "browserId":task.browser_id,"profileId":task.profile_id,"briefing":briefing,
+                    "recovery":{"tool":"browser_reconnect","arguments":{"taskId":id,"operation":"reconnect"},
+                        "freshFacadeCommand":{"executable":"agent-browser","args":["--json","mcp","host-reconnect",id,"reconnect"]},
+                        "precondition":"use an initialized client or the fresh-facade command; this does not reset any other selected client", "replayAllowed":false}}),
+                false,
+            ));
+        }
+        // Reuse exact retained-context observation. This may initialize the
+        // transport facade, but never allocates a task/browser or replays input.
+        return super::workflow::continue_task(&json!({"taskId":id}), transport);
     }
     let reconnect = if operation == "status" {
         browser_host_reconnect::metadata(&before, id)

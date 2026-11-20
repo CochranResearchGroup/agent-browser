@@ -22,12 +22,13 @@ pub fn command_profile(command: &Value) -> &'static str {
 }
 pub const MAX_AGE_MS: u64 = 60_000;
 
-/// Host clock boundary. Wall time is diagnostic; elapsed readings are scoped to
-/// a Linux boot and include suspend. Unsupported platforms retain wall guards.
+/// Native freshness boundary. Only qualified StableTime service bounds authorize
+/// age decisions. Legacy wall/boot metadata remains diagnostic and inspectable.
 #[derive(Clone, Debug)]
 pub struct NativeImageClockReading {
     pub wall_time_ms: u64,
     pub elapsed: Option<NativeImageElapsedClock>,
+    pub service_time: Option<crate::connection::stable_time::Stamp>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -37,46 +38,20 @@ pub struct NativeImageElapsedClock {
     pub observed_at_ms: u64,
 }
 impl NativeImageClockReading {
+    #[cfg(test)]
+    pub fn fixture(ms: u64) -> Self {
+        Self {
+            wall_time_ms: ms,
+            elapsed: None,
+            service_time: Some(crate::connection::stable_time::fixture_stamp(ms)),
+        }
+    }
     pub fn read() -> Result<Self, String> {
-        let wall_time_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| "browser_native_image_clock_unavailable")?
-            .as_millis() as u64;
-        #[cfg(target_os = "linux")]
-        let elapsed = {
-            let boot_id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
-                .map_err(|_| "browser_native_image_clock_unavailable")?;
-            let boot_id = boot_id.trim().to_owned();
-            uuid::Uuid::parse_str(&boot_id)
-                .map_err(|_| "browser_native_image_clock_unavailable")?;
-            let mut value = libc::timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            };
-            // SAFETY: clock_gettime writes only to this initialized timespec.
-            if unsafe { libc::clock_gettime(libc::CLOCK_BOOTTIME, &mut value) } != 0 {
-                return Err("browser_native_image_clock_unavailable".into());
-            }
-            let observed_at_ms = u64::try_from(value.tv_sec)
-                .ok()
-                .and_then(|seconds| seconds.checked_mul(1000))
-                .and_then(|ms| {
-                    u64::try_from(value.tv_nsec)
-                        .ok()
-                        .and_then(|ns| ms.checked_add(ns / 1_000_000))
-                })
-                .ok_or("browser_native_image_clock_unavailable")?;
-            Some(NativeImageElapsedClock {
-                kind: "linux-boottime-v1".into(),
-                boot_id,
-                observed_at_ms,
-            })
-        };
-        #[cfg(not(target_os = "linux"))]
-        let elapsed = None;
+        let service_time = crate::connection::stable_time::native_now()?;
         Ok(Self {
-            wall_time_ms,
-            elapsed,
+            wall_time_ms: service_time.earliest_ms(),
+            elapsed: None,
+            service_time: Some(service_time),
         })
     }
 }
@@ -116,10 +91,14 @@ pub struct NativeImageObservation {
     pub frame_sha256: String,
     pub native_control_epoch: u64,
     pub observed_at_ms: u64,
-    /// Elapsed authority is owner-minted and usable only inside its exact boot.
-    /// Missing metadata preserves the historical strict wall-clock contract.
+    /// Legacy clock metadata is retained for readback only. It never substitutes
+    /// for qualified service time on a current input attempt.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clock: Option<NativeImageElapsedClock>,
+    /// Qualified service instant sampled before physical capture. Legacy guest
+    /// clock metadata remains inspectable, but never grants current input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_time: Option<crate::connection::stable_time::Stamp>,
     pub registered_action_id: String,
     pub puzzle_sha256: String,
     pub candidates: Vec<NativeImageCandidate>,
@@ -454,51 +433,41 @@ pub fn observe(
 impl NativeImageObservation {
     /// Validate at the receiving clock boundary, never at a caller timestamp.
     pub fn validate_at(&self, clock: &NativeImageClockReading) -> Result<(), String> {
-        self.validate_in_domain(self.time_in_domain(clock)?)
+        self.validate_structure()?;
+        let observed = self.service_time.as_ref().ok_or("browser_native_time_recapture_required: legacy capture has no qualified StableTime evidence; obtain a fresh native_capture")?;
+        let current = clock
+            .service_time
+            .as_ref()
+            .ok_or("browser_native_time_evidence_invalid")?;
+        observed.fresh_at(current, MAX_AGE_MS)
     }
     pub fn validate_current(&self) -> Result<(), String> {
         self.validate_at(&NativeImageClockReading::read()?)
     }
-    pub fn current_time_ms(&self) -> Result<u64, String> {
-        self.time_in_domain(&NativeImageClockReading::read()?)
-    }
-    pub fn time_in_domain(&self, current: &NativeImageClockReading) -> Result<u64, String> {
-        match &self.clock {
-            None => Ok(current.wall_time_ms),
-            Some(observed) => {
-                let now = current
-                    .elapsed
-                    .as_ref()
-                    .ok_or("browser_native_image_clock_domain_changed")?;
-                if observed.kind != "linux-boottime-v1"
-                    || now.kind != observed.kind
-                    || uuid::Uuid::parse_str(&observed.boot_id).is_err()
-                    || observed.boot_id != now.boot_id
-                {
-                    return Err("browser_native_image_clock_domain_changed".into());
-                }
-                Ok(now.observed_at_ms)
-            }
+    pub fn validate_structure(&self) -> Result<(), String> {
+        if let Some(stamp) = &self.service_time {
+            stamp.validate()?;
         }
+        self.validate_observed(self.observed_time_ms(), self.observed_time_ms())
     }
     fn clock_identity(&self) -> Option<(&str, &str)> {
-        self.clock
+        self.service_time
             .as_ref()
-            .map(|clock| (clock.kind.as_str(), clock.boot_id.as_str()))
-    }
-    pub fn observed_time_ms(&self) -> u64 {
-        self.clock
-            .as_ref()
-            .map_or(self.observed_at_ms, |clock| clock.observed_at_ms)
-    }
-    pub fn age_at(&self, clock: &NativeImageClockReading) -> Result<u64, String> {
-        self.validate_at(clock)?;
-        Ok(self.time_in_domain(clock)? - self.observed_time_ms())
+            .map(|stamp| ("stable-time-service-v1", stamp.epoch.as_str()))
     }
     fn validate_in_domain(&self, now_ms: u64) -> Result<(), String> {
+        if self.service_time.is_none() {
+            return Err(
+                "browser_native_time_recapture_required: obtain a fresh native_capture".into(),
+            );
+        }
         self.validate_observed(now_ms, self.observed_time_ms())
     }
-
+    pub fn observed_time_ms(&self) -> u64 {
+        self.service_time
+            .as_ref()
+            .map_or(self.observed_at_ms, |stamp| stamp.earliest_ms())
+    }
     fn validate_observed(&self, now_ms: u64, observed_ms: u64) -> Result<(), String> {
         let hex = |v: &str| v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit());
         let contains = |b: &NativeChallengeBounds| {
@@ -511,9 +480,7 @@ impl NativeImageObservation {
                 && i64::from(b.y) + i64::from(b.height)
                     <= i64::from(self.region.y) + i64::from(self.region.height)
         };
-        if self.clock.as_ref().is_some_and(|clock| {
-            clock.kind != "linux-boottime-v1" || uuid::Uuid::parse_str(&clock.boot_id).is_err()
-        }) || !is_profile(&self.registered_action_id)
+        if !is_profile(&self.registered_action_id)
             || (self.registered_action_id == ROUNDS_PROFILE_ID
                 && (self.tile_image_sha256s.len() != 9
                     || self.tile_image_sha256s.iter().any(|v| !hex(v))))

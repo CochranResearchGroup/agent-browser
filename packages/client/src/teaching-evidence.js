@@ -1,8 +1,9 @@
+import {clientFailureError} from './client-recovery.js';
 import {createHash} from 'node:crypto';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const clone = value => structuredClone(value);
-const fail = code => {throw new Error(code);};
+const fail = (code,context={}) => {throw clientFailureError(code,{...context,source:'packages/client/src/teaching-evidence.js',owningFunction:'fail'});};
 const integer = value => Number.isSafeInteger(value) && value >= 0;
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const text = value => typeof value === 'string' && value.length>0 && value.length<=128 && !/[\u0000-\u001f\u007f]/.test(value);
@@ -52,7 +53,7 @@ export function createTeachingEvidenceClient({recordings, speech}) {
     if(record.recordingId!==selection.recordingId || record.owner!==expected.owner || record.desktopId!==expected.desktopId ||
        record.contextRevision!==expected.contextRevision || start?.slot!==expected.slot || start.generation!==expected.generation ||
        ['application','taskId','sessionId'].some(key=>start.context?.[key]!==expected[key])) fail('teaching_binding_changed');
-    if(record.pinned!==true && record.expiresAtUnixMs!==null && record.expiresAtUnixMs!==undefined && record.expiresAtUnixMs<=Date.now()) fail('teaching_source_expired');
+    if(record.pinned!==true && record.expiresAtUnixMs!==null && record.expiresAtUnixMs!==undefined) fail('teaching_source_expiry_unqualified',{recordingId:selection.recordingId,taskId:expected.taskId});
     if(!['complete','interrupted'].includes(record.state) || !integer(record.durationMs) || record.durationMs<1 ||
        !hash(record.videoSha256) || !hash(record.eventsSha256)) fail('teaching_recording_not_finalized_av');
     const tracks=start.sourceTracks;

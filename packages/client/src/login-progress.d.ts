@@ -1,4 +1,7 @@
 export interface LoginProgress {
+  clientRecovery?:import('./client-recovery.js').ClientRecovery;
+  failure?:Record<string,unknown>;
+  dependencyFailure?:{component:string;code:string;occurrenceId?:string};
   schemaVersion:1;
   outcome:'incomplete'|'verified';
   category:string;

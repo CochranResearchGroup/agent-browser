@@ -70,7 +70,7 @@ function normalizeFiles(files) {
 function surfacesFor(file) {
   const surfaces = [];
   if (isDocsOrGovernance(file)) surfaces.push('docs');
-  if (file.startsWith('packages/dashboard/')) surfaces.push('dashboard');
+  if (file.startsWith('packages/dashboard/') || ['scripts/test-dashboard-failure-observation.js', 'scripts/test-dashboard-read-coordinator.ts', 'scripts/test-dashboard-view-streams.js', 'scripts/test-dashboard-guacamole-connection-sharing.ts', 'scripts/test-dashboard-launcher-eligibility.js', 'scripts/test-dashboard-profile-allocation.js', 'scripts/test-native-window-inventory.ts'].includes(file)) surfaces.push('dashboard');
   if (isServiceClient(file) || isAuthCompositionSurface(file) || /^scripts\/test-login-(?:progress|discovery|recovery|verification|continuation|workflow)\.mjs$/.test(file)) surfaces.push('service-client');
   if (isRepositoryTooling(file)) surfaces.push('repository-tooling');
   if (isWorkstationOrRelease(file)) surfaces.push('workstation');
@@ -89,9 +89,16 @@ function isDocsOrGovernance(file) {
   ) && !file.startsWith('docs/dev/contracts/');
 }
 function isServiceClient(file) {
+  if (['scripts/test-login-playbook.js', 'scripts/test-login-playbook-hosted.js', 'scripts/test-native-receiving-browser.js'].includes(file)) return true;
+  if (['scripts/test-native-image-challenge.js', 'scripts/test-task-briefing-client.js', 'scripts/test-teaching-draft.js', 'scripts/test-teaching-evidence.js', 'scripts/test-teaching-review.js', 'scripts/test-workspace-siteguides.mjs'].includes(file)) return true;
+  if (file === 'scripts/smoke-task-operation-continuation.mjs') return true;
+  if (file === 'scripts/smoke-service-incident-summary-http.js') return true;
+  if (file === 'scripts/test-native-checkbox-assistance.js') return true;
+  if (file === 'scripts/test-native-saved-login.js' || file === 'scripts/generate-client-recovery.js') return true;
   return file.startsWith('packages/client/') || file.startsWith('examples/service-client/') || file.startsWith('scripts/generate-service-') || file.startsWith('scripts/test-service-') || file.startsWith('docs/dev/contracts/') || file === 'cli/src/native/service_contracts.rs' || file === 'cli/src/native/service_request.rs' || file === 'cli/src/native/service_model.rs' || file.startsWith('cli/src/native/mcp');
 }
 function isRepositoryTooling(file) {
+  if (file === 'scripts/measure-command-latency.mjs') return true;
   if (['scripts/dev/check-login-workflow.mjs', 'scripts/test-login-validation.mjs', '.husky/pre-push'].includes(file)) return true;
   return file === 'scripts/dev/run-validation.js' || file === 'scripts/dev/validation-plan.mjs' || file === 'scripts/dev/assess-validation.mjs' || file === 'scripts/lib/local-validation.mjs' || file === 'scripts/test-local-validation.mjs' || file === 'scripts/test-validation-runner.js' || file === 'scripts/candidate-build.js' || file.startsWith('scripts/lib/candidate-build-') || file.startsWith('scripts/test-candidate-build-') || file === 'scripts/dev/worktree-closeout.js' || file.startsWith('scripts/lib/worktree-closeout') || file === 'scripts/test-worktree-closeout.js';
 }

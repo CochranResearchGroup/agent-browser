@@ -7439,10 +7439,21 @@ Commands:
   task-briefing TASK Read retained task context without browser effects
   host-control TASK status|view reads any retained managed task; standalone return verifies the original process and freshly observes the same target before release; reconcile checks exact owned task and terminal dispatcher; takeover/override require hosted app binding.
   Task briefing processPid is retained metadata; authentication verifies current physical ownership separately.
-  task-operation TASK REQUEST Read original addressed CDP operation without retry
+  task-operation TASK REQUEST [reconcile] Read original; reconcile only owner-proven no-effect refusal
+  failure-recovery JSON Inspect/packet/history/run/reconcile; live configure maxAttempts/maxNoProgress with actor/reason
+  Retention/popup limits: live maximumRetentionClaims=4096, maximumPopupAdmissions=64; released history retained
+  Popup overflow: bounded admission plus deferredEligibleTargetCount; increase policy and refresh same task
+  Live reconnect/lane limits: maximumReconnectRequests=128; system-default maximumRuntimeLanes=64; retained originals/lanes preserved
+  Legacy helper expiry: helper_grant_time_unqualified before new input; original readback/current owner SDK remain
+  Legacy automatic expiry/profile deletion: deferred without qualified start time; inspect or explicit scoped close
+  Recovery default budgets: 3 attempts, 2 without progress; 0 attempts disables automation; history survives extension
+  Optional maxDurationMs qualifies dispatch intervals with StableTime; inspect/history stay available
+  Recovery never replays original input; record_resume verifies exact owner ACK, not website/task completion
   Teaching evidence: client teaching-evidence / teaching-evidence-http; recheck Saved provenance before Speech ranges
   Teaching drafts: inspect_guide / client inspectTeachingDraft; inert until reviewed
   Teaching review: client teaching-review edits/reviews; MCP candidate validation stays inert
+  Teaching capacity(): live maximumLineageRevisions/maximumRetainedContexts/maximumCatalogEntries; defaults 256/4096/4096
+  Client options and trusted host JSON teachingCapacity preserve append-only originals and permissions
   Teaching repeat: recordFreshRepeat / promote; trusted review plus actual report proof
   Teaching grilling: client teaching-grilling; source-linked questions, authenticated answers
   Native challenge: bounded passive wait or one registered checkbox attempt per task
@@ -7457,7 +7468,7 @@ Commands:
   Native image: explicit provider membership; static 3x3 bus grid; returned IDs only
   Native image budget: one attempt, at most four tiles plus Verify, 60 seconds
   Native image rounds: separate two-round grant; originalRequestId anchors 60 seconds/10 clicks
-  Native image timing: Linux same-boot elapsed age; wall timestamps are diagnostic
+  Native image timing: supported StableTime observation bounds; guest wall/boot clocks are diagnostic
   Native image ROI: declare complete_puzzle_region before capture; original region/hash stay fixed
   Native image expiry: safe observationClock timings diagnose refusal; inspect original, never replay
   Native policy: verified CDP origin/provider required; CDP-free uses human assistance
@@ -7530,12 +7541,12 @@ Workflow tools (16):
   browser_fill          Fill an input; native dates use YYYY-MM-DD
   browser_screenshot    Capture current page
   browser_tab           Task tabs; reuse tabKey for new
-  browser_handoff       Interactive human assistance; interaction=view for passive viewing
+  browser_handoff       Enable human input; activity pauses; interaction=view is passive
   browser_continue      Observe task after human input
   browser_close         Close task; preserve peers/profile/borrowed process
   browser_control       Explicit takeover/return; view never pauses
-  browser_reconnect     Explicit continuity and opted-in loss recovery
-  browser_policy        App defaults, task replacement/clear and override
+  browser_reconnect     Exact-task status/reconnect; hosted explicit loss recovery
+  browser_policy        App/task rules; scoped override, override_capacity/lookup
   browser_artifact      Screenshot/download to local handle; no publication
   browser_command       Advanced task action with params
     task_retirement     Linux exact cross-boot inspect/retire/status; stable operationId; no input replay
@@ -8251,6 +8262,20 @@ Configuration:
   Pre-dispatch validation failures return the journal code, ingress_validation phase, no_effect, and a correlation ID (HTTP id or MCP error data.requestId). Correct invalid requests before resubmitting. runtimeEnvironmentId is server-owned provenance, not a client request field.
   desktop_interaction_authority_required stops before input and reports profile_access, child_admission, and no_effect. Inspect the Service trace and compare the controller viewerId with the interaction agentName before any new attempt; never change identity labels to borrow controller authority.
   Retained-browser identity rejection (runtime_handoff_orphan_browser_hint_mismatch) fails resolution with no_effect and inspect_profile_recovery_plan recourse. Preserve the handoff identity; do not blindly retry or reopen a replacement. This does not establish permanent browser loss.
+  Configure retained operation capacity with browser_command action task_operation, params.operation=capacity, scope=task|defaults, and optional policy {{initialCapacity,extensionIncrement,maximumCapacity}}. Defaults256/256/4096; omit policy to inspect. Completed operations archive before extension; uncertain records remain active. Archived original IDs still prevent redispatch. First archival requires runtime schema6; do not downgrade to an older binary that cannot read it.
+  Optional capacity policy maximumLoginSteps (default32) updates the existing task immediately; settled login episodes can renew, uncertain input must reconcile first.
+  Optional maximumArtifactReferences (default256) controls new artifact admission on existing tasks; inspect count/limit or raise live without restart. Completed artifact metadata is always retained; no deletion or destination permission expansion.
+  Native input requires qualified StableTime capture evidence; fresh native_capture repairs legacy/expired evidence. Capture timing failures preserve readback, ordinary CDP and task inspection.
+  Finite handoff/Auth/challenge deadlines retain trusted service origins; legacy handoffs need explicit same-link set_link_lifetime. Inspect returns timeRecovery without a new occurrence. Qualified handoff retention requires schema8; older readers refuse it.
+  Profile plans retain sealed absolute expiry; uncertain bounds pause new effects, completed authenticated receipts replay without time access. Time repair never extends permission.
+  Cold startup uses a persistent kernel lock; healthy exact warm continuation bypasses it. Legacy marker age proves no ownership; follow diagnosis/preserve-mode replacement recourse.
+  Running jobs with unqualified legacy start times are not automatically terminalized from guest-clock age; inspect service jobs --id JOB and preserve original uncertainty.
+
+
+  browser_policy override_capacity uses scope app|task and capacity {{activeLimit:256}}, with expectedRevision, actor and reason. Archived grants preserve exact authorization; override_lookup with overrideId inspects originals. Capacity updates require no restart or permission expansion.
+  Ordinary browser_reconnect status returns exact-task continuity and a fresh-facade command; reconnect observes the retained page without reopening closed tasks or replaying uncertain requests.
+
+  Public workflow refusals retain failure recourse and occurrenceId. logging.state distinguishes durable_pending custody from failed logging. Read recent task records using browser_command action failure_log with params.occurrenceId and optional limit1..1000. The task view filters before limiting and never starts a browser. A known occurrenceId permits lookup without taskId; HTTP accepts GET /api/service/failures?occurrenceId=ID. Follow executableNextAction for inspection; uncertain originals are not replay authority.
   Failure records enter private failure-journal.pending custody before asynchronous projection. Unix writes sync the file and directory; daemon startup replays pending occurrences without request resubmission. pendingRecordCount reports pending projection. custody_failed reports persistence failure. Journal reads wait up to 250 ms for a concurrent writer, then report lock contention if it persists.
   Profile ACL admission denials report profile_access_denied / profile_access / no_effect and preserve profileAccessDecision. Follow the policy-inspection action using the same credential; do not change labels or retry to bypass access. Join pre-dispatch request IDs to the failure journal; no job exists.
   Child authority denials report profile_access / child_admission / no_effect with the exact profile_child_* cause. Follow recommendedAction using your own handle or connection; never change identity labels to borrow a peer's tab.
@@ -8418,6 +8443,15 @@ Environment:
   AGENT_BROWSER_JSON             JSON output
   AGENT_BROWSER_ANNOTATE         Annotated screenshot with numbered labels and legend
   AGENT_BROWSER_DEBUG            Debug output
+  AGENT_BROWSER_STABLE_TIME_CLIENT
+                                 Absolute supported Native freshness client config (default: ~/.local/share/stable-time/client.json)
+  AGENT_BROWSER_STABLE_TIME_BINARY
+                                 Supported Native freshness executable (default: stable-time); no guest-clock fallback
+  AGENT_BROWSER_LATENCY_PHASE    Optional StableTime phase: routing, state_read, readiness, startup_lock, cdp, persistence, queue
+  AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT
+                                 Absolute supported StableTime MCP client config; selected samples only, no guest-time fallback
+  AGENT_BROWSER_LATENCY_STABLE_TIME_BINARY
+                                 Supported timing client executable (default: stable-time); bounded helper failure preserves browser result
   AGENT_BROWSER_IGNORE_HTTPS_ERRORS Ignore HTTPS certificate errors
   AGENT_BROWSER_PROVIDER         Browser provider (ios, browserbase, kernel, browseruse, browserless, agentcore)
   AGENT_BROWSER_AUTO_CONNECT     Auto-discover and connect to running Chrome

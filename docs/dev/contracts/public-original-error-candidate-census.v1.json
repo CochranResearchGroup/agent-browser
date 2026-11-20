@@ -1,0 +1,4963 @@
+{
+  "schemaVersion": "agent-browser.original-error-candidate-census.v1",
+  "qualification": "Original finite source-literal census, not proof of public reachability. Every candidate requires an exact reviewed producer contract or a source-backed non-error/normalization/retirement disposition. Current producer and public boundary source gates remain independently required.",
+  "originalArtifactSha256": "d17cdd5f0096b556015e6ba7cfdbe2bf78de0778aa6926a0207d40e277b95108",
+  "candidateCount": 1526,
+  "candidateCodesSha256": "5d9616cb414afa09220fb230bd45791d50f665b295ffca2067f6b74b659635cc",
+  "candidates": {
+    "auth_authority_migration_required": [
+      "packages/client/src/hosted-auth-helper.js"
+    ],
+    "auth_channel_discovery_unavailable": [
+      "packages/client/src/hosted-auth-helper.js"
+    ],
+    "auth_live_task_required": [
+      "packages/client/src/hosted-auth-helper.js"
+    ],
+    "auth_no_effect_proof_unavailable": [
+      "packages/client/src/owner-login-playbook.js"
+    ],
+    "auth_outcome_uncertain": [
+      "packages/client/src/owner-login-playbook.js"
+    ],
+    "auth_probe_cookie_missing": [
+      "cli/src/commands.rs",
+      "cli/src/mcp.rs",
+      "cli/src/native/service_config.rs"
+    ],
+    "auth_receiving_changed": [
+      "packages/client/src/native-receiving-browser.js"
+    ],
+    "auth_reconciliation_unavailable": [
+      "packages/client/src/owner-login-playbook.js",
+      "packages/client/src/owner-totp-continuation.js"
+    ],
+    "auth_review_unavailable": [
+      "packages/client/src/owner-login-playbook.js"
+    ],
+    "auth_sdk_invalid": [
+      "packages/client/src/hosted-auth-helper.js"
+    ],
+    "auth_target_busy": [
+      "packages/client/src/login-playbook.js",
+      "packages/client/src/owner-login-playbook.js"
+    ],
+    "browser_adoption_uncertain": [
+      "crates/agent-browser-lease-authority/src/authority/protocol.rs",
+      "crates/agent-browser-lease-authority/src/authority/protocol/client.rs"
+    ],
+    "browser_artifact_clock_invalid": [
+      "cli/src/mcp/host_policy.rs"
+    ],
+    "browser_artifact_completed_reference_capacity_reached": [
+      "crates/agent-browser-service-model/src/browser_task_artifacts.rs"
+    ],
+    "browser_artifact_completed_reference_context_changed": [
+      "crates/agent-browser-service-model/src/browser_task_artifacts.rs"
+    ],
+    "browser_artifact_destination_conflict": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_artifact_destination_unavailable": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_artifact_exact_task_required": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_artifact_handle_required": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_artifact_hosted_task_required": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_artifact_kind_invalid": [
+      "cli/src/mcp/host_policy.rs"
+    ],
+    "browser_artifact_name_invalid": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_artifact_name_required": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_artifact_parent_unavailable": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_artifact_path_conflict": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_artifact_reference_capacity_reached": [
+      "cli/src/mcp/host_policy.rs"
+    ],
+    "browser_artifact_reference_invalid": [
+      "cli/src/mcp/host_policy.rs"
+    ],
+    "browser_artifact_route_unsupported": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_artifact_task_missing": [
+      "cli/src/mcp/host_policy.rs"
+    ],
+    "browser_attachment_atomic_publication_unsupported": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_attachment_browser_identity_changed": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs"
+    ],
+    "browser_attachment_capability_unavailable": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_attachment_desktop_changed": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_attachment_desktop_observation_unavailable": [
+      "cli/src/native/browser_session_remote_view.rs",
+      "crates/agent-browser-service-model/src/browser_attachment.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_attachment_desktop_process_changed": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_attachment_host_binding_required": [
+      "cli/src/mcp/workflow.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_attachment_identity_invalid": [
+      "cli/src/native/browser_session_remote_view.rs",
+      "cli/src/native/browser_session_runtime.rs",
+      "crates/agent-browser-service-model/src/browser_attachment.rs"
+    ],
+    "browser_attachment_invalid": [
+      "cli/src/mcp/workflow.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_attachment_owner_conflict": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs"
+    ],
+    "browser_attachment_placement_conflict": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "crates/agent-browser-service-model/tests/browser_hosted_placement.rs"
+    ],
+    "browser_attachment_process_identity_conflict": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_attachment_process_unavailable": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_attachment_profile_conflict": [
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/browser_attachment.rs",
+      "crates/agent-browser-service-model/tests/browser_hosted_placement.rs"
+    ],
+    "browser_attachment_profile_identity_conflict": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_attachment_profile_identity_unavailable": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_attachment_profile_invalid": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs"
+    ],
+    "browser_attachment_profile_unavailable": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_attachment_publication_begin_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_attachment_publication_commit_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_attachment_publication_conflict": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_attachment_rebind_cached_process_custody_conflict": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_attachment_runtime_unsupported": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_attachment_sharing_invalid": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs"
+    ],
+    "browser_attachment_sharing_owner_required": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs"
+    ],
+    "browser_attachment_sharing_required": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "crates/agent-browser-service-model/tests/browser_hosted_placement.rs"
+    ],
+    "browser_attachment_target_census_invalid": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_attachment_target_census_unavailable": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_attachment_target_missing": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_attachment_task_conflict": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs"
+    ],
+    "browser_attachment_window_observation_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_build_absolute_path_required": [
+      "cli/src/native/browser_build_selection.rs",
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "browser_build_begin_failed": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_browser_missing": [
+      "cli/src/native/browser_build_open.rs"
+    ],
+    "browser_build_changed": [
+      "cli/src/native/browser_build_selection.rs"
+    ],
+    "browser_build_choice_unsupported": [
+      "cli/src/native/browser_build_selection.rs"
+    ],
+    "browser_build_commit_failed": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_copy_catalog_missing": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_copy_directory_unavailable": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_copy_lineage_invalid": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_copy_lineage_unavailable": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_copy_readback_invalid": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "browser_build_destination_configuration_changed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "browser_build_destination_configuration_conflict": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "browser_build_destination_identity_unavailable": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "browser_build_executable_unavailable": [
+      "cli/src/flags.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_build_intent_invalid": [
+      "cli/src/native/browser_build_selection.rs"
+    ],
+    "browser_build_manifest_executable_missing": [
+      "cli/src/flags.rs"
+    ],
+    "browser_build_manifest_missing": [
+      "cli/src/flags.rs"
+    ],
+    "browser_build_manifest_path_missing": [
+      "cli/src/flags.rs"
+    ],
+    "browser_build_manifest_schema_unsupported": [
+      "cli/src/flags.rs"
+    ],
+    "browser_build_manifest_unavailable": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_build_mode_invalid": [
+      "cli/src/native/browser_build_open.rs",
+      "cli/src/native/browser_build_selection.rs",
+      "cli/src/native/profile_duplicate_custody.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "browser_build_operation_id_conflict": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_operation_id_invalid": [
+      "cli/src/native/browser_build_selection.rs"
+    ],
+    "browser_build_owner_confirmation_required": [
+      "cli/src/native/browser_build_selection.rs",
+      "cli/src/native/browser_mode_host.rs",
+      "cli/src/native/browser_mode_operation.rs"
+    ],
+    "browser_build_previous_unavailable": [
+      "cli/src/native/browser_mode_host.rs"
+    ],
+    "browser_build_process_identity_missing": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_build_process_identity_unavailable": [
+      "cli/src/native/browser_build_open.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_build_profile_busy": [
+      "cli/src/native/browser_build_open.rs"
+    ],
+    "browser_build_profile_changed": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_profile_directory_unavailable": [
+      "cli/src/native/browser_build_open.rs"
+    ],
+    "browser_build_profile_missing": [
+      "cli/src/native/browser_build_open.rs",
+      "cli/src/native/browser_build_selection.rs",
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_profile_required": [
+      "cli/src/native/browser_build_selection.rs"
+    ],
+    "browser_build_readback_binding_changed": [
+      "cli/src/native/browser_mode_host.rs"
+    ],
+    "browser_build_readback_invalid": [
+      "cli/src/native/browser_mode_host.rs"
+    ],
+    "browser_build_readback_unavailable": [
+      "cli/src/native/browser_mode_host.rs"
+    ],
+    "browser_build_receipt_encode_failed": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_receipt_invalid": [
+      "cli/src/native/browser_build_open.rs",
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_receipt_profile_conflict": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_receipt_unavailable": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_receipt_write_failed": [
+      "cli/src/native/browser_profile_build_store.rs"
+    ],
+    "browser_build_request_invalid": [
+      "cli/src/mcp/browser_build.rs"
+    ],
+    "browser_build_response_invalid": [
+      "cli/src/mcp/browser_build.rs"
+    ],
+    "browser_build_reuse_conflict": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_build_selection_id_invalid": [
+      "cli/src/native/browser_build_open.rs"
+    ],
+    "browser_build_selection_invalid": [
+      "cli/src/native/browser_mode_operation.rs"
+    ],
+    "browser_build_selection_missing": [
+      "cli/src/native/browser_build_open.rs"
+    ],
+    "browser_build_selection_mode_conflict": [
+      "cli/src/native/browser_build_open.rs"
+    ],
+    "browser_build_selection_required": [
+      "cli/src/native/browser_build_selection.rs",
+      "cli/src/native/browser_mode_host.rs"
+    ],
+    "browser_build_selection_unsupported": [
+      "cli/src/native/browser_session_runtime.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_build_selector_unsupported": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_build_store_unavailable": [
+      "cli/src/native/browser_build_selection.rs"
+    ],
+    "browser_build_tab_missing": [
+      "cli/src/native/browser_build_open.rs"
+    ],
+    "browser_build_task_missing": [
+      "cli/src/native/browser_build_open.rs",
+      "cli/src/native/browser_build_selection.rs"
+    ],
+    "browser_build_task_profile_conflict": [
+      "cli/src/mcp/browser_build.rs",
+      "cli/src/native/browser_build_selection.rs"
+    ],
+    "browser_build_unavailable": [
+      "cli/src/native/browser_build_selection.rs",
+      "cli/src/native/browser_mode_host.rs",
+      "cli/src/native/service_access.rs"
+    ],
+    "browser_command_action_unsupported": [
+      "cli/src/native/stream/dashboard.rs"
+    ],
+    "browser_command_method_invalid": [
+      "cli/src/native/stream/dashboard.rs"
+    ],
+    "browser_command_owner_relay_failed": [
+      "cli/src/native/stream/dashboard.rs"
+    ],
+    "browser_command_owner_response_invalid": [
+      "cli/src/native/stream/dashboard.rs"
+    ],
+    "browser_command_owner_timeout": [
+      "cli/src/native/stream/dashboard.rs"
+    ],
+    "browser_command_owner_unavailable": [
+      "cli/src/native/stream/dashboard.rs"
+    ],
+    "browser_control_attribution_required": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_directory_missing": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_encode_failed": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_epoch_changed": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_epoch_exhausted": [
+      "cli/src/native/browser_host_control.rs",
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_control_epoch_invalid": [
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_expected_epoch_required": [
+      "cli/src/mcp.rs",
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_fresh_observation_required": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_fresh_target_observation_required": [
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_hosted_task_required": [
+      "cli/src/mcp.rs",
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_human": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_lock_unavailable": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_observation_paused": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_observation_process_changed": [
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_observation_target_changed": [
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_operation_invalid": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_original_process_changed": [
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_original_process_required": [
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_original_target_required": [
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_pause_reads_invalid": [
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_read_failed": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_request_missing": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_response_invalid": [
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_return_key_unavailable": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_return_observation_scope_invalid": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_return_observation_unavailable": [
+      "cli/src/mcp/host_control.rs",
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_state_invalid": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_store_unavailable": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_sync_failed": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_control_task_missing": [
+      "cli/src/mcp.rs",
+      "cli/src/mcp/host_control.rs"
+    ],
+    "browser_control_write_failed": [
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_disposable_allocation_id_invalid": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_disposable_allocation_identity_invalid": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_disposable_allocation_path_invalid": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_disposable_build_conflict": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_disposable_build_selection_invalid": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_disposable_cleanup_expiry_exhausted": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_disposable_cleanup_failed": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_disposable_cleanup_identity_invalid": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "browser_disposable_cleanup_kind_invalid": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_disposable_cleanup_path_invalid": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_disposable_cleanup_process_census_failed": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "browser_disposable_cleanup_process_census_unavailable": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "browser_disposable_cleanup_process_command_changed": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "browser_disposable_cleanup_process_observation_failed": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "browser_disposable_cleanup_profile_identity_conflict": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "browser_disposable_directory_create_failed": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_disposable_directory_permissions_failed": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_disposable_group_admission_unsupported": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_disposable_group_profile_missing": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "browser_disposable_profile_activity_changed": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "crates/agent-browser-service-model/tests/browser_session_manager.rs"
+    ],
+    "browser_disposable_profile_bytes_exhausted": [
+      "cli/src/native/browser_session_runtime.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_disposable_profile_count_exhausted": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_disposable_sequence_exhausted": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_disposable_size_failed": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_disposable_size_kind_invalid": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_disposable_size_path_invalid": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_disposable_size_root_invalid": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_graceful_close_dispatch_unsupported": [
+      "cli/src/native/browser_session_runtime.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_handoff_control_changed": [
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_handoff_interaction_invalid": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_handoff_payload_invalid": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_handoff_payload_missing": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_handoff_reconstruction_destination_unavailable": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_handoff_recovery_binding_conflict": [
+      "cli/src/native/browser_launch_custody_store.rs",
+      "cli/src/native/browser_ordinary_handoff_recovery.rs"
+    ],
+    "browser_handoff_recovery_chain_changed": [
+      "cli/src/native/browser_launch_custody_store.rs",
+      "cli/src/native/browser_ordinary_handoff_recovery.rs"
+    ],
+    "browser_handoff_recovery_mapping_changed": [
+      "cli/src/native/browser_launch_custody_store.rs",
+      "cli/src/native/browser_ordinary_handoff_recovery.rs"
+    ],
+    "browser_handoff_recovery_publication_conflict": [
+      "cli/src/native/browser_human_handoff.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_handoff_recovery_state_missing": [
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_handoff_recovery_store_unavailable": [
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_handoff_reopen_control_unavailable": [
+      "cli/src/native/browser_handoff_reopen_control.rs"
+    ],
+    "browser_handoff_reopen_key_unavailable": [
+      "cli/src/native/browser_handoff_reopen_control.rs"
+    ],
+    "browser_handoff_reopen_request_conflict": [
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_handoff_reopen_request_invalid": [
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_handoff_reopen_scope_invalid": [
+      "cli/src/native/browser_handoff_reopen_control.rs",
+      "cli/src/native/browser_host_control.rs"
+    ],
+    "browser_handoff_takeover_request_invalid": [
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_handoff_target_changed": [
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_handoff_viewer_claim_missing": [
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_handoff_viewer_identity_required": [
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_health_changed": [
+      "cli/src/commands.rs",
+      "cli/src/mcp.rs",
+      "cli/src/native/service_activity.rs",
+      "cli/src/native/service_model.rs",
+      "cli/src/native/service_trace.rs",
+      "cli/src/native/stream/http.rs",
+      "cli/src/output.rs",
+      "crates/agent-browser-service-model/src/job_event.rs",
+      "crates/agent-browser-service-model/src/service_state.rs",
+      "packages/dashboard/src/components/service-panel.tsx"
+    ],
+    "browser_host_binding_changed": [
+      "cli/src/mcp/workflow.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_host_binding_identity_invalid": [
+      "crates/agent-browser-service-model/src/browser_host_binding.rs"
+    ],
+    "browser_host_binding_invalid": [
+      "cli/src/mcp/workflow.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_host_binding_version_unsupported": [
+      "crates/agent-browser-service-model/src/browser_host_binding.rs"
+    ],
+    "browser_host_configuration_invalid": [
+      "cli/src/native/browser_host_context.rs"
+    ],
+    "browser_host_configuration_missing": [
+      "cli/src/native/browser_host_context.rs"
+    ],
+    "browser_host_configuration_unavailable": [
+      "cli/src/native/browser_host_context.rs"
+    ],
+    "browser_host_configuration_version_unsupported": [
+      "cli/src/native/browser_host_context.rs"
+    ],
+    "browser_host_desktop_missing": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_host_handoff_identity_invalid": [
+      "cli/src/native/browser_host_context.rs"
+    ],
+    "browser_host_handoff_url_invalid": [
+      "cli/src/native/browser_host_context.rs"
+    ],
+    "browser_host_watch_directory_missing": [
+      "cli/src/mcp/hosted.rs"
+    ],
+    "browser_host_watch_metadata_unavailable": [
+      "cli/src/mcp/hosted.rs"
+    ],
+    "browser_host_watch_output_failed": [
+      "cli/src/mcp/hosted.rs"
+    ],
+    "browser_inventory_identity_conflict": [
+      "cli/src/native/service_inventory.rs",
+      "cli/src/native/stream/http.rs",
+      "cli/src/native/stream/p300_profile_library.rs"
+    ],
+    "browser_launch_failed": [
+      "cli/src/native/browser.rs",
+      "cli/src/native/remote_view/open/coordinator.rs",
+      "cli/src/native/remote_view_handoff.rs"
+    ],
+    "browser_launch_wait_budget_invalid": [
+      "cli/src/native/browser_launch_admission.rs"
+    ],
+    "browser_lifecycle_attribution_required": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_lifecycle_browser_missing": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_lifecycle_original_identity_missing": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_lifecycle_original_identity_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_lifecycle_peer_scope_conflict": [
+      "cli/src/native/browser_host_policy.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_lifecycle_process_exit_unproven": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_lifecycle_process_observation_unavailable": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_lifecycle_residue_readback_unavailable": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_lifecycle_scope_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_lifecycle_target_changed": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_login_mode_conflict": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_login_mode_invalid": [
+      "cli/src/mcp/workflow.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_native_action_unavailable": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_actions_required": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_attempt_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_browser_missing": [
+      "cli/src/native/browser_native_host.rs"
+    ],
+    "browser_native_challenge_attempt_budget_exhausted": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_classification_context_changed": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_classification_control_changed": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_classification_flag_invalid": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_classification_frame_changed": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_classification_image_invalid": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_classification_invalid": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_classification_ocr_invalid": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_classification_ocr_unavailable": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_close_control_unavailable": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_exact_task_required": [
+      "cli/src/native/browser_native_host.rs"
+    ],
+    "browser_native_generation_changed": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_image_attempt_invalid": [
+      "cli/src/native/browser_native_image.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_image_capture_scope_invalid": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_image_clock_domain_changed": [
+      "cli/src/native/browser_native_image.rs"
+    ],
+    "browser_native_image_clock_unavailable": [
+      "cli/src/native/browser_native_image.rs"
+    ],
+    "browser_native_image_observation_expired": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_native_image.rs"
+    ],
+    "browser_native_image_observation_invalid": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_native_control.rs",
+      "cli/src/native/browser_native_image.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_image_pixels_invalid": [
+      "cli/src/native/browser_native_image.rs"
+    ],
+    "browser_native_image_round_changed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_native_image.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_image_round_invalid": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_native_image.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_image_round_missing": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_image_selection_invalid": [
+      "cli/src/native/browser_native_image.rs"
+    ],
+    "browser_native_input_inspection_unavailable": [
+      "cli/src/native/browser_native_readiness.rs"
+    ],
+    "browser_native_input_target_changed": [
+      "cli/src/native/browser_native_readiness.rs"
+    ],
+    "browser_native_login_account_invalid": [
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_budget_exhausted": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_login_context_changed": [
+      "cli/src/native/browser_native_control.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_login_control_changed": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_login_episode_changed": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_login_episode_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_login_evidence_invalid": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_frame_changed": [
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_layout_unsupported": [
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_observation_expired": [
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_observation_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_login_observation_missing": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_login_ocr_profile_unsupported": [
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_ocr_unavailable": [
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_original_context_changed": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_login_original_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_login_original_missing": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_login_original_unavailable": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_login_producer_contract_unavailable": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_task_operations.rs",
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_profile_unsupported": [
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_refinement_unavailable": [
+      "cli/src/native/native_login_ocr.rs"
+    ],
+    "browser_native_login_request_invalid": [
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_step_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_login_target_invalid": [
+      "cli/src/native/browser_native_control.rs",
+      "cli/src/native/browser_task_operations.rs",
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_login_target_unsupported": [
+      "cli/src/native/native_login_perception.rs"
+    ],
+    "browser_native_observation_clock_invalid": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_original_identity_missing": [
+      "cli/src/native/browser_native_host.rs"
+    ],
+    "browser_native_original_identity_unavailable": [
+      "cli/src/native/browser_native_host.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_native_original_observation_context_changed": [
+      "cli/src/native/browser_native_control.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_original_observation_control_changed": [
+      "cli/src/native/browser_native_control.rs",
+      "cli/src/native/browser_native_host.rs",
+      "cli/src/native/browser_native_host_image.rs"
+    ],
+    "browser_native_original_observation_expired": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_original_observation_invalid": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_native_control.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_original_observation_missing": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_original_observation_request_invalid": [
+      "cli/src/native/browser_native_image.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_original_operation_completion_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_original_operation_context_changed": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_original_operation_invalid": [
+      "cli/src/native/browser_native_host.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_original_operation_missing": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_original_operation_unavailable": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_owner_access_denied": [
+      "cli/src/native/browser_native_readiness.rs"
+    ],
+    "browser_native_owner_authentication_missing": [
+      "cli/src/native/browser_native_readiness.rs"
+    ],
+    "browser_native_owner_clock_invalid": [
+      "cli/src/mcp/task_operations.rs"
+    ],
+    "browser_native_owner_configuration_invalid": [
+      "cli/src/native/browser_native_host.rs",
+      "cli/src/native/browser_native_host_image.rs"
+    ],
+    "browser_native_params_invalid": [
+      "cli/src/mcp.rs"
+    ],
+    "browser_native_policy_publication_conflict": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_registered_action_invalid": [
+      "cli/src/native/browser_native_control.rs",
+      "cli/src/native/browser_task_operations.rs",
+      "cli/src/native/desktop_locator.rs"
+    ],
+    "browser_native_registered_frame_invalid": [
+      "cli/src/native/desktop_locator.rs"
+    ],
+    "browser_native_registered_locator_unavailable": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_registered_ocr_invalid": [
+      "cli/src/native/desktop_locator.rs"
+    ],
+    "browser_native_registered_ocr_unavailable": [
+      "cli/src/native/desktop_locator.rs"
+    ],
+    "browser_native_registered_region_invalid": [
+      "cli/src/native/desktop_locator.rs"
+    ],
+    "browser_native_registered_target_invalid": [
+      "cli/src/native/browser_native_control.rs"
+    ],
+    "browser_native_site_policy_attempt_denied": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_site_policy_binding_missing": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_site_policy_changed": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_site_policy_invalid": [
+      "cli/src/native/browser_native_image.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_site_policy_provider_missing": [
+      "cli/src/native/browser_native_image.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_site_policy_task_missing": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_native_tab_missing": [
+      "cli/src/native/browser_native_host.rs"
+    ],
+    "browser_native_target_changed": [
+      "cli/src/native/browser_mode_host.rs",
+      "cli/src/native/browser_native_host.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_native_task_missing": [
+      "cli/src/native/browser_native_host.rs"
+    ],
+    "browser_native_window_observation_unavailable": [
+      "cli/src/native/browser_native_host.rs"
+    ],
+    "browser_navigation_history_limit_invalid": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_navigation_history_measure_failed": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_navigation_timestamp_invalid": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_operation_busy_readback_unavailable": [
+      "cli/src/native/browser_operation_lookup.rs"
+    ],
+    "browser_operation_journal_unavailable": [
+      "cli/src/native/browser_operation_lookup.rs"
+    ],
+    "browser_operation_profile_missing": [
+      "cli/src/native/browser_operation_lookup.rs"
+    ],
+    "browser_operation_profile_required": [
+      "cli/src/native/browser_operation_lookup.rs"
+    ],
+    "browser_operation_readback_invalid": [
+      "cli/src/native/browser_operation_lookup.rs"
+    ],
+    "browser_operation_readback_unavailable": [
+      "cli/src/native/browser_operation_lookup.rs"
+    ],
+    "browser_operation_runtime_directory_missing": [
+      "cli/src/native/browser_operation_lookup.rs"
+    ],
+    "browser_operation_target_binding_changed": [
+      "cli/src/native/browser_operation_lookup.rs",
+      "packages/dashboard/src/components/use-browser-operation.ts"
+    ],
+    "browser_operation_task_binding_changed": [
+      "cli/src/native/browser_operation_lookup.rs",
+      "packages/dashboard/src/components/use-browser-operation.ts"
+    ],
+    "browser_operation_task_binding_missing": [
+      "cli/src/native/browser_operation_lookup.rs"
+    ],
+    "browser_operation_task_missing": [
+      "cli/src/native/browser_operation_lookup.rs"
+    ],
+    "browser_operation_task_required": [
+      "cli/src/native/browser_operation_lookup.rs"
+    ],
+    "browser_owner_replacement_browser_missing": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_placement_conflict": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "crates/agent-browser-service-model/tests/browser_hosted_placement.rs"
+    ],
+    "browser_placement_inventory_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_placement_pool_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_placement_unavailable": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "crates/agent-browser-service-model/tests/browser_hosted_placement.rs"
+    ],
+    "browser_policy_action_denied": [
+      "cli/src/native/browser_host_policy.rs",
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_action_invalid": [
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_artifact_destination_invalid": [
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_attribution_required": [
+      "cli/src/native/browser_host_policy.rs",
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_hosted_task_required": [
+      "cli/src/native/browser_host_policy.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_policy_invalid": [
+      "cli/src/native/browser_host_policy.rs",
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_operation_invalid": [
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_override_action_required": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_policy_override_invalid": [
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_override_limit": [
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_override_request_required": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_policy_request_invalid": [
+      "cli/src/mcp/host_policy.rs"
+    ],
+    "browser_policy_required": [
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_response_invalid": [
+      "cli/src/mcp/host_policy.rs"
+    ],
+    "browser_policy_revision_changed": [
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_revision_exhausted": [
+      "crates/agent-browser-service-model/src/browser_host_policy.rs"
+    ],
+    "browser_policy_revision_required": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_policy_task_missing": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_policy_task_required": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_private_launch_environment_invalid": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_process_capacity_exhausted": [
+      "cli/src/native/browser_launch_admission.rs",
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_process_count_unavailable": [
+      "cli/src/native/browser_launch_admission.rs"
+    ],
+    "browser_profile_build_selection_unsupported": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/browser_session_runtime.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_profile_catalog_begin_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_profile_catalog_commit_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_profile_catalog_publication_conflict": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_profile_catalog_schema_unsupported": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_profile_catalog_unavailable": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_profile_directory_missing": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_profile_legacy_state_json_invalid": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_profile_legacy_state_read_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_profile_mode_invalid": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_profile_name_required": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_profile_selector_conflict": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_reconnect_attachment_missing": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_attachment_owner_required": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_attachment_scope_changed": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_binding_missing": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_browser_record_missing": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_expected_revision_required": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_explicit_desktop_required": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_explicit_recovery_placement_unsupported": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_reconnect_explicit_required": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_reconnect_fresh_attachment_required": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_hosted_task_required": [
+      "cli/src/mcp/host_reconnect.rs",
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_loss_policy_invalid": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_managed_rebind_capability_unavailable": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_native_assignment_unavailable": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_native_context_invalid": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_native_generation_changed": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_native_observation_unavailable": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_native_transport_unavailable": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_operation_invalid": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_options_invalid": [
+      "cli/src/mcp/host_reconnect.rs"
+    ],
+    "browser_reconnect_process_absence_unproven": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_process_generation_changed": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_profile_missing": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_rebind_required": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_recovery_identity_changed": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_recovery_placement_unsupported": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_recovery_target_unavailable": [
+      "cli/src/native/browser_host_reconnect.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_reconnect_request_capacity_reached": [
+      "crates/agent-browser-service-model/src/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_request_id_invalid": [
+      "crates/agent-browser-service-model/src/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_request_identity_conflict": [
+      "crates/agent-browser-service-model/src/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_request_invalid": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_required": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_response_invalid": [
+      "cli/src/mcp/host_reconnect.rs"
+    ],
+    "browser_reconnect_revision_conflict": [
+      "crates/agent-browser-service-model/src/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_revision_exhausted": [
+      "cli/src/native/browser_host_reconnect.rs",
+      "crates/agent-browser-service-model/src/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_shared_recovery_target_conflict": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_tab_missing": [
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_reconnect_task_missing": [
+      "cli/src/mcp/host_reconnect.rs",
+      "cli/src/native/browser_host_reconnect.rs"
+    ],
+    "browser_record_changed": [
+      "crates/agent-browser-service-model/src/abandoned_browser_retirement.rs"
+    ],
+    "browser_record_missing": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "browser_recovery_attempts_exhausted": [
+      "crates/agent-browser-service-model/src/browser_recovery.rs"
+    ],
+    "browser_recovery_begin_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_recovery_browser_id_invalid": [
+      "crates/agent-browser-service-model/src/browser_recovery.rs"
+    ],
+    "browser_recovery_commit_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_recovery_generation_exhausted": [
+      "crates/agent-browser-service-model/src/browser_recovery.rs"
+    ],
+    "browser_recovery_policy_invalid": [
+      "crates/agent-browser-service-model/src/browser_recovery.rs"
+    ],
+    "browser_recovery_state_invalid": [
+      "crates/agent-browser-service-model/src/browser_recovery.rs"
+    ],
+    "browser_recovery_state_missing": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_retention_binding_invalid": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_retention_claim_missing": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_retention_policy_invalid": [
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "browser_retention_receipt_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_retention_request_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_retirement_action_required": [
+      "cli/src/native/service_browser_retirement.rs"
+    ],
+    "browser_retirement_browser_missing": [
+      "cli/src/native/service_browser_retirement.rs"
+    ],
+    "browser_retirement_encode_failed": [
+      "cli/src/native/service_browser_retirement.rs"
+    ],
+    "browser_retirement_expiry_invalid": [
+      "cli/src/native/service_browser_retirement.rs"
+    ],
+    "browser_retirement_now_invalid": [
+      "cli/src/native/service_browser_retirement.rs"
+    ],
+    "browser_retirement_plan_expired": [
+      "cli/src/native/service_browser_retirement.rs"
+    ],
+    "browser_retirement_plan_invalid": [
+      "cli/src/native/service_browser_retirement.rs"
+    ],
+    "browser_retirement_plan_required": [
+      "cli/src/native/service_browser_retirement.rs"
+    ],
+    "browser_retirement_plan_schema_unsupported": [
+      "cli/src/native/service_browser_retirement.rs"
+    ],
+    "browser_runtime_backup_copy_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_backup_digest_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_backup_manifest_invalid": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_backup_manifest_read_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_backup_open_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_backup_schema_invalid": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_backup_stage_open_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_clock_readback_required": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_busy_timeout_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_directory_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_directory_permissions_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_open_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_parent_missing": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_path_unavailable": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_permissions_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_pragma_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_read_only_open_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_read_only_unavailable": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_schema_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_schema_read_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_database_schema_unsupported": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_directory_missing": [
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_runtime_document_invalid": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_document_read_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_document_save_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_document_schema_unsupported": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_document_serialize_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_integrity_check_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_inventory_readback_required": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_archive_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_archive_missing": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_archive_permissions_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_archive_read_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_begin_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_checkpoint_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_commit_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_receipt_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_receipt_invalid": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_receipt_missing": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_source_name_missing": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_migration_source_read_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_status_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_runtime_storage_metadata_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_action_missing": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_action_unsupported": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_activity_admission_conflict": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_activity_readback_required": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_activity_readback_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_activity_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_browser_missing": [
+      "cli/src/native/browser_mode_host.rs",
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_session_browser_selector_conflict": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_browser_sequence_exhausted": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_close_exit_unproven": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_command_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_config_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_current_tab_missing": [
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_session_exact_selector_conflict": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_expiry_exhausted": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "crates/agent-browser-service-model/tests/browser_session_manager.rs"
+    ],
+    "browser_session_explicit_profile_path_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_field_missing": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/daemon.rs",
+      "cli/src/native/remote_view/open/coordinator.rs"
+    ],
+    "browser_session_host_join_failed": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/daemon.rs"
+    ],
+    "browser_session_host_missing": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/daemon.rs",
+      "cli/src/native/remote_view/open/coordinator.rs"
+    ],
+    "browser_session_idle_activity_identity_conflict": [
+      "cli/src/native/browser_session_runtime.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "browser_session_idle_custody_identity_changed": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+      "crates/agent-browser-service-model/tests/browser_handoff_recovery.rs"
+    ],
+    "browser_session_idle_custody_unavailable": [
+      "cli/src/mcp/workflow.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_idle_effect_readback_unavailable": [
+      "cli/src/native/browser_session_runtime.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_session_idle_original_effect_unavailable": [
+      "cli/src/native/browser_session_runtime.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_session_idle_original_identity_conflict": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_idle_original_identity_missing": [
+      "cli/src/native/browser_session_reaper.rs",
+      "cli/src/native/browser_session_runtime.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+      "crates/agent-browser-service-model/tests/browser_handoff_recovery.rs"
+    ],
+    "browser_session_idle_original_target_conflict": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_idle_publication_conflict": [
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_idle_publication_unavailable": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_idle_publication_unsupported": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_idle_readback_required": [
+      "cli/src/native/browser_session_reaper.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_idle_viewer_observation_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_json_commit_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_json_directory_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_json_directory_permissions_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_json_invalid": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_json_parent_missing": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_json_permissions_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_json_read_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_json_serialize_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_json_stage_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_json_write_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_launch_absence_unsupported": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_launch_pid_missing": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_launch_publication_conflict": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_launch_publication_unsupported": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_leave_open_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_managed_browser_unavailable": [
+      "cli/src/native/actions.rs"
+    ],
+    "browser_session_managed_route_changed": [
+      "cli/src/native/actions.rs",
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_mutation_begin_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_mutation_commit_failed": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_navigation_failed": [
+      "cli/src/native/remote_view/open/coordinator.rs"
+    ],
+    "browser_session_observation_binding_changed": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_open_identity_missing": [
+      "cli/src/native/remote_view/open/coordinator.rs"
+    ],
+    "browser_session_operation_target_changed": [
+      "cli/src/native/browser_session_remote_view.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_owned_target_identity_conflict": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_owned_target_missing": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_popup_attach_invalid": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_popup_observation_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_process_observation_unavailable": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_profile_claim_persistence_unavailable": [
+      "cli/src/native/browser_session_profile_reuse.rs"
+    ],
+    "browser_session_profile_debug_endpoint_unavailable": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_profile_endpoint_identity_conflict": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_profile_lock_invalid": [
+      "cli/src/native/browser_session_profile_reuse.rs"
+    ],
+    "browser_session_profile_lock_unavailable": [
+      "cli/src/native/browser_session_profile_reuse.rs"
+    ],
+    "browser_session_profile_process_identity_unavailable": [
+      "cli/src/native/browser_session_profile_reuse.rs",
+      "cli/src/native/browser_session_profile_reuse/profile_file_proof.rs"
+    ],
+    "browser_session_profile_selector_conflict": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_profile_selector_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_profile_unavailable": [
+      "cli/src/native/browser_session_profile_reuse.rs",
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_publication_begin_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_publication_commit_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_publication_conflict": [
+      "cli/src/native/browser_native_host.rs"
+    ],
+    "browser_session_reap_failed": [
+      "cli/src/native/browser_session_reaper.rs"
+    ],
+    "browser_session_reap_join_failed": [
+      "cli/src/native/daemon.rs"
+    ],
+    "browser_session_reap_receipt_write_failed": [
+      "cli/src/native/browser_session_reaper.rs"
+    ],
+    "browser_session_reattach_failed": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_reconciliation_encode_failed": [
+      "cli/src/native/browser_session_reconciliation.rs"
+    ],
+    "browser_session_reconciliation_invalid": [
+      "cli/src/native/browser_session_reconciliation.rs"
+    ],
+    "browser_session_reconciliation_missing": [
+      "cli/src/native/browser_session_reconciliation.rs"
+    ],
+    "browser_session_reconciliation_receipt_failed": [
+      "cli/src/native/browser_session_reconciliation.rs"
+    ],
+    "browser_session_recorded_process_missing": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_recovery_absence_unproven": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+      "crates/agent-browser-service-model/tests/browser_handoff_recovery.rs"
+    ],
+    "browser_session_recovery_assignment_conflict": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_recovery_assignment_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_recovery_browser_missing": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_session_recovery_custody_conflict": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_recovery_desktop_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_recovery_environment_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+      "crates/agent-browser-service-model/tests/browser_handoff_recovery.rs"
+    ],
+    "browser_session_recovery_identity_conflict": [
+      "cli/src/native/browser_session_profile_reuse.rs",
+      "cli/src/native/browser_session_runtime.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+      "crates/agent-browser-service-model/tests/browser_session_manager.rs"
+    ],
+    "browser_session_recovery_launch_readback_required": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_recovery_observation_readback_required": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_recovery_pool_missing": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_recovery_prior_custody_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_recovery_process_absence_unproven": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_recovery_profile_census_unavailable": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_recovery_profile_missing": [
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_session_recovery_profile_unavailable": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_recovery_readback_required": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "browser_session_recovery_target_missing": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_recovery_unsupported": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_session_remaining_session_missing": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_session_retained_observation_unavailable": [
+      "cli/src/native/browser_session_runtime.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_session_retirement_continuation_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_retirement_publication_required": [
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_session_runtime_browser_missing": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_runtime_command_unsupported": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_runtime_startup_failed": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_runtime_thread_failed": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_sequence_exhausted": [
+      "crates/agent-browser-service-model/src/browser_attachment.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "crates/agent-browser-service-model/tests/browser_session_manager.rs"
+    ],
+    "browser_session_service_directory_missing": [
+      "cli/src/native/browser_native_host.rs",
+      "cli/src/native/browser_native_host_image.rs",
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_state_schema_unsupported": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_session_status_serialize_failed": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_tab_close_selection_changed": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_tab_creation_readback_required": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_tab_handle_join_unavailable": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_tab_request_conflict": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_tab_request_id_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_tab_request_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_tab_request_missing": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_session_tab_target_missing": [
+      "cli/src/native/browser.rs",
+      "cli/src/native/browser_session_profile_reuse.rs",
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_target_inventory_unavailable": [
+      "cli/src/native/browser_session_profile_reuse.rs",
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "browser_session_target_selector_conflict": [
+      "cli/src/native/actions.rs"
+    ],
+    "browser_session_target_unproven": [
+      "cli/src/native/actions.rs"
+    ],
+    "browser_shutdown_force_kill_failed": [
+      "cli/src/native/service_health.rs"
+    ],
+    "browser_tab_initial_source_invalid": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_tab_lifetime_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_tab_new_source_invalid": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "browser_tab_operation_invalid": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_tab_pressure_lifetime_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "browser_task_context_required": [
+      "cli/src/commands.rs",
+      "cli/src/native/service_request.rs"
+    ],
+    "browser_task_continuation_context_changed": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_control_read_failed": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_task_current_tab_missing": [
+      "cli/src/mcp/playbooks.rs",
+      "cli/src/mcp/workflow.rs",
+      "cli/src/native/browser_human_handoff.rs"
+    ],
+    "browser_task_current_url_missing": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_task_dispatch_identity_conflict": [
+      "cli/src/native/browser_host_policy.rs"
+    ],
+    "browser_task_identity_missing": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "browser_task_operation_action_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_archive_identity_conflict": [
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_archive_read_failed": [
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_archive_record_invalid": [
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_archive_unavailable": [
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_archive_write_failed": [
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_browser_context_missing": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_capacity_commit_failed": [
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_capacity_policy_invalid": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_capacity_reached": [
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_capacity_scope_invalid": [
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_capacity_store_busy": [
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_clock_unavailable": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_completion_conflict": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_completion_unavailable": [
+      "cli/src/mcp/task_operations.rs"
+    ],
+    "browser_task_operation_context_changed": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_context_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_directory_missing": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_document_invalid": [
+      "cli/src/native/browser_task_operation_archive.rs"
+    ],
+    "browser_task_operation_fingerprint_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_identity_conflict": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_key_generation_failed": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_key_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_key_permissions_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_key_publication_failed": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_key_unavailable": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_original_missing": [
+      "cli/src/mcp/task_operations.rs",
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_request_conflict": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_request_id_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_request_invalid": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_target_missing": [
+      "cli/src/native/browser_task_operations.rs"
+    ],
+    "browser_task_operation_uncertain": [
+      "cli/src/mcp/task_operations.rs"
+    ],
+    "browser_task_owner_unavailable": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_task_retirement_binding_changed": [
+      "crates/agent-browser-service-model/src/lost_task_retirement.rs"
+    ],
+    "browser_task_retirement_clock_unavailable": [
+      "cli/src/mcp/task_retirement.rs"
+    ],
+    "browser_task_retirement_operation_conflict": [
+      "cli/src/native/browser_lost_task_retirement_store.rs",
+      "crates/agent-browser-service-model/src/lost_task_retirement.rs"
+    ],
+    "browser_task_retirement_parameters_invalid": [
+      "cli/src/mcp/task_retirement.rs"
+    ],
+    "browser_task_retirement_platform_unsupported": [
+      "cli/src/mcp/task_retirement.rs"
+    ],
+    "browser_task_retirement_receipt_unavailable": [
+      "cli/src/mcp/task_retirement.rs"
+    ],
+    "browser_task_retirement_store_unavailable": [
+      "cli/src/mcp/task_retirement.rs"
+    ],
+    "browser_terminal_close_unproven": [
+      "cli/src/native/action_runtime/runtime/navigation.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "browser_workspace_inventory_unavailable": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "browser_workspace_snapshot_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "challenge_action_failed": [
+      "crates/agent-browser-authentication-control/src/lib.rs"
+    ],
+    "challenge_assistance_ports_required": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_consumer_receipt_invalid": [
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_consumer_receipt_missing": [
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_consumer_request_invalid": [
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_consumer_site_policy_missing": [
+      "cli/src/native/service_challenge_task.rs"
+    ],
+    "challenge_consumer_test_handle_missing": [
+      "cli/src/native/service_challenge_task.rs"
+    ],
+    "challenge_context_changed": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_continuation_identity_changed": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_control_changed": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_handoff_invalid": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_intervention_required": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_policy_changed": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_receiving_policy_required": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_reconciliation_unavailable": [
+      "packages/client/src/owner-number-matching.js"
+    ],
+    "challenge_stable_request_id_required": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_takeover_receipt_required": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_task_action_required": [
+      "cli/src/native/service_challenge_task.rs"
+    ],
+    "challenge_task_action_unsupported": [
+      "cli/src/native/service_challenge_task.rs"
+    ],
+    "challenge_task_caller_principal_required": [
+      "cli/src/native/service_challenge_task.rs"
+    ],
+    "challenge_task_cancelled_at_invalid": [
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_task_created_at_invalid": [
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_task_deadline_invalid": [
+      "cli/src/native/service_challenge_task.rs",
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_task_execution_invalid": [
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_task_hash_failed": [
+      "cli/src/native/service_challenge_task.rs",
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_task_idempotency_conflict": [
+      "cli/src/native/service_challenge_task.rs",
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_task_identity_changed": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_task_receipt_serialization_failed": [
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_task_required": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "challenge_task_resumed_at_invalid": [
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_task_service_tab_handle_invalid": [
+      "cli/src/native/service_challenge_task.rs"
+    ],
+    "challenge_task_service_tab_handle_missing": [
+      "cli/src/native/service_challenge_task.rs",
+      "crates/agent-browser-service-model/src/service_challenge_task.rs"
+    ],
+    "challenge_task_service_tab_handle_required": [
+      "cli/src/native/service_challenge_task.rs"
+    ],
+    "challenge_task_site_policy_digest_invalid": [
+      "cli/src/native/service_challenge_task.rs"
+    ],
+    "challenge_task_transition_budget_invalid": [
+      "cli/src/native/service_challenge_task.rs"
+    ],
+    "challenge_waiting_for_human": [
+      "cli/src/native/service_access.rs"
+    ],
+    "challenge_workflow_response_invalid": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "desktop_capture_failed": [
+      "cli/src/native/desktop_capture.rs"
+    ],
+    "desktop_capture_provider_unavailable": [
+      "cli/src/native/desktop_capture.rs"
+    ],
+    "desktop_capture_ready_probe_unavailable": [
+      "cli/src/native/desktop_evidence.rs"
+    ],
+    "desktop_cdp_absence_evidence_invalid": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_browser_missing": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_client_unavailable": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_endpoint_invalid": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_endpoint_missing": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_evaluation_failed": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_evaluation_invalid": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_evaluation_unavailable": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_handle_invalid": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_page_unavailable": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_process_identity_missing": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_runtime_unavailable": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_screenshot_invalid": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_screenshot_unavailable": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_tab_missing": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_target_endpoint_invalid": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_target_inventory_invalid": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_target_inventory_unavailable": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_cdp_target_missing": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "desktop_control_coordinator_fence_required": [
+      "cli/src/native/remote_view/viewer_lease.rs"
+    ],
+    "desktop_control_display_binding_missing": [
+      "cli/src/native/desktop_control_coordinator.rs"
+    ],
+    "desktop_control_runtime_state_root_unavailable": [
+      "cli/src/native/desktop_control_coordinator.rs"
+    ],
+    "desktop_evidence_capture_receipt_missing": [
+      "cli/src/native/desktop_evidence_action.rs"
+    ],
+    "desktop_evidence_response_failed": [
+      "cli/src/native/desktop_evidence_action.rs"
+    ],
+    "desktop_external_trigger_provider_unavailable": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_generation_conflict": [
+      "cli/src/native/remote_view_application_http.rs"
+    ],
+    "desktop_geometry_changed": [
+      "cli/src/native/desktop_capture.rs"
+    ],
+    "desktop_geometry_unavailable": [
+      "cli/src/native/desktop_capture.rs"
+    ],
+    "desktop_input_cleanup_failed": [
+      "cli/src/native/desktop_interaction.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_input_display_authority_invalid": [
+      "cli/src/native/desktop_input_provider/x11.rs"
+    ],
+    "desktop_input_display_unavailable": [
+      "cli/src/native/desktop_input_provider/x11.rs"
+    ],
+    "desktop_input_effect_journal_conflict": [
+      "cli/src/native/desktop_input_provider.rs"
+    ],
+    "desktop_input_effect_journal_identity_invalid": [
+      "cli/src/native/desktop_input_provider.rs"
+    ],
+    "desktop_input_effect_journal_invalid": [
+      "cli/src/native/desktop_input_provider.rs"
+    ],
+    "desktop_input_effect_journal_save_failed": [
+      "cli/src/native/desktop_input_provider.rs"
+    ],
+    "desktop_input_effect_journal_transition_invalid": [
+      "cli/src/native/desktop_input_provider.rs"
+    ],
+    "desktop_input_effect_journal_unavailable": [
+      "cli/src/native/desktop_input_provider.rs"
+    ],
+    "desktop_input_effect_uncertain": [
+      "cli/src/native/desktop_input_provider.rs",
+      "cli/src/native/service_failure.rs"
+    ],
+    "desktop_input_failed": [
+      "cli/src/native/desktop_interaction.rs"
+    ],
+    "desktop_input_focus_probe_unavailable": [
+      "cli/src/native/desktop_input_provider/x11.rs"
+    ],
+    "desktop_input_provider_failed": [
+      "cli/src/native/desktop_interaction.rs"
+    ],
+    "desktop_input_provider_frame_invalid": [
+      "cli/src/native/controlled_x11_provider.rs"
+    ],
+    "desktop_input_provider_generation_changed": [
+      "cli/src/native/controlled_x11_provider.rs",
+      "cli/src/native/desktop_input_provider_admission.rs"
+    ],
+    "desktop_input_provider_generation_invalid": [
+      "cli/src/native/desktop_input_provider_admission.rs"
+    ],
+    "desktop_input_provider_generation_unavailable": [
+      "cli/src/native/desktop_input_provider_admission.rs",
+      "cli/src/native/desktop_interaction.rs"
+    ],
+    "desktop_input_provider_identity_unavailable": [
+      "cli/src/native/controlled_x11_provider.rs"
+    ],
+    "desktop_input_provider_invalid": [
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_input_provider_receipt_invalid": [
+      "cli/src/native/desktop_interaction.rs"
+    ],
+    "desktop_input_provider_state_unavailable": [
+      "cli/src/native/controlled_x11_provider.rs"
+    ],
+    "desktop_input_provider_unavailable": [
+      "cli/src/native/desktop_input_provider_admission.rs"
+    ],
+    "desktop_input_provider_unsupported": [
+      "cli/src/native/desktop_input_provider.rs",
+      "cli/src/native/desktop_input_provider/x11.rs"
+    ],
+    "desktop_input_route_fence_identity_invalid": [
+      "cli/src/native/desktop_input_provider.rs"
+    ],
+    "desktop_input_route_fence_unavailable": [
+      "cli/src/native/desktop_input_provider.rs"
+    ],
+    "desktop_input_sink_acknowledgement_missing": [
+      "cli/src/native/desktop_input_provider.rs"
+    ],
+    "desktop_input_xdotool_effect_uncertain": [
+      "cli/src/native/desktop_input_provider/x11.rs"
+    ],
+    "desktop_input_xdotool_provider_unavailable": [
+      "cli/src/native/desktop_input_provider/x11.rs"
+    ],
+    "desktop_input_xtest_effect_uncertain": [
+      "cli/src/native/desktop_input_provider/x11.rs"
+    ],
+    "desktop_input_xtest_provider_unavailable": [
+      "cli/src/native/desktop_input_provider/x11.rs"
+    ],
+    "desktop_interaction_authority_changed": [
+      "cli/src/native/controlled_x11_provider.rs",
+      "cli/src/native/desktop_control_coordinator.rs",
+      "cli/src/native/desktop_interaction.rs",
+      "crates/agent-browser-desktop-services/src/coordinator.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_authority_required": [
+      "cli/src/native/controlled_x11_provider.rs",
+      "cli/src/native/desktop_interaction.rs",
+      "cli/src/native/service_failure.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "desktop_interaction_conflict": [
+      "cli/src/native/desktop_control_coordinator.rs",
+      "crates/agent-browser-desktop-services/src/coordinator.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_focus_changed": [
+      "cli/src/native/controlled_x11_provider.rs",
+      "cli/src/native/desktop_interaction.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_handoff_invalid": [
+      "cli/src/native/desktop_interaction.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_operation_conflict": [
+      "cli/src/native/desktop_interaction.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_operation_ledger_invalid": [
+      "cli/src/native/desktop_interaction.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_operation_ledger_load_failed": [
+      "cli/src/native/desktop_interaction.rs"
+    ],
+    "desktop_interaction_operation_ledger_save_failed": [
+      "cli/src/native/desktop_interaction.rs"
+    ],
+    "desktop_interaction_operation_ledger_unavailable": [
+      "cli/src/native/desktop_interaction.rs"
+    ],
+    "desktop_interaction_prompt_evidence_invalid": [
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_target_changed": [
+      "cli/src/native/desktop_interaction.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_target_unavailable": [
+      "cli/src/native/controlled_x11_provider.rs",
+      "cli/src/native/desktop_interaction.rs",
+      "cli/src/native/desktop_locator.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_unsupported": [
+      "cli/src/native/desktop_interaction.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_verification_failed": [
+      "cli/src/native/desktop_interaction.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_interaction_verification_unavailable": [
+      "cli/src/native/controlled_x11_provider.rs",
+      "cli/src/native/desktop_interaction.rs",
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_locator_detector_failed": [
+      "cli/src/native/desktop_locator.rs"
+    ],
+    "desktop_locator_detector_unavailable": [
+      "cli/src/native/desktop_locator.rs"
+    ],
+    "desktop_locator_unsupported": [
+      "cli/src/native/desktop_locator.rs"
+    ],
+    "desktop_locator_visualization_failed": [
+      "cli/src/native/desktop_locator.rs"
+    ],
+    "desktop_paired_cdp_provider_unavailable": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_prompt_detector_failed": [
+      "cli/src/native/desktop_prompt_perception.rs"
+    ],
+    "desktop_prompt_operator_intervention_required": [
+      "crates/agent-browser-desktop-services/src/transaction.rs"
+    ],
+    "desktop_prompt_page_evidence_invalid": [
+      "cli/src/native/desktop_prompt_perception.rs"
+    ],
+    "desktop_prompt_provider_unavailable": [
+      "cli/src/native/desktop_prompt_perception.rs"
+    ],
+    "desktop_prompt_visualization_failed": [
+      "cli/src/native/desktop_prompt_perception.rs"
+    ],
+    "desktop_scene_binding_unavailable": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_capture_ready_transition_failed": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_display_unavailable": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_native_restoration_failed": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_native_snapshot_failed": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_native_snapshot_missing": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_native_stage_failed": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_prior_slot_state_missing": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_probe_unavailable": [
+      "cli/src/native/desktop_evidence.rs",
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_reservation_unavailable": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_route_unavailable": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_snapshot_missing": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_stage_and_rollback_failed": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_stage_commit_and_rollback_failed": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_state_unavailable": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_scene_transition_failed": [
+      "cli/src/native/desktop_evidence_configured.rs"
+    ],
+    "desktop_selection_scope_invalid": [
+      "cli/src/native/desktop_control_coordinator.rs"
+    ],
+    "desktop_selection_sequence_exhausted": [
+      "crates/agent-browser-desktop-services/src/selection.rs"
+    ],
+    "desktop_selection_wait_failed": [
+      "cli/src/native/desktop_control_coordinator.rs"
+    ],
+    "desktop_selection_wait_timeout": [
+      "crates/agent-browser-desktop-services/src/selection.rs"
+    ],
+    "desktop_trigger_selector_invalid": [
+      "cli/src/native/desktop_evidence_cdp.rs"
+    ],
+    "native_action_failed": [
+      "crates/agent-browser-authentication-control/src/lib.rs"
+    ],
+    "native_capture_image_invalid": [
+      "cli/src/mcp.rs"
+    ],
+    "native_capture_image_unavailable": [
+      "cli/src/mcp.rs"
+    ],
+    "native_handoff_url_invalid": [
+      "packages/dashboard/src/components/native-task-viewport.tsx"
+    ],
+    "native_image_capture_region_invalid": [
+      "packages/client/src/native-image-challenge.js"
+    ],
+    "native_image_context_changed": [
+      "packages/client/src/native-image-challenge.js"
+    ],
+    "native_image_continuation_changed": [
+      "packages/client/src/native-image-challenge.js"
+    ],
+    "native_image_ports_required": [
+      "packages/client/src/native-image-challenge.js"
+    ],
+    "native_image_round_budget_exhausted": [
+      "packages/client/src/native-image-challenge.js"
+    ],
+    "native_image_round_changed": [
+      "packages/client/src/native-image-challenge.js"
+    ],
+    "native_image_selection_expired": [
+      "packages/client/src/native-image-challenge.js"
+    ],
+    "native_image_selection_timeout": [
+      "packages/client/src/native-image-challenge.js"
+    ],
+    "native_image_stable_request_id_required": [
+      "packages/client/src/native-image-challenge.js"
+    ],
+    "native_image_workflow_response_invalid": [
+      "packages/client/src/native-image-challenge.js"
+    ],
+    "native_input_target_changed": [
+      "cli/src/native/browser_native_readiness.rs"
+    ],
+    "native_inventory_invalid": [
+      "packages/dashboard/src/lib/native-window-inventory.ts"
+    ],
+    "native_inventory_unavailable": [
+      "packages/dashboard/src/hooks/use-native-browser-windows.ts"
+    ],
+    "native_journey_commit_failed": [
+      "cli/src/dashboard_ingress/native_journey.rs"
+    ],
+    "native_journey_dashboard_changed": [
+      "cli/src/dashboard_ingress/native_journey.rs"
+    ],
+    "native_journey_desktop_missing": [
+      "cli/src/dashboard_ingress/native_journey.rs"
+    ],
+    "native_journey_encode_failed": [
+      "cli/src/dashboard_ingress/native_journey.rs"
+    ],
+    "native_journey_evidence_invalid": [
+      "cli/src/dashboard_ingress/native_journey.rs"
+    ],
+    "native_journey_identity_changed": [
+      "cli/src/dashboard_ingress/native_journey.rs"
+    ],
+    "native_journey_persist_failed": [
+      "cli/src/dashboard_ingress/native_journey.rs"
+    ],
+    "native_journey_process_unavailable": [
+      "cli/src/dashboard_ingress/native_journey.rs"
+    ],
+    "native_journey_provider_evidence_unavailable": [
+      "cli/src/dashboard_ingress/native_journey.rs"
+    ],
+    "native_journey_stage_failed": [
+      "cli/src/dashboard_ingress/native_journey.rs"
+    ],
+    "native_launch_browser_missing": [
+      "cli/src/native/action_runtime/runtime/launch.rs"
+    ],
+    "native_owner_policy_changed": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "native_receiving_configuration_required": [
+      "packages/client/src/native-receiving-browser.js"
+    ],
+    "native_saved_login_budget_exhausted": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_saved_login_configuration_required": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_saved_login_native_binding_changed": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_saved_login_observation_unavailable": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_saved_login_original_uncertain": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_saved_login_retained_episode_required": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_saved_login_retained_identity_changed": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_saved_login_stable_identity_required": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_saved_login_surface_unsupported": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_saved_login_task_binding_changed": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_saved_login_task_control_changed": [
+      "packages/client/src/native-saved-login.js"
+    ],
+    "native_target_changed": [
+      "packages/client/src/challenge-assistance.js"
+    ],
+    "native_use_expired": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "native_use_missing": [
+      "cli/src/native/remote_view_application_http.rs"
+    ],
+    "native_viewer_unavailable": [
+      "packages/dashboard/src/components/native-window-viewport.tsx"
+    ],
+    "native_window_focus_unsupported": [
+      "cli/src/native/browser.rs"
+    ],
+    "profile_access_denied": [
+      "cli/src/native/action_runtime/runtime/native_acquisition.rs",
+      "cli/src/native/service_access.rs",
+      "cli/src/native/service_profile_acquisition.rs",
+      "cli/src/native/service_request.rs"
+    ],
+    "profile_acquisition_authority_time_invalid": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_availability_missing": [
+      "cli/src/native/service_profile_acquisition.rs"
+    ],
+    "profile_acquisition_daemon_route_unavailable": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_effect_channel_custody_unproven": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_exact_current_conflict": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_initial_owner_postcondition_failed": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_owner_binding_failed": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_physical_occupancy_uncertain": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_preflight_existing_session_profile_identity_unproven": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_profile_identity_unavailable": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_profile_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_profile_required": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_acquisition_protected_holder_reconstruction_required": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_protected_owner_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_recommended_action_missing": [
+      "cli/src/native/service_profile_acquisition.rs"
+    ],
+    "profile_acquisition_retry_owner_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_acquisition_retry_session_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_capability_authentication_failed": [
+      "cli/src/mcp.rs",
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_capability_authorization_required": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_capability_bearer_invalid": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_capability_output_create_failed": [
+      "cli/src/native/service_profile_lease.rs"
+    ],
+    "profile_capability_output_parent_missing": [
+      "cli/src/native/service_profile_lease.rs"
+    ],
+    "profile_capability_output_write_failed": [
+      "cli/src/native/service_profile_lease.rs"
+    ],
+    "profile_capability_required": [
+      "cli/src/native/service_profile_acquisition.rs"
+    ],
+    "profile_child_access_record_missing": [
+      "cli/src/native/action_runtime/runtime/cdp_free_execute.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "profile_child_explicit_reconnect_required": [
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "profile_drain_permission_denied": [
+      "crates/agent-browser-service-model/src/profile_access.rs"
+    ],
+    "profile_drain_target_conflict": [
+      "crates/agent-browser-service-model/src/profile_access.rs"
+    ],
+    "profile_duplicate_affected_tasks_changed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_atomic_publication_unsupported": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_binding_encode_failed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_binding_invalid": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_binding_read_failed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_binding_write_failed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_borrowed_anchor_changed": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_borrowed_anchor_invalid": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_borrowed_anchor_missing": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_build_changed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_build_unavailable": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_catalog_busy": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_catalog_commit_readback_required": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_catalog_invalid": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_catalog_readback_required": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_catalog_write_failed": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_choice_invalid": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_clean_close_evidence_required": [
+      "cli/src/native/profile_duplicate_custody.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_close_readback_required": [
+      "cli/src/native/profile_duplicate_copy.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_copy_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_copy_phase_required": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_copy_readback_required": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_copy_record_conflict": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_copy_record_missing": [
+      "cli/src/native/profile_duplicate_copy.rs",
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_create_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_destination_browser_missing": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_destination_conflict": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_destination_invalid": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_destination_parent_unavailable": [
+      "cli/src/native/profile_duplicate_copy.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_destination_profile_missing": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_destination_publication_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_destination_tab_missing": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_destination_task_missing": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_destination_unavailable": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_digest_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_disposal_catalog_changed": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_commit_readback_required": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_completed_copy_required": [
+      "cli/src/native/profile_duplicate_disposal.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_disposal_encode_failed": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_intent_changed": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_intent_missing": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_journal_unavailable": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_launch_history_invalid": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_launch_history_unavailable": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_lineage_changed": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_lineage_unavailable": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_operation_missing": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_disposal_operations_busy": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_disposal_operations_invalid": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_disposal_operations_unavailable": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_disposal_path_conflict": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_path_invalid": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_path_unavailable": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_payload_changed": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_publication_failed": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_quarantine_unavailable": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_readback_busy": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_readback_required": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_readback_unavailable": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_receipt_conflict": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_receipt_invalid": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_receipt_missing": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_runtime_busy": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_runtime_unavailable": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_target_changed": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_tree_unavailable": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_disposal_write_failed": [
+      "cli/src/native/profile_duplicate_disposal.rs"
+    ],
+    "profile_duplicate_encode_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_filename_unsupported": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_id_conflict": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_intent_conflict": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_intent_encode_failed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_intent_invalid": [
+      "cli/src/native/profile_duplicate_copy.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_intent_missing": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_intent_read_failed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_intent_write_failed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_journal_unavailable": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_launch_custody_invalid": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_launch_readback_required": [
+      "cli/src/native/profile_duplicate_copy.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_lineage_conflict": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_lineage_unavailable": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_lineage_write_failed": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_loaded_build_changed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_named_source_required": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_operation_busy": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_operation_id_conflict": [
+      "cli/src/native/profile_duplicate_host.rs",
+      "packages/dashboard/src/components/use-browser-operation.ts"
+    ],
+    "profile_duplicate_operation_id_invalid": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_operation_lock_unavailable": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_operation_lock_unsupported": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_original_exit_readback_required": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_original_identity_changed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_original_identity_missing": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_original_identity_unavailable": [
+      "cli/src/native/profile_duplicate_custody.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_owner_confirmation_required": [
+      "cli/src/native/profile_duplicate_disposal.rs",
+      "cli/src/native/profile_duplicate_host.rs",
+      "packages/dashboard/src/components/use-browser-operation.ts"
+    ],
+    "profile_duplicate_path_invalid": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_permissions_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_permissions_unsupported": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_publication_intent_changed": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_read_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_readback_required": [
+      "cli/src/native/profile_duplicate_copy.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_request_invalid": [
+      "cli/src/mcp/profile_duplicate.rs"
+    ],
+    "profile_duplicate_response_invalid": [
+      "cli/src/mcp/profile_duplicate.rs"
+    ],
+    "profile_duplicate_runtime_directory_missing": [
+      "cli/src/native/profile_duplicate_disposal.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_runtime_directory_unavailable": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_runtime_document_invalid": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_runtime_document_schema_unsupported": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_runtime_document_unavailable": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_runtime_permissions_failed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_runtime_schema_unsupported": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_runtime_unavailable": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_source_binding_changed": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_source_boot_changed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_source_browser_missing": [
+      "cli/src/native/profile_duplicate_custody.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_source_build_missing": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_source_busy": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_source_changed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_source_custody_required": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_source_focus_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_source_identity_changed": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_source_operation_busy": [
+      "cli/src/native/profile_duplicate_host.rs",
+      "packages/dashboard/src/components/use-browser-operation.ts"
+    ],
+    "profile_duplicate_source_profile_missing": [
+      "cli/src/native/profile_duplicate_custody.rs",
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_source_readback_required": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_source_tab_missing": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_source_task_missing": [
+      "cli/src/native/profile_duplicate_host.rs"
+    ],
+    "profile_duplicate_source_unavailable": [
+      "cli/src/native/profile_duplicate_copy.rs",
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_staging_cleanup_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_staging_conflict": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_staging_create_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_staging_invalid": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_staging_read_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_staging_unavailable": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_staging_write_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_state_encode_failed": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_state_invalid": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_state_write_failed": [
+      "cli/src/native/profile_duplicate_custody.rs"
+    ],
+    "profile_duplicate_store_unavailable": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_sync_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_duplicate_task_missing": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "profile_duplicate_task_profile_conflict": [
+      "cli/src/mcp/profile_duplicate.rs",
+      "cli/src/native/browser_session_host.rs",
+      "packages/dashboard/src/components/use-browser-operation.ts"
+    ],
+    "profile_duplicate_task_profile_missing": [
+      "cli/src/mcp/profile_duplicate.rs"
+    ],
+    "profile_duplicate_write_failed": [
+      "cli/src/native/profile_duplicate_copy.rs"
+    ],
+    "profile_evict_permission_denied": [
+      "crates/agent-browser-service-model/src/profile_access.rs"
+    ],
+    "profile_eviction_grace_deadline_required": [
+      "crates/agent-browser-service-model/src/profile_access.rs"
+    ],
+    "profile_freshness_invalid": [
+      "cli/src/native/service_config.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "profile_identity_digest_missing": [
+      "cli/src/native/service_profile_lease.rs"
+    ],
+    "profile_identity_observation_failed": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "profile_identity_unavailable": [
+      "cli/src/native/service_profile_acquisition.rs"
+    ],
+    "profile_launch_reached": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_lease_conflict": [
+      "cli/src/native/service_model.rs",
+      "crates/agent-browser-service-model/src/service_state.rs",
+      "crates/agent-browser-service-model/src/terminal_outcome.rs"
+    ],
+    "profile_lease_expires_at_required": [
+      "cli/src/native/service_profile_lease.rs",
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_lease_legacy_principal_unproven": [
+      "cli/src/workstation_install.rs"
+    ],
+    "profile_lease_lifecycle_changed": [
+      "cli/src/native/service_activity.rs",
+      "cli/src/native/service_model.rs",
+      "cli/src/native/service_trace.rs",
+      "crates/agent-browser-service-model/src/job_event.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "profile_lease_plan_invalid": [
+      "cli/src/native/service_profile_lease.rs"
+    ],
+    "profile_lease_plan_required": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_lease_revision_required": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_lease_schema_unsupported": [
+      "cli/src/native/service_state_migration.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "profile_lifecycle_authorization_conflict": [
+      "crates/agent-browser-service-model/src/profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_authorization_invalid": [
+      "crates/agent-browser-service-model/src/profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_authorization_missing": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_browser_unavailable": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_daemon_route_unproven": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_effect_target_changed": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_grace_deadline_invalid": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_grace_deadline_missing": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_observation_time_invalid": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_physical_close_failed": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_physical_close_unproven": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_policy_fence_changed": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_policy_missing": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_preservation_tab_failed": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_profile_missing": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_proof_changed": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_settlement_uncertain": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_tab_missing": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lifecycle_target_unproven": [
+      "cli/src/native/service_profile_lifecycle.rs"
+    ],
+    "profile_lock_observation_failed": [
+      "cli/src/native/cdp/chrome.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "profile_lock_target_observation_failed": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "profile_owner_binding_failed": [
+      "cli/src/native/service_profile_lease.rs"
+    ],
+    "profile_owner_binding_missing": [
+      "cli/src/native/service_profile_lease.rs"
+    ],
+    "profile_owner_binding_refresh_failed": [
+      "cli/src/native/service_profile_lease.rs"
+    ],
+    "profile_owner_missing": [
+      "cli/src/native/service_profile_lease.rs"
+    ],
+    "profile_policy_mutation_failed": [
+      "cli/src/native/service_config.rs"
+    ],
+    "profile_policy_permission_denied": [
+      "crates/agent-browser-service-model/src/profile_access.rs"
+    ],
+    "profile_properties_begin_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "profile_properties_changed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "profile_properties_commit_failed": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "profile_properties_directory_unavailable": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "profile_properties_missing": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "profile_properties_name_invalid": [
+      "cli/src/native/browser_session_store.rs"
+    ],
+    "profile_properties_request_invalid": [
+      "cli/src/native/stream/dashboard.rs"
+    ],
+    "profile_properties_task_failed": [
+      "cli/src/native/stream/dashboard.rs"
+    ],
+    "profile_readiness_expired": [
+      "cli/src/native/service_access.rs",
+      "cli/src/native/service_monitors.rs",
+      "cli/src/output.rs",
+      "packages/client/src/service-observability.js"
+    ],
+    "profile_readiness_missing": [
+      "cli/src/native/service_monitors.rs",
+      "packages/client/src/service-observability.js"
+    ],
+    "profile_recovery_contract_encode_failed": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_expiry_invalid": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_identity_unavailable": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_lifecycle_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_now_invalid": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_operation_invalid": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_recovery_owner_generation_exhausted": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_owner_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_plan_daemon_route_required": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_recovery_plan_expired": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_plan_invalid": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_plan_profile_required": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_recovery_plan_required": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_recovery_postcondition_lifecycle_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_postcondition_owner_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_profile_identity_unavailable": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_profile_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_recovery_receipt_conflict": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_contract_encode_failed": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_expiry_invalid": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_now_invalid": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_operation_invalid": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_reset_plan_expired": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_plan_invalid": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_plan_required": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_reset_profile_identity_unavailable": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_profile_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_receipt_conflict": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_runtime_lifecycle_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_runtime_owner_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_scope_invalid": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_scope_required": [
+      "cli/src/native/stream/http.rs"
+    ],
+    "profile_reset_stale_lock_cleanup_failed": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_reset_target_service_id_required": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "profile_user_data_directory_missing": [
+      "cli/src/native/service_profile_diagnosis.rs"
+    ],
+    "remote_view_acquisition_lease_missing": [
+      "cli/src/native/remote_view_finalization.rs",
+      "cli/src/native/remote_view_handoff.rs"
+    ],
+    "remote_view_browser_recovery_response_invalid": [
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_browser_recovery_timeout": [
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_clock_invalid": [
+      "cli/src/mcp/workflow.rs",
+      "cli/src/native/browser_session_runtime/manual.rs",
+      "cli/src/native/stream/native_browser_mode.rs",
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_desktop_runtime_context_invalid": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "remote_view_desktop_runtime_context_unavailable": [
+      "cli/src/native/browser_session_runtime.rs"
+    ],
+    "remote_view_desktop_unavailable": [
+      "crates/agent-browser-service-model/src/browser_desktop_selector.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "remote_view_display_missing": [
+      "cli/src/native/service_model.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "remote_view_focus_assignment_conflict": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_focus_desktop_missing": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_focus_launch_custody_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_focus_owned_window_unproven": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_focus_window_readback_required": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_handoff_desktop_missing": [
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_handoff_desktop_unavailable": [
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_handoff_expired": [
+      "cli/src/native/stream/remote_view_presentation.rs",
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs",
+      "crates/agent-browser-service-model/tests/browser_session_manager.rs"
+    ],
+    "remote_view_handoff_intent_serialize_failed": [
+      "cli/src/native/remote_view_handoff.rs"
+    ],
+    "remote_view_handoff_path_invalid": [
+      "cli/src/native/stream/dashboard.rs"
+    ],
+    "remote_view_handoff_recreation_conflict": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_handoff_recreation_identity_missing": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_handoff_recreation_missing": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_handoff_recreation_navigation_failed": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_handoff_reopen_choice_conflict": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_handoff_reopen_profile_replacement_not_required": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_handoff_reopen_profile_replacement_required": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_handoff_reopen_required": [
+      "cli/src/native/stream/remote_view_presentation.rs",
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs",
+      "crates/agent-browser-service-model/tests/browser_session_manager.rs"
+    ],
+    "remote_view_handoff_resume_intent_missing": [
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "remote_view_handoff_resume_profile_unavailable": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_handoff_ttl_invalid": [
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "remote_view_handoff_url_invalid": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "remote_view_human_handoff_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_human_use_evidence_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_human_use_target_changed": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/browser_session_remote_view.rs",
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_idle_evidence_invalid": [
+      "cli/src/native/browser_session_pool_maintenance.rs"
+    ],
+    "remote_view_native_callback_denied": [
+      "cli/src/native/stream/dashboard.rs",
+      "cli/src/native/stream/native_browser_mode.rs",
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_native_callback_invalid": [
+      "cli/src/native/stream/dashboard.rs",
+      "cli/src/native/stream/native_browser_mode.rs"
+    ],
+    "remote_view_native_mode_desktop_changed": [
+      "cli/src/native/stream/native_browser_mode.rs"
+    ],
+    "remote_view_native_mode_read_unavailable": [
+      "cli/src/native/stream/native_browser_mode.rs"
+    ],
+    "remote_view_native_mode_reply_invalid": [
+      "cli/src/native/stream/native_browser_mode.rs"
+    ],
+    "remote_view_native_mode_request_invalid": [
+      "cli/src/native/stream/native_browser_mode.rs"
+    ],
+    "remote_view_native_mode_target_changed": [
+      "cli/src/native/stream/native_browser_mode.rs"
+    ],
+    "remote_view_native_observation_expired": [
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_native_observation_unsupported": [
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "remote_view_native_registration_failed": [
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_native_registration_missing": [
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_native_registration_response_invalid": [
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_native_registration_timeout": [
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_native_registration_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_native_replacement_changed": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_native_replacement_custody_missing": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_native_replacement_custody_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_native_replacement_desktop_missing": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_native_replacement_target_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_native_target_changed": [
+      "cli/src/native/browser_session_remote_view.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_native_target_invalid": [
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "remote_view_native_target_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_native_use_unavailable": [
+      "cli/src/native/browser_session_remote_view.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_operator_handoff_id_invalid": [
+      "crates/agent-browser-service-model/src/remote_view_retention.rs"
+    ],
+    "remote_view_pending_human_retention_invalid": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_pool_acquisition_readback_required": [
+      "crates/agent-browser-service-model/src/remote_view_session_pool.rs"
+    ],
+    "remote_view_pool_capacity_exhausted": [
+      "crates/agent-browser-service-model/src/remote_view_session_pool.rs"
+    ],
+    "remote_view_pool_custody_unavailable": [
+      "cli/src/native/browser_session_pool_maintenance.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_pool.rs"
+    ],
+    "remote_view_presentation_join_failed": [
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_presentation_path_invalid": [
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_presentation_unavailable": [
+      "cli/src/native/stream/dashboard.rs",
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_privileged_group_membership_missing": [
+      "cli/src/install.rs",
+      "cli/src/remote_view_doctor.rs"
+    ],
+    "remote_view_privileged_group_missing": [
+      "cli/src/install.rs",
+      "cli/src/remote_view_doctor.rs"
+    ],
+    "remote_view_privileged_helper_missing": [
+      "cli/src/install.rs",
+      "cli/src/remote_view_doctor.rs"
+    ],
+    "remote_view_privileged_sudoers_missing": [
+      "cli/src/install.rs",
+      "cli/src/remote_view_doctor.rs"
+    ],
+    "remote_view_provider_auth_failed": [
+      "cli/src/native/service_model.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "remote_view_public_origin_invalid": [
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_public_origin_missing": [
+      "cli/src/mcp/workflow.rs",
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/stream/remote_view_presentation.rs"
+    ],
+    "remote_view_release_cancellation_invalid": [
+      "cli/src/native/browser_launch_custody_store.rs"
+    ],
+    "remote_view_release_custody_unavailable": [
+      "cli/src/native/browser_launch_custody_store.rs",
+      "cli/src/native/browser_session_pool_maintenance.rs"
+    ],
+    "remote_view_release_readback_required": [
+      "cli/src/native/browser_launch_custody_store.rs",
+      "cli/src/native/browser_session_pool_maintenance.rs"
+    ],
+    "remote_view_retention_browser_missing": [
+      "crates/agent-browser-service-model/src/remote_view_retention.rs"
+    ],
+    "remote_view_retention_conflict": [
+      "crates/agent-browser-service-model/src/remote_view_retention.rs"
+    ],
+    "remote_view_retention_desktop_missing": [
+      "crates/agent-browser-service-model/src/remote_view_retention.rs"
+    ],
+    "remote_view_retention_missing": [
+      "crates/agent-browser-service-model/src/remote_view_retention.rs"
+    ],
+    "remote_view_retention_session_missing": [
+      "crates/agent-browser-service-model/src/remote_view_retention.rs"
+    ],
+    "remote_view_retention_tab_missing": [
+      "crates/agent-browser-service-model/src/remote_view_retention.rs"
+    ],
+    "remote_view_route_pool_exhausted": [
+      "cli/src/native/service_model.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "remote_view_runtime_application_invalid": [
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_runtime_assignment_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_pool.rs"
+    ],
+    "remote_view_runtime_config_invalid": [
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_runtime_config_missing": [
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_runtime_desktop_count_invalid": [
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_runtime_inventory_unavailable": [
+      "cli/src/native/browser_session_pool_maintenance.rs",
+      "cli/src/native/browser_session_remote_view.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_pool.rs"
+    ],
+    "remote_view_runtime_origin_invalid": [
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_runtime_pool_missing": [
+      "cli/src/native/browser_session_pool_maintenance.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_pool.rs"
+    ],
+    "remote_view_session_assignment_invalid": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_pool.rs"
+    ],
+    "remote_view_session_custody_unavailable": [
+      "cli/src/native/browser_session_pool_maintenance.rs",
+      "cli/src/native/browser_session_remote_view.rs"
+    ],
+    "remote_view_session_desktop_required": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_session_intent_invalid": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_session_launch_readback_required": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+      "crates/agent-browser-service-model/tests/browser_handoff_recovery.rs"
+    ],
+    "remote_view_session_observation_target_changed": [
+      "cli/src/native/browser_session_remote_view.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_session_operation_baseline_missing": [
+      "cli/src/native/browser_session_remote_view.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_session_pool_invalid": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_pool.rs"
+    ],
+    "remote_view_tab_handoff_browser_unavailable": [
+      "cli/src/native/browser_session_remote_view.rs",
+      "cli/src/native/stream/remote_view_presentation.rs",
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "remote_view_tab_handoff_id_conflict": [
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "remote_view_tab_handoff_id_invalid": [
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "remote_view_tab_handoff_identity_conflict": [
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "remote_view_tab_handoff_missing": [
+      "cli/src/native/browser_human_handoff.rs",
+      "cli/src/native/browser_session_host.rs",
+      "cli/src/native/browser_session_remote_view.rs",
+      "cli/src/native/stream/native_browser_mode.rs",
+      "cli/src/native/stream/remote_view_presentation.rs",
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs",
+      "crates/agent-browser-service-model/tests/browser_session_manager.rs"
+    ],
+    "remote_view_tab_handoff_record_conflict": [
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "remote_view_tab_handoff_session_unavailable": [
+      "cli/src/native/stream/remote_view_presentation.rs",
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "remote_view_tab_handoff_tab_unavailable": [
+      "cli/src/native/stream/remote_view_presentation.rs",
+      "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+    ],
+    "remote_view_tab_observation_unsupported": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "remote_view_tab_transport_readback_required": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_tab_view_assignment_conflict": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_tab_view_assignment_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_tab_view_desktop_missing": [
+      "cli/src/native/browser_session_remote_view.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_tab_view_identity_conflict": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_tab_view_inventory_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_tab_view_issuance_invalid": [
+      "cli/src/native/browser_session_host.rs",
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_tab_view_issuance_readback_required": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_tab_view_launch_custody_unavailable": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_tab_view_missing": [
+      "cli/src/native/browser_session_host.rs"
+    ],
+    "remote_view_tab_view_resolution_failed": [
+      "crates/agent-browser-service-model/src/remote_view_session_effects.rs"
+    ],
+    "remote_view_tab_view_unsupported": [
+      "crates/agent-browser-service-model/src/browser_session_manager.rs"
+    ],
+    "runtime_additional_source_host_exit_timeout": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_additional_source_host_identity_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_browser_record_missing": [
+      "cli/src/native/service_profile_diagnosis.rs",
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "runtime_cleanup_obligations_missing": [
+      "cli/src/install.rs"
+    ],
+    "runtime_convergence_preservation_lane_state_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_cooperative_preparation_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_environment_ownership_unproven": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_handoff_alternate_browser_conflict": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_handoff_candidate_owner_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_candidate_profile_projection_conflict": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_durable_orphan_cdp_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_durable_orphan_process_identity_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_durable_orphan_runtime_state_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_finalize_browser_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_logical_browser_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_orphan_cdp_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_orphan_commit_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_orphan_pid_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_orphan_profile_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_owner_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_owner_transfer_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_persist_browser_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_prepare_descriptor_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_handoff_prepare_path_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_handoff_prepare_response_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_handoff_prepare_retry_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_handoff_prepare_retry_read_failed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_handoff_prepare_stale_retry_cleanup_failed": [
+      "cli/src/native/action_runtime/runtime/navigation.rs",
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_handoff_prepare_stale_retry_process_identity_unavailable": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_prepare_stale_retry_process_unavailable": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_prepare_stale_retry_profile_unavailable": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_process_identity_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_profile_inventory_failed": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_profile_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_profile_projection_conflict": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_resume_post_commit_compensation_failed": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_rollback_browser_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_rollback_browser_projection_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_rollback_owner_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_source_listener_inventory_unavailable": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_handoff_source_owner_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_source_runtime_host_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_handoff_source_session_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_handoff_target_set_missing": [
+      "cli/src/native/action_runtime/runtime/navigation.rs"
+    ],
+    "runtime_host_admission_required": [
+      "cli/src/connection.rs"
+    ],
+    "runtime_host_boot_epoch_missing": [
+      "cli/src/runtime_host_ingress.rs"
+    ],
+    "runtime_host_boot_epoch_unavailable": [
+      "cli/src/runtime_host_ingress.rs"
+    ],
+    "runtime_host_competing_lane_browser_health_unavailable": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_convergence_deadline_expired": [
+      "cli/src/runtime_adoption.rs"
+    ],
+    "runtime_host_convergence_deadline_invalid": [
+      "cli/src/runtime_adoption.rs"
+    ],
+    "runtime_host_convergence_missing": [
+      "cli/src/runtime_adoption.rs",
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_convergence_required": [
+      "cli/src/session_supervisor.rs"
+    ],
+    "runtime_host_executable_hash_failed": [
+      "cli/src/runtime_host_supervisor_takeover.rs"
+    ],
+    "runtime_host_identity_changed": [
+      "cli/src/runtime_adoption.rs"
+    ],
+    "runtime_host_ingress_lock_timeout": [
+      "cli/src/runtime_host_ingress.rs"
+    ],
+    "runtime_host_ingress_old_generation_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_ingress_replacement_process_observation_failed": [
+      "cli/src/runtime_host_ingress.rs"
+    ],
+    "runtime_host_ingress_selected_identity_changed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_ingress_selected_process_observation_failed": [
+      "cli/src/runtime_host_ingress.rs",
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_ingress_selected_socket_root_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_lane_admission_failed": [
+      "cli/src/session_supervisor.rs"
+    ],
+    "runtime_host_lane_capacity_exhausted": [
+      "cli/src/runtime_host.rs"
+    ],
+    "runtime_host_lane_config_invalid": [
+      "cli/src/runtime_host.rs"
+    ],
+    "runtime_host_lane_invalid": [
+      "cli/src/runtime_host.rs"
+    ],
+    "runtime_host_lane_owner_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_listener_fd_invalid": [
+      "cli/src/runtime_host_supervisor_takeover.rs"
+    ],
+    "runtime_host_listener_fd_observation_failed": [
+      "cli/src/runtime_host_supervisor_takeover.rs"
+    ],
+    "runtime_host_listener_fd_target_failed": [
+      "cli/src/runtime_host_supervisor_takeover.rs"
+    ],
+    "runtime_host_manifest_encode_failed": [
+      "cli/src/runtime_host.rs"
+    ],
+    "runtime_host_manifest_permissions_failed": [
+      "cli/src/runtime_host.rs"
+    ],
+    "runtime_host_manifest_write_failed": [
+      "cli/src/runtime_host.rs"
+    ],
+    "runtime_host_quiesce_source_socket_changed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_service_state_revision_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_service_state_revision_read_failed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_service_state_revision_unavailable": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_host_socket_identity_failed": [
+      "cli/src/runtime_host.rs"
+    ],
+    "runtime_host_start_timeout": [
+      "cli/src/session_supervisor.rs"
+    ],
+    "runtime_host_stream_metadata_write_failed": [
+      "cli/src/native/daemon.rs"
+    ],
+    "runtime_host_stream_start_failed": [
+      "cli/src/native/daemon.rs"
+    ],
+    "runtime_host_supervisor_post_upgrade_verification_failed": [
+      "cli/src/runtime_host_supervisor_takeover.rs"
+    ],
+    "runtime_host_supervisor_takeover_failed": [
+      "cli/src/runtime_host_supervisor_takeover.rs"
+    ],
+    "runtime_host_supervisor_takeover_manifest_changed": [
+      "cli/src/runtime_host_supervisor_takeover.rs"
+    ],
+    "runtime_host_supervisor_takeover_plan_changed": [
+      "cli/src/runtime_host_supervisor_takeover.rs"
+    ],
+    "runtime_host_supervisor_takeover_resume_failed": [
+      "cli/src/runtime_host_supervisor_takeover.rs"
+    ],
+    "runtime_host_supervisor_takeover_revision_changed": [
+      "cli/src/runtime_host_supervisor_takeover.rs"
+    ],
+    "runtime_lane_candidate_session_missing": [
+      "cli/src/runtime_adoption.rs"
+    ],
+    "runtime_lane_commit_receipt_missing": [
+      "cli/src/runtime_adoption.rs"
+    ],
+    "runtime_lane_observation_receipt_missing": [
+      "cli/src/runtime_adoption.rs"
+    ],
+    "runtime_lane_rollback_receipt_missing": [
+      "cli/src/runtime_adoption.rs"
+    ],
+    "runtime_lifecycle_bound_browser_identity_unproven": [
+      "cli/src/native/action_runtime/runtime/remote_headed.rs"
+    ],
+    "runtime_lifecycle_browser_unproven": [
+      "cli/src/native/runtime_reconciliation.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_descendant_closure_unproven": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_exact_owner_unproven": [
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_generation_exhausted": [
+      "cli/src/native/runtime_lifecycle.rs"
+    ],
+    "runtime_lifecycle_identity_encode_failed": [
+      "cli/src/native/runtime_lifecycle.rs"
+    ],
+    "runtime_lifecycle_launch_identity_unproven": [
+      "cli/src/native/runtime_reconciliation.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_owned_browser_profile_unavailable": [
+      "cli/src/native/action_runtime/runtime/remote_headed.rs"
+    ],
+    "runtime_lifecycle_owner_browser_changed": [
+      "cli/src/native/runtime_reconciliation.rs"
+    ],
+    "runtime_lifecycle_owner_generation_changed": [
+      "cli/src/native/runtime_reconciliation.rs"
+    ],
+    "runtime_lifecycle_owner_missing": [
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_lifecycle_owner_process_changed": [
+      "cli/src/native/runtime_reconciliation.rs"
+    ],
+    "runtime_lifecycle_owner_unproven": [
+      "cli/src/native/runtime_reconciliation.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_package_launch_changed": [
+      "cli/src/native/runtime_reconciliation.rs"
+    ],
+    "runtime_lifecycle_package_launch_identity_invalid": [
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_lifecycle_process_group_changed": [
+      "cli/src/native/runtime_reconciliation.rs"
+    ],
+    "runtime_lifecycle_process_group_unproven": [
+      "cli/src/native/runtime_reconciliation.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_process_identity_changed": [
+      "cli/src/native/runtime_reconciliation.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_process_identity_unavailable": [
+      "cli/src/native/action_runtime/runtime/remote_headed.rs"
+    ],
+    "runtime_lifecycle_process_identity_unproven": [
+      "cli/src/native/runtime_reconciliation.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_process_tree_record_missing": [
+      "cli/src/native/runtime_lifecycle.rs"
+    ],
+    "runtime_lifecycle_profile_identity_changed": [
+      "cli/src/native/runtime_reconciliation.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_profile_identity_unproven": [
+      "cli/src/native/runtime_reconciliation.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_profile_migration_record_missing": [
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_lifecycle_profile_path_invalid": [
+      "cli/src/native/runtime_lifecycle.rs"
+    ],
+    "runtime_lifecycle_profile_record_missing": [
+      "cli/src/native/runtime_lifecycle.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "runtime_lifecycle_record_browser_changed": [
+      "cli/src/native/runtime_reconciliation.rs"
+    ],
+    "runtime_lifecycle_record_invalid": [
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_lifecycle_record_missing": [
+      "cli/src/native/runtime_lifecycle.rs",
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_lifecycle_record_profile_changed": [
+      "cli/src/native/runtime_reconciliation.rs"
+    ],
+    "runtime_lifecycle_record_unproven": [
+      "cli/src/native/runtime_reconciliation.rs",
+      "cli/src/native/service_resources.rs"
+    ],
+    "runtime_lifecycle_recovery_owner_missing": [
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_lifecycle_recovery_record_missing": [
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_lifecycle_registry_unavailable": [
+      "cli/src/install.rs"
+    ],
+    "runtime_lifecycle_relinquish_authority_unproven": [
+      "cli/src/native/runtime_lifecycle.rs"
+    ],
+    "runtime_lifecycle_relinquish_owner_missing": [
+      "cli/src/native/runtime_lifecycle.rs"
+    ],
+    "runtime_lifecycle_relinquish_record_missing": [
+      "cli/src/native/runtime_lifecycle.rs"
+    ],
+    "runtime_lifecycle_replacement_owner_missing": [
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_lifecycle_replacement_record_missing": [
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_lifecycle_retained_attach_owner_missing": [
+      "cli/src/native/action_runtime/runtime/launch.rs"
+    ],
+    "runtime_lifecycle_reverse_owner_state_invalid": [
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_lifecycle_terminal_evidence_missing": [
+      "crates/agent-browser-lease-authority/src/runtime_owner.rs"
+    ],
+    "runtime_memory_high_invalid": [
+      "cli/src/session_supervisor.rs"
+    ],
+    "runtime_observation_unavailable": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_orphan_source_session_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_owner_lifecycle_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "runtime_owner_missing": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "runtime_owner_principal_binding_missing": [
+      "cli/src/native/service_profile_diagnosis.rs",
+      "cli/src/native/service_profile_lease.rs",
+      "cli/src/native/service_profile_recovery.rs",
+      "cli/src/output.rs"
+    ],
+    "runtime_process_tree_observation_failed": [
+      "cli/src/native/cdp/chrome.rs"
+    ],
+    "runtime_process_tree_review_changed": [
+      "cli/src/native/cdp/chrome.rs"
+    ],
+    "runtime_process_tree_root_missing": [
+      "cli/src/native/cdp/chrome.rs"
+    ],
+    "runtime_process_tree_wait_failed": [
+      "cli/src/native/cdp/chrome.rs"
+    ],
+    "runtime_profile_directory_conflict": [
+      "cli/src/native/service_config.rs"
+    ],
+    "runtime_profile_directory_unavailable": [
+      "cli/src/native/service_config.rs"
+    ],
+    "runtime_replacement_authorization_invalid": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_authorization_missing": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_authorization_serialize_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_authorization_time_invalid": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_browser_exit_timeout": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_browser_exit_unproven": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_browser_process_identity_missing": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_close_command_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_close_command_timeout": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_close_output_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_close_response_invalid": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_close_session_missing": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_close_wait_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_effect_receipt_invalid": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_effect_receipt_plan_changed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_effect_receipt_serialize_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_forward_recovery_required": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_replacement_forward_resume_effect_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_replacement_forward_resume_receipt_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_replacement_operator_authorization_required": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_plan_changed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_replacement_plan_serialize_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_selected_process_identity_missing": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_service_state_invalid": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_service_state_migration_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_replacement_service_state_read_failed": [
+      "cli/src/runtime_replacement.rs",
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_replacement_service_state_snapshot_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_replacement_service_state_stage_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_replacement_service_state_summary_serialize_failed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_replacement_service_state_utf8_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_replacement_source_executable_missing": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_source_exit_timeout": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_source_exit_unproven": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_transaction_authorization_changed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_transaction_commit_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_transaction_directory_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_transaction_parent_missing": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_transaction_permissions_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_transaction_plan_changed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_transaction_plan_invalid": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_transaction_serialize_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_transaction_stage_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_replacement_transaction_write_failed": [
+      "cli/src/runtime_replacement.rs"
+    ],
+    "runtime_reset_account_home_invalid": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_account_home_unavailable": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_argument_invalid": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_arguments_conflict": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_backup_digest_changed": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_backup_failed": [
+      "cli/src/native/browser_runtime_reset_store.rs"
+    ],
+    "runtime_reset_backup_integrity_failed": [
+      "cli/src/native/browser_runtime_reset_store.rs"
+    ],
+    "runtime_reset_cgroup_inventory_unavailable": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_cgroup_pid_invalid": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_clock_invalid": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_custody_missing": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_database_missing": [
+      "cli/src/native/browser_runtime_reset_store.rs",
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_database_parent_missing": [
+      "cli/src/native/browser_runtime_reset_store.rs"
+    ],
+    "runtime_reset_executor_identity_unavailable": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_home_missing": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_operation_conflict": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_outcome_invalid": [
+      "cli/src/native/browser_runtime_reset_store.rs"
+    ],
+    "runtime_reset_process_cgroup_unavailable": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_process_exit_unproven": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_process_identity_unavailable": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_receipt_cgroup_invalid": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_receipt_invalid": [
+      "cli/src/native/browser_runtime_reset_store.rs"
+    ],
+    "runtime_reset_receipt_parent_missing": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_receipt_unit_invalid": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_resume_id_invalid": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_resume_id_required": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_resume_invalid": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_systemd_failed": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_reset_systemd_timeout": [
+      "cli/src/runtime_reset.rs"
+    ],
+    "runtime_resource_config_invalid": [
+      "cli/src/session_supervisor.rs"
+    ],
+    "runtime_source_exit_deadline_expired": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_source_host_exit_timeout": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_source_host_identity_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_source_host_identity_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_source_prepare_descriptor_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_source_prepare_descriptor_remove_failed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_source_prepare_expected_owner_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_source_prepare_owner_proposal_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_source_process_identity_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_stream_metadata_invalid": [
+      "cli/src/install.rs"
+    ],
+    "runtime_transfer_candidate_session_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_transfer_receipt_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_transfer_receipt_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "runtime_transfer_source_browser_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_access_plan_request_unavailable": [
+      "cli/src/native/service_access.rs",
+      "cli/src/native/service_profile_acquisition.rs",
+      "cli/src/native/service_request.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_access_plan_route_browser_conflict": [
+      "cli/src/native/service_access.rs",
+      "cli/src/native/service_request.rs",
+      "cli/src/native/stream/http.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_access_plan_route_session_conflict": [
+      "cli/src/native/service_access.rs",
+      "cli/src/native/service_request.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_browser_close_authority_denied": [
+      "cli/src/native/service_health.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_job_timeout": [
+      "cli/src/commands.rs",
+      "cli/src/mcp.rs",
+      "cli/src/native/service_activity.rs",
+      "cli/src/native/service_model.rs",
+      "cli/src/native/stream/http.rs",
+      "crates/agent-browser-service-model/src/service_state.rs",
+      "packages/dashboard/src/components/service-panel.tsx"
+    ],
+    "service_navigation_tab_identity_conflict": [
+      "cli/src/native/browser_lifecycle.rs"
+    ],
+    "service_operation_failed": [
+      "cli/src/native/service_failure.rs",
+      "cli/src/native/service_failure/public.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_profile_diagnosis_encode_failed": [
+      "cli/src/mcp.rs",
+      "cli/src/native/service_profile_diagnosis.rs"
+    ],
+    "service_profile_diagnosis_profile_missing": [
+      "cli/src/native/service_profile_diagnosis.rs"
+    ],
+    "service_profile_diagnosis_serialization_failed": [
+      "cli/src/native/service_profile_recovery.rs"
+    ],
+    "service_request_failed": [
+      "cli/src/native/control_plane.rs",
+      "packages/client/src/service-request.js"
+    ],
+    "service_request_unavailable": [
+      "cli/src/native/service_profile_acquisition.rs"
+    ],
+    "service_state_browser_display_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_browser_profile_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_browser_session_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_display_browser_missing": [
+      "cli/src/native/service_state_migration.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_display_profile_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_display_route_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_display_session_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_lock_timeout": [
+      "cli/src/native/browser.rs",
+      "cli/src/native/control_plane.rs",
+      "cli/src/native/service_failure.rs",
+      "cli/src/native/service_store.rs",
+      "cli/src/native/stream/guacamole_primary_binding.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_state_migration_authoritative_state_changed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_migration_cas_read_failed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_migration_contamination_serialize_failed": [
+      "cli/src/native/service_state_migration.rs"
+    ],
+    "service_state_migration_json_invalid": [
+      "cli/src/native/service_state_migration.rs"
+    ],
+    "service_state_migration_read_failed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_migration_record_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_migration_remove_failed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_migration_serialize_failed": [
+      "cli/src/native/service_state_migration.rs"
+    ],
+    "service_state_migration_snapshot_digest_changed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_migration_snapshot_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_migration_stage_missing": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_migration_staged_digest_changed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_migration_summary_serialize_failed": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_migration_utf8_invalid": [
+      "cli/src/workstation_install.rs"
+    ],
+    "service_state_prepared_save_missing": [
+      "cli/src/native/service_store.rs"
+    ],
+    "service_state_prepared_save_path_missing": [
+      "cli/src/native/service_store.rs"
+    ],
+    "service_state_prepared_save_unsupported": [
+      "cli/src/native/service_store.rs"
+    ],
+    "service_state_principal_capability_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_principal_profile_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_process_browser_missing": [
+      "cli/src/native/service_state_migration.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_revision_exhausted": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_route_browser_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_route_controller_lease_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_route_display_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_route_session_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_route_viewer_lease_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_schema_unsupported": [
+      "cli/src/native/service_state_validation.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_seeding_handoff_profile_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_session_browser_missing": [
+      "cli/src/native/service_state_migration.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_session_profile_missing": [
+      "cli/src/native/service_state_migration.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_session_tab_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_tab_browser_missing": [
+      "cli/src/native/service_state_migration.rs",
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_tab_routed_session_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_tab_session_missing": [
+      "crates/agent-browser-service-model/src/service_state.rs"
+    ],
+    "service_state_unavailable": [
+      "cli/src/native/action_runtime/runtime/daemon.rs",
+      "cli/src/remote_view_doctor.rs"
+    ],
+    "service_tab_handle_unavailable": [
+      "packages/client/src/service-request.js"
+    ],
+    "service_tab_profile_selector_conflict": [
+      "cli/src/native/action_runtime/runtime/cdp_free_execute.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_tab_recovery_attach_failed": [
+      "cli/src/native/remote_view/open/coordinator.rs",
+      "cli/src/native/service_probe.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_tab_recovery_endpoint_unproven": [
+      "cli/src/native/remote_view/open/coordinator.rs",
+      "cli/src/native/service_probe.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_tab_recovery_owner_missing": [
+      "cli/src/native/remote_view/open/coordinator.rs",
+      "cli/src/native/service_probe.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_tab_recovery_process_unproven": [
+      "cli/src/native/remote_view/open/coordinator.rs",
+      "cli/src/native/service_probe.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_tab_recovery_target_missing": [
+      "cli/src/native/browser.rs",
+      "cli/src/native/remote_view/open/coordinator.rs",
+      "cli/src/native/service_probe.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_tab_target_selector_conflict": [
+      "cli/src/native/action_runtime/runtime/cdp_free_execute.rs",
+      "cli/src/native/action_runtime/runtime/native_acquisition.rs",
+      "cli/src/native/actions.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "service_tab_target_unproven": [
+      "cli/src/native/action_runtime/runtime/cdp_free_execute.rs",
+      "crates/agent-browser-service-model/src/failure_recourse.rs"
+    ],
+    "workflow_cli_failed": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "workflow_cli_response_invalid": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "workflow_operation_failed": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "workflow_transport_failed": [
+      "cli/src/mcp/workflow.rs"
+    ],
+    "workflow_transport_start_failed": [
+      "cli/src/mcp/workflow.rs"
+    ]
+  }
+}

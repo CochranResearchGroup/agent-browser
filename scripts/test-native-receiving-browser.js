@@ -79,3 +79,9 @@ await assert.rejects(identifierUnknown.fill(unknownIdentifierInput));
 await assert.rejects(identifierUnknown.fill(unknownIdentifierInput));
 assert.equal(identifierUnknownDispatches,1);
 console.log('Native receiving browser: unknown identifier delivery cannot be converted into equality success');
+
+// A stalled private receiving read is bounded by an OS wait, never guest expiry.
+let waitInputs760=0;
+const stalled760=createNativeReceivingBrowser({desktop,guards,timeoutMs:20,readObservation:async()=>new Promise(()=>{}),inputMatches:async()=>false,remote:{observe:async()=>({...desktop}),input:async()=>{waitInputs760++;return {delivery:'dispatched'}}}});
+const stalledOutcome760=await Promise.race([stalled760.waitForChange({binding,observation:{state:'identifier_required'},guard:async()=>{}}).then(()=>null,error=>error),new Promise(resolve=>setTimeout(()=>resolve(null),200))]);
+assert.equal(stalledOutcome760?.code,'auth_input_unknown');assert.equal(stalledOutcome760?.budgetKind,'caller_wait_only');assert.equal(waitInputs760,0);

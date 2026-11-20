@@ -4,6 +4,86 @@ Command help is local and read-only. Use `agent-browser service --help` or
 `agent-browser service -h` without starting a browser or changing Service State.
 Unsupported commands and subcommands return typed errors.
 
+Retention and popup admission use optional positive `maximumRetentionClaims`
+(default 4096) and `maximumPopupAdmissions` (default 64) in the same live policy.
+Retention admission counts all retained unreleased claims; released original
+history remains inspectable and does not consume admission. Guest expiry never
+releases a claim. Capacity status reports `retentionClaimActiveCount`,
+`retentionClaimReleasedHistoryCount`, `retentionClaimCountScope`,
+`retentionClaimLimit` and `popupAdmissionLimit` with the effective policy source.
+Popup refresh admits a bounded batch and reports `deferredEligibleTargetCount`
+instead of refusing the original task. Raise its live policy and refresh the same
+task to admit remaining eligible targets; no input replay or permission change.
+
+Reconnect receipts use optional positive `maximumReconnectRequests` (default 128).
+Runtime lanes use `maximumRuntimeLanes` (default 64) from system defaults only;
+task overrides do not change host-wide capacity. Update these fields through the
+existing `task_operation` capacity interface. Readback reports
+`reconnectRequestLimit`, `runtimeLaneLimit` and `runtimeLanePolicySource`.
+Increasing a limit admits new work without removing original reconnect receipts
+or existing lanes. Lowering a limit never evicts an existing lane. The runtime
+manifest reports its startup snapshot, not current policy.
+
+## Deferred legacy expiry
+
+Automatic task/tab expiry and disposable-profile deletion are deferred when their
+starting timestamps have only guest-clock evidence. A clock jump cannot authorize
+those destructive effects. `browser_session_reap` reports `maintenanceEvidence`
+with `unqualified_legacy_start`; this does not claim qualified automatic cleanup.
+Use retained task status/briefing for inspection and explicit scoped close under
+existing authority when work is finished. Browser work and explicit close remain
+independent of this maintenance timing qualification.
+
+## Continue after a refusal
+
+Use the existing `browser_command` action `failure_recovery` with
+`params:{"operation":"inspect","occurrenceId":"RETURNED-UUID"}` and the original
+`taskId` when available. `packet` returns sanitized escalation context; `history`
+reads retained attempts. These reads do not dispatch browser input.
+
+`run` accepts a stable UUID `attemptId` and optionally one declared `remedy`
+containing `tool` and `arguments`. It performs registered inspection, one supported
+remedy and verification. Supported remedies use existing task-bound observation,
+reconnect, capacity or owner-proof reconciliation interfaces. Original input and
+permission overrides are excluded. The same attempt and arguments return its
+retained result; changed arguments conflict. After interruption, `reconcile`
+verifies the retained attempt without repeating its remedy.
+
+Configure budgets live with `params:{"operation":"configure","scope":"task",
+"actor":"AGENT","reason":"REVIEWED REPAIR","policy":{"maxAttempts":5,
+"maxNoProgress":3}}`. Use `scope:"defaults"` for defaults. Defaults are three
+attempts and two consecutive checks without progress; zero `maxAttempts` disables
+automatic recovery. Optional positive `maxDurationMs` checks supported StableTime
+observation bounds before subsequent remedy and verification dispatch. It does not
+promise delivery or completion by a deadline. Without it, ordinary recovery reads
+add no timing gate. An unqualified client, service bound or elapsed interval pauses
+only these budgeted steps; inspect, history and escalation remain available.
+Inspection and history remain available after exhaustion.
+Updates preserve prior attempts and require no restart or recompile. Configuration
+and actor labels do not grant new permissions or authenticate the caller.
+
+CLI clients use `agent-browser --json mcp failure-recovery '<JSON request containing
+taskId and params>'`. `agent-browser --json mcp task-operation TASK REQUEST reconcile`
+settles an original failure only from verified owner evidence of no dispatched
+input. Its state is `owner_refused_no_effect`, never a successful acknowledgement.
+A new input intent still needs fresh observation and existing authority. First
+such settlement promotes runtime schema to 7; older readers must refuse it.
+
+After ordinary work resumes, `record_resume` accepts the recovery `attemptId`,
+original occurrence, acknowledged new `requestId` and `actor`. It verifies that
+exact task operation's owner acknowledgement. The association is caller supplied;
+it does not establish website success or task completion. Attempt and outcome
+journal records link the original occurrence without copying private input.
+
+Legacy helper callbacks without owner-qualified executable expiry now return
+`helper_grant_time_unqualified` before new private input. Original request
+inspection/reconciliation and independently verified prior completion remain
+available. Continue through the existing authenticated owner SDK
+(`createOwnerLoginPlaybook` / `connectHostedAuthHelper`) under its current grants;
+caller timestamps or assertions cannot qualify a new credential use. Teaching
+sources with finite, unqualified expiry similarly use current recording-owner
+pin/qualified-read recourse; owner revocation and deletion still apply.
+
 ## Button activation
 
 `browser_click` delivers pointer input for ordinary buttons, including menus

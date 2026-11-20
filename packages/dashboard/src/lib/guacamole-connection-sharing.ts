@@ -1,3 +1,5 @@
+import {dashboardLocalFailure} from "./response-failure.ts";
+import {dashboardResponseFailureError,responseFailureMetadata} from "./response-failure.ts";
 import type { ServiceViewStream } from "@/lib/service-view-streams";
 
 type GuacamoleAuthToken = {
@@ -95,7 +97,7 @@ export function classifyGuacamoleShareAuthMessage({
 function newShareAttemptId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   if (typeof globalThis.crypto?.getRandomValues !== "function") {
-    throw new Error("Guacamole connection-sharing attempt identity cannot be generated securely");
+    throw dashboardLocalFailure(new Error("Guacamole connection-sharing attempt identity cannot be generated securely"),"dashboard_guacamole_secure_identity_unavailable","packages/dashboard/src/lib/guacamole-connection-sharing.ts","newShareAttemptId");
   }
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
@@ -119,7 +121,7 @@ function guacamoleRoot(frameUrl: string, dashboardHref: string): URL | null {
 function guacamoleSharingRoot(root: URL): URL {
   const labels = root.hostname.split(".");
   if (labels.length < 2 || !labels[0] || labels[0].endsWith("-share")) {
-    throw new Error("Guacamole connection-sharing origin is unavailable");
+    throw dashboardLocalFailure(new Error("Guacamole connection-sharing origin is unavailable"),"dashboard_guacamole_origin_unavailable","packages/dashboard/src/lib/guacamole-connection-sharing.ts","guacamoleSharingRoot");
   }
   const shared = new URL(root);
   labels[0] = `${labels[0]}-share`;
@@ -128,19 +130,17 @@ function guacamoleSharingRoot(root: URL): URL {
 }
 
 async function readJson<T>(response: Response, operation: string): Promise<T> {
-  if (!response.ok) {
-    if (operation === "Guacamole backend primary ownership" || operation === "Guacamole primary recovery") {
-      const failure = await response.json().catch(() => null) as { code?: unknown; occurrenceId?: unknown } | null;
-      if (typeof failure?.code === "string" && /^guacamole_(primary_|viewer_primary_)[a-z_]+$/.test(failure.code)) {
-        const occurrence = typeof failure.occurrenceId === "string"
-          && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(failure.occurrenceId)
-          ? ` (occurrence ${failure.occurrenceId})` : "";
-        throw new Error(`${operation}: ${failure.code}${occurrence}`);
-      }
-    }
-    throw new Error(`${operation} returned HTTP ${response.status}`);
+  let payload: unknown;
+  try { payload = await response.json(); }
+  catch { throw dashboardResponseFailureError({success:false}, "guacamole_response_invalid"); }
+  if (!response.ok || responseFailureMetadata(payload)) {
+    const envelope = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+    const error = dashboardResponseFailureError({...envelope,success:false}, "guacamole_owner_request_failed");
+    const occurrence = responseFailureMetadata({...envelope,success:false})?.observationId;
+    error.message = `${operation}: ${error.message}${occurrence ? ` (occurrence ${occurrence})` : ""}`;
+    throw error;
   }
-  return response.json() as Promise<T>;
+  return payload as T;
 }
 
 function waitForElection(delayMs: number, signal?: AbortSignal): Promise<void> {
@@ -264,7 +264,7 @@ export async function recoverGuacamolePrimary({
   if (stream.providerMode !== "simultaneous_view") return;
   const routeId = stream.routeId?.trim();
   const connectionId = stream.connectionId?.trim();
-  if (!routeId || !connectionId) throw new Error("Guacamole primary binding is incomplete");
+  if (!routeId || !connectionId) throw dashboardLocalFailure(new Error("Guacamole primary binding is incomplete"),"dashboard_guacamole_binding_incomplete","packages/dashboard/src/lib/guacamole-connection-sharing.ts","recoverGuacamolePrimary");
   const request = (operation: string, expectedTerminalOccurrenceId?: string) => fetchImpl(
     new URL("/api/guacamole-primary-claim", dashboardHref), {
       method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
@@ -275,15 +275,17 @@ export async function recoverGuacamolePrimary({
   const observed = await response.json() as GuacamolePrimaryClaim & {
     success?: boolean; terminalOccurrenceId?: string; code?: string; occurrenceId?: string;
   };
-  if (response.ok && observed.primaryOwned === true && observed.granted === false && observed.activeConnectionId) return;
+  if (response.ok && !responseFailureMetadata(observed) && observed.primaryOwned === true && observed.granted === false && observed.activeConnectionId) return;
   if (response.status !== 503 || observed.success !== false || !observed.terminalOccurrenceId) {
-    throw new Error(`Guacamole recovery lacks a terminated owner: ${observed.code ?? response.status}`);
+    const error = dashboardResponseFailureError({...observed,success:false}, "guacamole_recovery_owner_unverified");
+    error.message = `Guacamole recovery lacks a terminated owner: ${error.message}`;
+    throw error;
   }
   const recovered = await readJson<GuacamolePrimaryClaim>(
     await request("recover", observed.terminalOccurrenceId), "Guacamole primary recovery",
   );
   if (recovered.primaryOwned !== true || recovered.granted !== false || !recovered.activeConnectionId) {
-    throw new Error("Guacamole recovered primary identity is unavailable");
+    throw dashboardLocalFailure(new Error("Guacamole recovered primary identity is unavailable"),"dashboard_guacamole_recovered_identity_unverified","packages/dashboard/src/lib/guacamole-connection-sharing.ts","recoverGuacamolePrimary");
   }
 }
 
@@ -315,14 +317,14 @@ export async function resolveGuacamoleViewerFrame({
   const connectionId = stream.connectionId?.trim();
   const routeId = stream.routeId?.trim();
   if (stream.providerMode !== "simultaneous_view") return { mode: "direct", url: frameUrl };
-  if (!root || !connectionId || !routeId) throw new Error("Guacamole primary binding is incomplete");
+  if (!root || !connectionId || !routeId) throw dashboardLocalFailure(new Error("Guacamole primary binding is incomplete"),"dashboard_guacamole_binding_incomplete","packages/dashboard/src/lib/guacamole-connection-sharing.ts","resolveGuacamoleViewerFrame");
   const ownership = await readJson<GuacamolePrimaryClaim>(await fetchImpl(
     new URL("/api/guacamole-primary-claim", dashboardHref), {
       method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ operation: "ensure", routeId, connectionId }), cache: "no-store", signal,
     }), "Guacamole backend primary ownership");
   if (ownership.primaryOwned !== true || ownership.granted !== false || !ownership.activeConnectionId) {
-    throw new Error("Guacamole backend primary identity is unavailable");
+    throw dashboardLocalFailure(new Error("Guacamole backend primary identity is unavailable"),"dashboard_guacamole_primary_identity_unverified","packages/dashboard/src/lib/guacamole-connection-sharing.ts","resolveGuacamoleViewerFrame");
   }
 
   const tokenResponse = await fetchImpl(new URL("api/tokens", root), {
@@ -334,7 +336,7 @@ export async function resolveGuacamoleViewerFrame({
     signal,
   });
   const token = await readJson<GuacamoleAuthToken>(tokenResponse, "Guacamole header authentication");
-  if (!token.authToken) throw new Error("Guacamole header authentication returned no token");
+  if (!token.authToken) throw dashboardLocalFailure(new Error("Guacamole header authentication returned no token"),"dashboard_guacamole_authentication_unavailable","packages/dashboard/src/lib/guacamole-connection-sharing.ts","resolveGuacamoleViewerFrame");
   const authenticatedFetch = async <T>(path: string, operation: string): Promise<T> => readJson<T>(
     await fetchImpl(new URL(path, root), {
       credentials: "include",
@@ -373,7 +375,7 @@ export async function resolveGuacamoleViewerFrame({
       profile.name === expectedName && profile.primaryConnectionIdentifier === connectionId,
     );
     if (!sharingProfile?.identifier) {
-      throw new Error("Guacamole simultaneous-view sharing profile is unavailable");
+      throw dashboardLocalFailure(new Error("Guacamole simultaneous-view sharing profile is unavailable"),"dashboard_guacamole_sharing_profile_unavailable","packages/dashboard/src/lib/guacamole-connection-sharing.ts","resolveGuacamoleViewerFrame");
     }
 
     for (const candidate of activeCandidates) {
@@ -399,7 +401,7 @@ export async function resolveGuacamoleViewerFrame({
         (field) => field.name === "key" && field.type === "QUERY_PARAMETER",
       );
       const key = credentials.values?.key;
-      if (!keyExpected || !key) throw new Error("Guacamole connection-sharing returned no usable key");
+      if (!keyExpected || !key) throw dashboardLocalFailure(new Error("Guacamole connection-sharing returned no usable key"),"dashboard_guacamole_sharing_key_unavailable","packages/dashboard/src/lib/guacamole-connection-sharing.ts","resolveGuacamoleViewerFrame");
 
       let stable = true;
       for (let snapshot = 0; snapshot < 2; snapshot += 1) {
@@ -423,7 +425,7 @@ export async function resolveGuacamoleViewerFrame({
       const shared = guacamoleSharingRoot(root);
       shared.hash = `/?key=${encodeURIComponent(key)}`;
       const attemptId = attemptIdImpl().trim();
-      if (!attemptId) throw new Error("Guacamole connection-sharing attempt identity is unavailable");
+      if (!attemptId) throw dashboardLocalFailure(new Error("Guacamole connection-sharing attempt identity is unavailable"),"dashboard_guacamole_attempt_identity_unavailable","packages/dashboard/src/lib/guacamole-connection-sharing.ts","resolveGuacamoleViewerFrame");
       return {
         mode: "shared",
         url: shared.toString(),
@@ -435,5 +437,5 @@ export async function resolveGuacamoleViewerFrame({
       deadline: electionDeadline, delayMs: 100, nowImpl, signal, waitImpl,
     })) break;
   }
-  throw new Error("Guacamole backend primary sharing timed out");
+  throw dashboardLocalFailure(new Error("Guacamole backend primary sharing timed out"),"dashboard_guacamole_wait_budget_exhausted","packages/dashboard/src/lib/guacamole-connection-sharing.ts","resolveGuacamoleViewerFrame");
 }

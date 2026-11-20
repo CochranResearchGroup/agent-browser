@@ -261,6 +261,81 @@ pub(crate) async fn run_native_handoff_http_fixture(listener: TcpListener) {
     }
 }
 
+/// Reuse the same private journal projection on both HTTP adapters. The
+/// authenticated dashboard can browse recent records; the service port can
+/// only resolve a caller-provided occurrence ID from its own refusal response.
+pub(super) async fn write_failure_journal_response(
+    stream: &mut tokio::net::TcpStream,
+    query: Option<&str>,
+    allow_recent: bool,
+) {
+    let limit = query
+        .and_then(|query| {
+            query.split('&').find_map(|part| {
+                let (key, value) = part.split_once('=')?;
+                (key == "limit")
+                    .then(|| value.parse::<usize>().ok())
+                    .flatten()
+            })
+        })
+        .unwrap_or(100);
+    // Disk reads and bounded writer-lock admission must not stall the
+    // dashboard's asynchronous request workers.
+    let occurrence = query.and_then(|query| {
+        url::form_urlencoded::parse(query.as_bytes())
+            .find(|(key, _)| key == "occurrenceId")
+            .map(|(_, value)| value.into_owned())
+    });
+    let readback = tokio::task::spawn_blocking(move || match occurrence {
+        Some(id) => crate::native::service_failure_journal::read_failure_occurrence(&id),
+        None if allow_recent => read_service_failures(limit),
+        None => Err("failure_occurrence_id_required".to_string()),
+    })
+    .await
+    .unwrap_or_else(|_| Err("failure_journal_reader_task_failed".to_string()));
+    match readback {
+        Ok(readback) => {
+            write_json_value(
+                stream,
+                "200 OK",
+                json!({
+                    "success": true,
+                    "data": readback,
+                }),
+            )
+            .await
+        }
+        Err(error) => {
+            let invalid = matches!(
+                error.as_str(),
+                "failure_occurrence_id_invalid" | "failure_occurrence_id_required"
+            );
+            let code = if invalid {
+                error.as_str()
+            } else {
+                "failure_journal_read_failed"
+            };
+            let request_id = uuid::Uuid::new_v4().to_string();
+            let mut response = json!({"success":false,"id":request_id,"error":error,"code":code,"failure":{"code":code}});
+            crate::native::service_failure::attach_public_failure(
+                &mut response,
+                &json!({"action":"failure_log","id":request_id}),
+                "http_failure_journal",
+            );
+            write_json_value(
+                stream,
+                if invalid {
+                    "400 Bad Request"
+                } else {
+                    "500 Internal Server Error"
+                },
+                response,
+            )
+            .await
+        }
+    }
+}
+
 pub(crate) async fn ensure_dashboard_service_backend() {
     if let Err(err) = ensure_dashboard_service_backend_with_retry(
         || super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION, None),
@@ -1033,45 +1108,7 @@ async fn handle_service_api_request(
         return;
     }
     if method == "GET" && split_path_query(path).0 == "/api/service/failures" {
-        let limit = split_path_query(path)
-            .1
-            .and_then(|query| {
-                query.split('&').find_map(|part| {
-                    let (key, value) = part.split_once('=')?;
-                    (key == "limit")
-                        .then(|| value.parse::<usize>().ok())
-                        .flatten()
-                })
-            })
-            .unwrap_or(100);
-        // Disk reads and bounded writer-lock admission must not stall the
-        // dashboard's asynchronous request workers.
-        let readback = tokio::task::spawn_blocking(move || read_service_failures(limit))
-            .await
-            .unwrap_or_else(|_| Err("failure_journal_reader_task_failed".to_string()));
-        match readback {
-            Ok(readback) => {
-                write_json_value(
-                    stream,
-                    "200 OK",
-                    json!({
-                        "success": true,
-                        "data": readback,
-                    }),
-                )
-                .await
-            }
-            Err(error) => {
-                write_json_error_with_code(
-                    stream,
-                    "500 Internal Server Error",
-                    &error,
-                    Some("failure_journal_read_failed"),
-                    None,
-                )
-                .await
-            }
-        }
+        write_failure_journal_response(stream, split_path_query(path).1, true).await;
         return;
     }
     if method == "POST" && split_path_query(path).0 == "/api/service/failure-observation" {
@@ -4033,8 +4070,41 @@ fn json_error_http_response(
         body["code"] = json!(code);
     }
     if let Some(details) = details {
+        // Preserve an existing owner failure/occurrence when the gateway has
+        // already received one. A gateway error itself never proves no effect.
+        if details["failure"].is_object() {
+            body["failure"] = details["failure"].clone();
+        }
         body["details"] = details;
     }
+    if !body["failure"].is_object() {
+        if let Some(code) = code {
+            body["failure"] = json!({"code":code,"effectState":"effect_uncertain"});
+        }
+    }
+    let request = body
+        .pointer("/details/requestId")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty() && id.len() <= 128)
+        .map(str::to_owned)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let action = body
+        .pointer("/details/action")
+        .and_then(Value::as_str)
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= 128
+                && value
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        })
+        .unwrap_or("dashboard_http_gateway")
+        .to_owned();
+    crate::native::service_failure::attach_public_failure(
+        &mut body,
+        &json!({"action":action,"requestId":request}),
+        "http_dashboard_gateway",
+    );
     let body = body.to_string();
     let response = format!(
         "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
@@ -7100,6 +7170,13 @@ mod tests {
 
     #[test]
     fn dashboard_gateway_json_error_response_includes_code_and_details() {
+        let directory = std::env::temp_dir().join(format!(
+            "dashboard-gateway-failure-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let guard = crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_HOME"]);
+        guard.set("HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
         let response = json_error_http_response(
             "502 Bad Gateway",
             "Service API proxy failed: invalid JSON response",
@@ -7116,6 +7193,28 @@ mod tests {
         assert_eq!(value["success"], false);
         assert_eq!(value["code"], "invalid_backend_payload");
         assert_eq!(value["details"]["stage"], "response");
+        assert_eq!(
+            value["error"],
+            "Service API proxy failed: invalid JSON response"
+        );
+        assert_eq!(value["failure"]["code"], "invalid_backend_payload");
+        assert_eq!(value["failure"]["effectState"], "effect_uncertain");
+        assert!(value["failure"]["occurrenceId"].is_string(), "{value}");
+        let projected = json_error_http_response(
+            "502 Bad Gateway",
+            "Original owner failure",
+            Some("invalid_backend_payload"),
+            Some(json!({"failure":value["failure"]})),
+        );
+        let projected: Value =
+            serde_json::from_slice(http_response_body(&projected).unwrap()).unwrap();
+        assert_eq!(
+            projected["failure"]["occurrenceId"],
+            value["failure"]["occurrenceId"]
+        );
+        assert_eq!(projected["failure"]["effectState"], "effect_uncertain");
+        drop(guard);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

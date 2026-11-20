@@ -18,8 +18,10 @@ const helper=async(name)=>{
 let playbook=createLoginPlaybook({browser,helper,checkpoints});
 assert.equal((await playbook.advance(options)).reasonCode,'approval_required');
 request.state='approved';
-assert.equal((await playbook.advance(options)).effectState,'unknown');
-assert.equal(submissions,1);
+assert.equal((await playbook.advance(options)).reasonCode,'helper_grant_time_unqualified');
+assert.equal(submissions,0,'A legacy approved timestamp cannot qualify new private use');
+// Retained history can still be reconciled after a historical pre-upgrade input.
+stored={...stored,attempted:true};await assert.rejects(helper('authenticate'),/lost acknowledgement/);assert.equal(submissions,1);
 playbook=createLoginPlaybook({browser,helper,checkpoints});
 assert.equal((await playbook.advance(options)).reasonCode,'helper_running_or_uncertain');
 assert.equal(submissions,1,'Never resubmit after an unknown effect');
@@ -32,7 +34,7 @@ request.state='authenticated';
 const noInput={...request,state:'uncertain'};delete noInput.inputAttemptedAt;
 const locked=createLoginPlaybook({browser,helper:async()=>structuredClone(noInput),checkpoints});
 assert.equal((await locked.advance(options)).reasonCode,'password_source_unavailable');
-assert.equal((await locked.advance(options)).effectState,'no_effect');
+assert.equal((await locked.advance(options)).effectState,'unknown','Missing attempted timestamp cannot establish no-effect');
 const mismatch={...options,organizationRef:'other-company'};
 await assert.rejects(()=>playbook.advance(mismatch),/checkpoint_binding_mismatch/);
 request.captureState='held';
@@ -50,26 +52,21 @@ assert.equal(reads,0);
 assert.equal((await unavailable.advance({...options,authenticationMethod:'passkey'})).reasonCode,'authentication_method_unsupported');
 request.state='approved';delete request.startedAt;delete request.inputAttemptedAt;
 stored={...stored,attempted:false};
-const brokenStore=createLoginPlaybook({browser,helper,checkpoints:{load:checkpoints.load,save:async()=>{throw Error('disk full');}}});
+const brokenStore=createLoginPlaybook({browser:{...browser,verifyLogin:async()=>({...binding,status:'waiting',reasonCode:'password_required'})},helper,checkpoints:{load:async()=>null,save:async()=>{throw Error('disk full');}}});
 await assert.rejects(()=>brokenStore.advance(options),/disk full/);
 assert.equal(submissions,1,'Failed durable intent makes no submission');
 console.log('Login playbook restart reconciliation and exact binding passed');
 
-// A typed pre-input refusal can be reconciled; transport uncertainty cannot.
+// A retained legacy pre-input refusal can be inspected but does not certify expiry.
 let retrySaved=null,retries=0,requests=0;
 const retryRequest={...request,state:'approved',captureState:'ready'};
 const retryStore={load:async()=>structuredClone(retrySaved),save:async(_key,value)=>{retrySaved=structuredClone(value);}};
-const retryHelper=async operation=>{
- if(operation==='request_login'){requests++;return structuredClone(retryRequest);}
- if(operation==='inspect_request')return structuredClone(retryRequest);
- retries++;if(retries===1)throw Object.assign(Error('held'),{code:'auth_capture_held'});
- retryRequest.startedAt=Date.now();retryRequest.inputAttemptedAt=Date.now();
- retryRequest.state='authenticated';return structuredClone(retryRequest);
-};
+const retryHelper=async operation=>{if(operation==='request_login'){requests++;return structuredClone(retryRequest);}if(operation==='inspect_request')return structuredClone(retryRequest);retries++;throw Error('Private legacy use must not execute');};
 const retryPlaybook=createLoginPlaybook({browser:{...browser,verifyLogin:async()=>({...binding,status:retryRequest.state==='authenticated'?'completed':'waiting',reasonCode:'password_required'})},helper:retryHelper,checkpoints:retryStore});
-assert.equal((await retryPlaybook.advance(options)).reasonCode,'private_capture_held');
-assert.equal(retries,1);assert.equal((await retryPlaybook.advance(options)).status,'completed');
-assert.equal(retries,2);assert.equal(requests,1,'Reuse exact approved request after proven pre-input refusal');
+assert.equal((await retryPlaybook.advance(options)).reasonCode,'helper_grant_time_unqualified');
+retrySaved={...retrySaved,attempted:true,preInputRefusal:'auth_capture_held'};
+assert.equal((await retryPlaybook.advance(options)).reasonCode,'helper_grant_time_unqualified');assert.equal(retries,0);assert.equal(requests,1);
+retryRequest.state='authenticated';assert.equal((await retryPlaybook.advance(options)).status,'completed','Actual owner completion remains independently verifiable');
 
 // Reviewed replacement has fresh exact-target validation and unchanged action.
 let adaptationSaved=null,planVersion='old',adaptationSubmissions=0;
@@ -84,6 +81,6 @@ const retained=await adaptation.advance(options);adaptationRequest.state='approv
 assert.equal((await adaptation.advance(options)).reasonCode,'prepared_controls_changed');assert.equal(adaptationSubmissions,0);
 assert.equal((await adaptation.advance({...options,reviewedPlan:{version:'invalid'}})).status,'adaptation_required');assert.equal(adaptationSubmissions,0);
 const adapted=await adaptation.advance({...options,reviewedPlan:{version:'reviewed'}});
-assert.equal(adapted.status,'completed');assert.equal(adapted.actionId,retained.actionId);assert.equal(adaptationSubmissions,1);
+assert.equal(adapted.reasonCode,'helper_grant_time_unqualified');assert.equal(adapted.actionId,retained.actionId);assert.equal(adaptationSubmissions,0);
 assert.throws(()=>createLoginPlaybook({browser:{verifyLogin:browser.verifyLogin},helper,checkpoints}),/dependencies_required/);
-console.log('Required plan checks, reviewed same-action adaptation and proven pre-input refusal recovery passed');
+console.log('Required plan checks, historical readback and explicit unqualified legacy-use continuation passed');

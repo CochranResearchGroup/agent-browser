@@ -6,6 +6,12 @@ allowed-tools: Bash(agent-browser:*)
 
 # Agent Browser
 
+Change operation, artifact, reconnect and lane budgets live: [capacity guide](references/cli-and-service.md#task-operation-capacity).
+
+For recovery, capacity and owner continuation, see [continuation](references/cli-and-service.md#continue-after-a-refusal).
+
+For public refusal occurrence IDs and no-launch task error-log readback, see [the CLI and service reference](references/cli-and-service.md#recover-a-public-refusal).
+
 Authelia supplies access; dashboard login, enrollment and roles are disabled.
 
 [Control and credentials](references/cli-and-service.md).
@@ -35,13 +41,13 @@ Clicks deliver pointer input; verify page state. [Profile rules](references/cli-
 
 Installed viewers: [qualification](references/cli-and-service.md#native-journey-qualification).
 
-Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. It defaults to interactive input and pauses cooperative automation. Use `interaction:"view"` for passive viewing. The authorized recipient needs no administrator override; visibility alone does not prove input readiness. Require `operatorVisible.state=ready`; return the complete `data.handoffUrl` and keep the task ID. For `remote_view_public_origin_missing`, check reviewed `AGENT_BROWSER_PUBLIC_ORIGIN` in `~/.agent-browser/.env` or `AGENT_BROWSER_ENV_FILE`; process settings win. Reconnect MCP after configuration changes because its environment is pinned at startup. Preserve the task. Never assemble provider URLs.
+Use `browser_handoff({ "taskId": "<task-id>" })` for human assistance. Interactive capability alone does not pause; actual viewer activity does. Require `operatorVisible.state=ready`, return complete `data.handoffUrl`, retain the task ID and never assemble provider URLs. For `remote_view_public_origin_missing`, review `AGENT_BROWSER_PUBLIC_ORIGIN`; reconnect MCP after configuration changes. See [handoff recovery and configuration](references/cli-and-service.md#retained-handoff-recovery).
 
 Reuse the same handoff after a CDP-free exit; reconcile interrupted conversions explicitly.
 A confirmed mode change restarts the same profile, retains its tabs and session names, and updates every attached task to the replacement process. After exit, the old PID and desktop assignment are historical records, not reasons to refuse the replacement. The supported workspace chooser includes Chrome and Chromium; Chrome for Testing is identified separately and excluded.
 Retained handoff recovery: [guide](references/cli-and-service.md#retained-handoff-recovery).
 
-After human input, use Give control back or `browser_control`, then `browser_continue` with the same `taskId`. Preserve edits and the [pending-mode boundary](references/cli-and-service.md#retained-handoff-recovery).
+Actual input pauses until qualified quiet; explicit Take control holds until that viewer selects view-only. Other viewers may still hold control; inspect `browser_control` status. Use `browser_continue` for fresh observation with the same `taskId`. Preserve edits and the [pending-mode boundary](references/cli-and-service.md#retained-handoff-recovery).
 
 Nested login outlines require same-frame boundary or bounded connected-field proof; conflicting mask/value evidence stays unverified. Distinct controls retain ambiguity.
 
@@ -51,34 +57,7 @@ For an operator-requested stuck-browser restart, inspect `mode`, then use `mode_
 
 ## Standalone authentication
 
-Follow explicit user instructions and service-specific authentication guidance.
-Use an available authorized stored credential through its supported private
-channel. Auth Receipts is the generic path when an agent needs credential
-discovery, owner approval or private login orchestration and no more specific
-authorized path is available. It is not required for every browser login.
-
-Keep the username and password from the same credential source together. A
-service account name selects its matching credential pair; it does not replace
-the username belonging to another saved password. Do not mix pairs based on an
-account hint or discovery ranking. An explicitly requested alternative mapping
-must remain explicit rather than becoming an inferred default.
-
-Preserve account, realm, browser ownership and private-input checks for every
-path. Read secret files only inside the authorized login process; never put
-secrets in model context, command arguments, logs, screenshots or Git. An
-already-authorized credential file or saved login does not need migration into
-Auth before use.
-
-For route selection and special cases, read [authentication paths](references/authentication.md#choose-an-authentication-path). The following Auth helper rules apply when Auth is the selected path. Discover connected channels before asking the operator; proposals grant no authority.
-
-Use `connectHostedAuthHelper` only for a genuine current Codex caller.
-An explicitly enrolled unattended application uses `connectEnrolledAuthHelper`
-with its own discovery file and exact operation/recovery/browser context; never
-copy CODEX_THREAD_ID or fall back to Codex discovery. Auth owns enrollment and
-current authority; the adapter does not expose bearer or credential contents.
-Use current `discover_credentials`, not empty legacy scopes, to distinguish
-missing authority, unavailable/partial sources, no match and account choice.
-Before saved-password Native input, read [input and control ownership](references/authentication.md#native-input-and-control-ownership). Keep original unknown attempts; never replay private use.
+Follow explicit service authentication instructions and authorized credential paths. Keep credential pairs together and secrets inside private input channels. Read [standalone authentication](references/cli-and-service.md#standalone-authentication) before Auth discovery or saved-password use.
 
 ## Hosted workflow guidance v1
 
@@ -104,32 +83,7 @@ before coordinating peers, foreground input or lifecycle effects.
 
 ## CLI fallback
 
-If browser_open is absent, report missing Agent Browser MCP integration.
-Register installed agent-browser mcp serve in that client and reconnect.
-Use the CLI while correcting integration; server tools/list does not prove client exposure.
-
-Help is launch-free. MCP returns `success/data/error`; CLI errors add `type`. Read private journal `details.phase` for unknown outcomes.
-
-Read [Runtime health and cleanup diagnostics](references/cli-and-service.md#runtime-health-and-cleanup-diagnostics) before maintenance, expiry diagnosis or unknown-effect interpretation. Preserve peers and scrub exported URLs.
-Uncorrelated displays stay protected: missing Service State proves no ownership or cleanup authority.
-
-CDP-free idle close uses verified original OS identity and exit confirmation.
-Explicit handoff can supersede idle cleanup after its worker ends and the exact
-original is verified alive. Attempt history stays intact; this retention decision
-requires a schema-5-capable runtime.
-Deleted handoff links cannot be restored by concurrent lifetime edits.
-Closed-task links offer **Reopen task** on the same URL. GET is read-only;
-missing disposable storage needs a separate disclosed fresh-profile choice.
-Never substitute a named profile. Read [closed-task reopening](references/cli-and-service.md#closed-task-reopening)
-for software operations, retry and human-control semantics.
-
-Idle-closed CDP-free handoffs reopen through the owner, preserving task/tab/link
-and profile, but not unsaved page state. Unknown proof or changed scope defers;
-never reset the profile as a workaround.
-
-CLI fallback: use installed help, exact profile and named session; preserve peers.
-
-Read [CLI commands](references/commands.md) for examples.
+If browser_open is absent, report missing MCP integration and use installed CLI help while configuring the client. Preserve task IDs, profiles, peers and uncertain originals. Read [CLI fallback](references/cli-and-service.md#cli-fallback) before maintenance, closed-task recovery or fallback commands.
 
 ## SiteGuide routines
 
@@ -174,22 +128,10 @@ If the task has no tab (`mode_operation_tab_missing`), create one through `brows
 
 ## Evidence-backed login progress
 
-The public Auth helper exposes `inspectLoginProgress({loginId})` or `inspectLoginProgress({requestId})` for read-only, evidence-backed progress. `summarizeLoginProgress` projects an existing public observation without effects. Selection, request submission, confirmed actionable delivery, expiry, denial and unknown input remain distinct; a review state or URL alone never means the operator received a request. Native operator ownership is metadata, not proof of human activity. Follow the returned read-only next operation; the summary grants no credential or Native input authority.
+Read [evidence-backed login progress](references/cli-and-service.md#evidence-backed-login-progress) for Auth progress, recovery, independent verification and continuation. Native ownership metadata never proves human activity.
 
+Latency: [phases](references/cli-and-service.md#optional-command-latency-diagnostics).
 
-`helper.loginRecovery.reconcile({requestId})` observes and reconciles the same original owner attempt without dispatching credentials. `recordFailure` forwards qualified caller observations to Auth completion and independently reads the settlement; it preserves unknown input history and never grants retry permission. `prepareFresh` may ask Auth to prepare a distinct challenge only after a settled business failure, with the same explicit account and receiving scope; Auth still owns current target readiness, permission and any subsequent private use. A running or changed original remains held. No clock is synthesized by this helper.
+[Login and grant continuation](references/cli-and-service.md#continued-login-and-scoped-override-capacity).
 
-
-`verifyLoginAccess` composes the existing independent application readback with original Auth request and completion reads. The intended account and any required organization must match the exact addressed browser binding. Receiving-provider origin and application origin remain distinct. Auth completion is caller-observed bookkeeping, not independent identity proof; receiver settlement is reported separately. Closed source tickets, filled fields and provider sign-in cannot complete the workflow. No verification call writes credentials or completion.
-
-
-`discoverLoginReadiness` checks supported Auth capabilities and source metadata before manual unlock. A signed-out extension does not imply unavailable private-source recovery. Credential readiness means uniquely selected metadata, never private-use authority. A hidden owner permission view is visibility unavailable, not an absent grant. Trusted host compositions may use `createLoginDiscovery` with an already authorized scoped owner reader; this neither broadens access nor renews an expired request.
-
-
-`resumeLoginContinuation` extends only an existing private record’s `loginContinuation` namespace, through the existing store lock/load/save interface. Preserve its Native episode, exact caller and browser bindings, requested account/organization and unresolved attempts. Fresh Auth reads and independent verification decide the outcome; a stored success flag never does. Equivalent progress is coalesced across resumes. Notification intent is persisted before the optional callback, and callback acknowledgement is not human delivery; an unknown notification is not blindly resent. An injected trusted Wake reader normalizes its supported receipt: registered/held is not ready, readiness requires the exact armed intent and ready monitor, and cancellation remains a separate cleanup obligation.
-
-
-The local pre-push gate uses the existing validation selector to run the public login workflow checks for relevant committed changes. It requires clean current source and rejects unknown coverage or failed checks. Enable it for one checkout with `git config --local extensions.worktreeConfig true` and `git config --worktree core.hooksPath .husky`; peer checkout settings and hosted CI remain unchanged. This focused source check does not replace full required validation or grant merge/install authority.
-
-
-For a Native control observation, pass the addressed browser task ID rather than the Auth caller ID: the progress summary returns a read-only `browser_command` / `task_briefing` action. Missing binding is explicit as `addressed_browser_task_required`. Continuation preserves sanitized incomplete verifier categories, evidence, qualification and supported next reads. Broad executable, dependency and selector changes select the workflow and gate checks as well; the gate is not duplicated inside the tooling aggregate.
+Time: [freshness and deadlines](references/cli-and-service.md#native-freshness-time).

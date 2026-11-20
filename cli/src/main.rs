@@ -40,7 +40,7 @@ mod windows_browser_setup;
 mod workstation_convergence;
 mod workstation_install;
 
-use serde_json::json;
+use serde_json::{json, Value};
 use std::env;
 use std::fs;
 use std::process::exit;
@@ -59,9 +59,7 @@ use flags::{clean_args, parse_flags, upsert_runtime_profile_in_user_config, Flag
 use install::{run_install, run_install_doctor, run_install_stealthcdp_chromium};
 use native::cdp::chrome::{launch_chrome_detached, LaunchOptions};
 use native::service_config::record_persisted_profile_seeding_handoff_launch;
-use output::{
-    print_command_help, print_help, print_response_with_opts, print_version, OutputOptions,
-};
+use output::{print_command_help, print_help, print_version, OutputOptions};
 use process_identity::{VerifiedProcessSignal, VerifiedProcessTermination};
 use runtime_profile::{
     list_runtime_profiles, runtime_status_with_user_data_dir, RuntimeProfileSummary, RuntimeStatus,
@@ -78,11 +76,117 @@ fn print_json_value(value: serde_json::Value) {
     println!("{}", serialize_json_value(&value));
 }
 
+/// Build only public CLI error metadata. Explicit parser cases describe this
+/// invocation before dispatch; a usage label never settles an older operation.
+fn cli_failure_payload(message: &str, error_type: Option<&str>) -> Value {
+    let mut response = json!({"success":false,"error":message});
+    if let Some(kind) = error_type {
+        response["type"] = json!(kind);
+    }
+    let code = match error_type {
+        Some("unknown_command") => Some("cli_unknown_command"),
+        Some("unknown_subcommand") => Some("cli_unknown_subcommand"),
+        Some("missing_arguments") => Some("cli_missing_arguments"),
+        Some("invalid_value") => Some("cli_invalid_value"),
+        Some("invalid_session_name") => Some("cli_invalid_session_name"),
+        _ => None,
+    };
+    if let Some(code) = code {
+        response["failure"] = json!({"code":code,"axis":"request","phase":"ingress_validation",
+            "effectState":"no_effect","scope":"current_invocation_validation","originalOutcome":"not_inferred"});
+    }
+    response
+}
+
+/// Public JSON and human-readable refusals share owner recourse and one actual
+/// occurrence. Private bootstrap/namespace protocols never call this formatter.
+fn enrich_public_cli_failure(response: &mut Value, action: &str) {
+    let action = if action == "cli_failure" && response["failure"]["phase"] == "ingress_validation"
+    {
+        "cli_parse"
+    } else {
+        action
+    };
+    let mut context = json!({"action":action});
+    if let Some(id) = response["id"].as_str() {
+        context["id"] = json!(id);
+    }
+    native::service_failure::attach_public_failure(response, &context, "cli");
+}
+
+fn print_public_cli_failure(mut response: Value, json_mode: bool) {
+    enrich_public_cli_failure(&mut response, "cli_failure");
+    if json_mode {
+        print_json_value(response);
+        return;
+    }
+    if let Some(warning) = response["warning"].as_str() {
+        eprintln!("{} {}", color::warning_indicator(), warning);
+    }
+    eprintln!(
+        "{} {}",
+        color::error_indicator(),
+        response["error"].as_str().unwrap_or("Operation failed")
+    );
+    if let Some(suggestion) = response["suggestion"].as_str() {
+        eprintln!("{suggestion}");
+    }
+    let failure = &response["failure"];
+    eprintln!(
+        "code={} occurrence={} logging={}",
+        failure["code"]
+            .as_str()
+            .unwrap_or("service_operation_failed"),
+        failure["occurrenceId"].as_str().unwrap_or("unavailable"),
+        failure["logging"]["state"]
+            .as_str()
+            .unwrap_or("unavailable")
+    );
+    if failure["executableNextAction"].is_object() {
+        eprintln!(
+            "Recovery inspection: {}",
+            serialize_json_value(&failure["executableNextAction"])
+        );
+    }
+}
+
+fn print_cli_response(
+    response: &connection::Response,
+    action: Option<&str>,
+    options: &OutputOptions,
+) {
+    if response.success {
+        output::print_response_with_opts(response, action, options);
+        return;
+    }
+    let mut value = serde_json::to_value(response)
+        .unwrap_or_else(|_| cli_failure_payload("Failed to serialize command response", None));
+    enrich_public_cli_failure(&mut value, action.unwrap_or("cli_failure"));
+    print_public_cli_failure(value, options.json);
+}
+
+fn print_cli_error_code(message: impl AsRef<str>, code: &str, json_mode: bool) {
+    let mut value = cli_failure_payload(message.as_ref(), None);
+    value["failure"] = json!({"code":code});
+    print_public_cli_failure(value, json_mode);
+}
+
+fn parse_failure_type(error: &ParseError) -> &'static str {
+    match error {
+        ParseError::UnknownCommand { .. } => "unknown_command",
+        ParseError::UnknownSubcommand { .. } => "unknown_subcommand",
+        ParseError::MissingArguments { .. } => "missing_arguments",
+        ParseError::InvalidValue { .. } => "invalid_value",
+        ParseError::InvalidSessionName { .. } => "invalid_session_name",
+    }
+}
+
+fn print_plain_error(message: impl AsRef<str>) {
+    print_public_cli_failure(cli_failure_payload(message.as_ref(), None), false);
+}
+
 fn print_json_error(message: impl AsRef<str>) {
-    print_json_value(json!({
-        "success": false,
-        "error": message.as_ref(),
-    }));
+    print_public_cli_failure(cli_failure_payload(message.as_ref(), None), true);
 }
 
 fn format_service_watch_line(resp: &connection::Response) -> String {
@@ -195,6 +299,14 @@ fn run_service_watch(cmd: &serde_json::Value, flags: &Flags) -> ! {
                 {
                     current_cmd["serviceState"] = service_state;
                 }
+                if !resp.success {
+                    print_cli_response(
+                        &resp,
+                        cmd["action"].as_str(),
+                        &OutputOptions::from_flags(flags),
+                    );
+                    exit(1);
+                }
                 if flags.json {
                     println!("{}", serde_json::to_string(&resp).unwrap_or_default());
                 } else if resp.success {
@@ -207,10 +319,10 @@ fn run_service_watch(cmd: &serde_json::Value, flags: &Flags) -> ! {
                     };
                     println!("{line}");
                 } else {
-                    eprintln!(
-                        "{} {}",
-                        color::error_indicator(),
-                        resp.error.as_deref().unwrap_or("service status failed")
+                    print_cli_response(
+                        &resp,
+                        Some("service_status"),
+                        &OutputOptions::from_flags(flags),
                     );
                 }
                 if !resp.success {
@@ -221,7 +333,7 @@ fn run_service_watch(cmd: &serde_json::Value, flags: &Flags) -> ! {
                 if flags.json {
                     print_json_error(e);
                 } else {
-                    eprintln!("{} {}", color::error_indicator(), e);
+                    print_plain_error(e);
                 }
                 exit(1);
             }
@@ -347,11 +459,17 @@ fn apply_remote_headed_launch_env_hints(launch_cmd: &mut serde_json::Value) {
 }
 
 fn print_json_error_with_type(message: impl AsRef<str>, error_type: &str) {
-    print_json_value(json!({
-        "success": false,
-        "error": message.as_ref(),
-        "type": error_type,
-    }));
+    print_public_cli_failure(
+        cli_failure_payload(message.as_ref(), Some(error_type)),
+        true,
+    );
+}
+
+fn print_plain_error_with_type(message: impl AsRef<str>, error_type: &str) {
+    print_public_cli_failure(
+        cli_failure_payload(message.as_ref(), Some(error_type)),
+        false,
+    );
 }
 
 struct ParsedProxy {
@@ -423,11 +541,11 @@ fn run_profiles(json_mode: bool) {
     let user_data_dir = match find_chrome_user_data_dir() {
         Some(dir) => dir,
         None => {
-            if json_mode {
-                print_json_error("No Chrome user data directory found");
-            } else {
-                eprintln!("{}", color::red("No Chrome user data directory found"));
-            }
+            print_cli_error_code(
+                "No Chrome user data directory found",
+                "cli_profile_sources_unavailable",
+                json_mode,
+            );
             exit(1);
         }
     };
@@ -980,7 +1098,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 if flags.json {
                     print_json_error(e);
                 } else {
-                    eprintln!("{} {}", color::error_indicator(), e);
+                    print_plain_error(e);
                 }
                 exit(1);
             }
@@ -1011,7 +1129,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     if flags.json {
                         print_json_error(e);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), e);
+                        print_plain_error(e);
                     }
                     exit(1);
                 }
@@ -1025,7 +1143,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 if flags.json {
                     print_json_error(msg);
                 } else {
-                    eprintln!("{} {}", color::error_indicator(), msg);
+                    print_plain_error(msg);
                 }
                 exit(1);
             }
@@ -1039,7 +1157,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 if flags.json {
                     print_json_error(msg);
                 } else {
-                    eprintln!("{} {}", color::error_indicator(), msg);
+                    print_plain_error(msg);
                 }
                 exit(1);
             }
@@ -1052,7 +1170,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 if flags.json {
                     print_json_error(err);
                 } else {
-                    eprintln!("{} {}", color::error_indicator(), err);
+                    print_plain_error(err);
                 }
                 exit(1);
             }
@@ -1095,7 +1213,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     if flags.json {
                         print_json_error(e);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), e);
+                        print_plain_error(e);
                     }
                     exit(1);
                 }
@@ -1114,7 +1232,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     if flags.json {
                         print_json_error(e);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), e);
+                        print_plain_error(e);
                     }
                     exit(1);
                 }
@@ -1133,7 +1251,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     if flags.json {
                         print_json_error(e);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), e);
+                        print_plain_error(e);
                     }
                     exit(1);
                 }
@@ -1239,7 +1357,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     if flags.json {
                         print_json_error(e);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), e);
+                        print_plain_error(e);
                     }
                     exit(1);
                 }
@@ -1259,7 +1377,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                         if flags.json {
                             print_json_error(e);
                         } else {
-                            eprintln!("{} {}", color::error_indicator(), e);
+                            print_plain_error(e);
                         }
                         exit(1);
                     }
@@ -1274,7 +1392,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 if flags.json {
                     print_json_error(msg);
                 } else {
-                    eprintln!("{} {}", color::error_indicator(), msg);
+                    print_plain_error(msg);
                 }
                 exit(1);
             }
@@ -1346,7 +1464,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     if flags.json {
                         print_json_error(e);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), e);
+                        print_plain_error(e);
                     }
                     exit(1);
                 }
@@ -1402,7 +1520,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     if flags.json {
                         print_json_error(msg);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), msg);
+                        print_plain_error(msg);
                     }
                     exit(1);
                 }
@@ -1410,7 +1528,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     if flags.json {
                         print_json_error(e);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), e);
+                        print_plain_error(e);
                     }
                     exit(1);
                 }
@@ -1419,11 +1537,17 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
         _ => {
             let msg =
                 "Usage: agent-browser runtime <create|list|status|login|attach|history> [name|url]";
-            if flags.json {
-                print_json_error(msg);
-            } else {
-                eprintln!("{}", color::red(msg));
-            }
+            print_public_cli_failure(
+                cli_failure_payload(
+                    msg,
+                    Some(if clean.get(1).is_some() {
+                        "unknown_subcommand"
+                    } else {
+                        "missing_arguments"
+                    }),
+                ),
+                flags.json,
+            );
             exit(1);
         }
     }
@@ -1541,7 +1665,7 @@ fn fail_dashboard_start(error: impl AsRef<str>, json_mode: bool) -> ! {
     if json_mode {
         print_json_error(error.as_ref());
     } else {
-        eprintln!("{} {}", color::error_indicator(), error.as_ref());
+        print_plain_error(error.as_ref());
     }
     exit(1);
 }
@@ -1582,11 +1706,7 @@ fn run_dashboard_start(port: u16, json_mode: bool) {
             if json_mode {
                 print_json_error(format!("Failed to get executable path: {}", e));
             } else {
-                eprintln!(
-                    "{} Failed to get executable path: {}",
-                    color::error_indicator(),
-                    e
-                );
+                print_plain_error(format!("Failed to get executable path: {e}"));
             }
             exit(1);
         }
@@ -1675,11 +1795,7 @@ fn run_dashboard_start(port: u16, json_mode: bool) {
             if json_mode {
                 print_json_error(format!("Failed to start dashboard ingress: {error}"));
             } else {
-                eprintln!(
-                    "{} Failed to start dashboard ingress: {}",
-                    color::error_indicator(),
-                    error
-                );
+                print_plain_error(format!("Failed to start dashboard ingress: {error}"));
             }
             exit(1);
         }
@@ -1786,7 +1902,7 @@ fn print_dashboard_ingress_result(result: Result<serde_json::Value, String>, jso
             if json_mode {
                 print_json_error(&error);
             } else {
-                eprintln!("{} {}", color::error_indicator(), error);
+                print_plain_error(error);
             }
             exit(1);
         }
@@ -1957,20 +2073,26 @@ fn run_close_all(flags: &Flags) {
     }
 
     if flags.json {
-        print_json_value(json!({
-            "success": failed.is_empty(),
-            "data": {
-                "closed": closed.len(),
-                "sessions": closed,
-                "failed": failed.iter().map(|(s, e)| json!({"session": s, "error": e})).collect::<Vec<_>>(),
-            },
-        }));
+        let mut response = json!({
+            "success":failed.is_empty(),"data":{"closed":closed.len(),"sessions":closed,
+                "failed":failed.iter().map(|(session,error)|json!({"session":session,"error":error})).collect::<Vec<_>>()}});
+        if !failed.is_empty() {
+            response["error"] = json!("One or more sessions could not be closed");
+            response["failure"] = json!({"code":"cli_close_failed"});
+            print_public_cli_failure(response, true);
+        } else {
+            print_json_value(response);
+        }
     } else {
         for s in &closed {
             println!("{} Closed session: {}", color::green("✓"), s);
         }
         for (s, e) in &failed {
-            eprintln!("{} Failed to close {}: {}", color::error_indicator(), s, e);
+            print_cli_error_code(
+                format!("Failed to close {s}: {e}"),
+                "cli_close_failed",
+                false,
+            );
         }
         if closed.is_empty() && !failed.is_empty() {
             exit(1);
@@ -2010,18 +2132,14 @@ fn close_all_scope_issue(flags: &Flags) -> Option<CloseScopeIssue> {
 }
 
 fn print_close_scope_issue(issue: &CloseScopeIssue, json_mode: bool) {
-    if json_mode {
-        print_json_value(json!({
-            "success": false,
-            "error": issue.message,
-            "type": "usage_error",
-            "code": issue.code,
-            "suggestion": issue.suggestion,
-        }));
-    } else {
-        eprintln!("{} {}", color::error_indicator(), issue.message);
-        eprintln!("{}", issue.suggestion);
-    }
+    // This exact scope parser rejects before any close dispatch; it says
+    // nothing about a previous close or any other retained operation.
+    let mut response = cli_failure_payload(issue.message, Some("usage_error"));
+    response["code"] = json!(issue.code);
+    response["suggestion"] = json!(issue.suggestion);
+    response["failure"] = json!({"code":issue.code,"axis":"request","phase":"ingress_validation",
+        "effectState":"no_effect","scope":"current_invocation_validation","originalOutcome":"not_inferred"});
+    print_public_cli_failure(response, json_mode);
 }
 
 fn force_close_session_from_metadata(session: &str) -> Result<bool, String> {
@@ -2056,15 +2174,10 @@ fn force_close_session_from_metadata(session: &str) -> Result<bool, String> {
 }
 
 fn exit_close_identity_failure(error: &str, json_mode: bool) -> ! {
-    if json_mode {
-        print_json_value(json!({
-            "success": false,
-            "error": error,
-            "type": "process_identity_error",
-        }));
-    } else {
-        eprintln!("{} {}", color::error_indicator(), error);
-    }
+    print_public_cli_failure(
+        cli_failure_payload(error, Some("process_identity_error")),
+        json_mode,
+    );
     exit(1)
 }
 
@@ -2231,7 +2344,7 @@ fn main() {
                     if flags.json {
                         print_json_error_with_type(message, "unknown_subcommand");
                     } else {
-                        eprintln!("{}", color::red(&message));
+                        print_plain_error_with_type(&message, "unknown_subcommand");
                     }
                     exit(1);
                 }
@@ -2255,7 +2368,7 @@ fn main() {
                         if flags.json {
                             print_json_error_with_type(message, "unknown_subcommand");
                         } else {
-                            eprintln!("{}", color::red(&message));
+                            print_plain_error_with_type(&message, "unknown_subcommand");
                         }
                         exit(1);
                     }
@@ -2273,7 +2386,7 @@ fn main() {
             if flags.json {
                 print_json_error_with_type(message, "unknown_command");
             } else {
-                eprintln!("{}", color::red(&message));
+                print_plain_error_with_type(&message, "unknown_command");
             }
             exit(1);
         }
@@ -2352,10 +2465,12 @@ fn main() {
                 return;
             }
             Some(unknown) => {
-                eprintln!(
-                    "{} Unknown dashboard subcommand: {}",
-                    color::error_indicator(),
-                    unknown
+                print_public_cli_failure(
+                    cli_failure_payload(
+                        &format!("Unknown dashboard subcommand: {unknown}"),
+                        Some("unknown_subcommand"),
+                    ),
+                    flags.json,
                 );
                 exit(1);
             }
@@ -2386,24 +2501,28 @@ fn main() {
             }
             Some(unknown) => {
                 if flags.json {
-                    print_json_error(format!("Unknown doctor subcommand: {unknown}"));
+                    print_json_error_with_type(
+                        format!("Unknown doctor subcommand: {unknown}"),
+                        "unknown_subcommand",
+                    );
                 } else {
-                    eprintln!(
-                        "{} Unknown doctor subcommand: {}",
-                        color::error_indicator(),
-                        unknown
+                    print_plain_error_with_type(
+                        format!("Unknown doctor subcommand: {unknown}"),
+                        "unknown_subcommand",
                     );
                 }
                 exit(1);
             }
             None => {
                 if flags.json {
-                    print_json_error(
+                    print_json_error_with_type(
                         "Usage: agent-browser doctor <windows-browser|remote-view> [options]",
+                        "missing_arguments",
                     );
                 } else {
-                    eprintln!(
-                        "Usage: agent-browser doctor <windows-browser|remote-view> [options]"
+                    print_plain_error_with_type(
+                        "Usage: agent-browser doctor <windows-browser|remote-view> [options]",
+                        "missing_arguments",
                     );
                 }
                 exit(1);
@@ -2419,23 +2538,23 @@ fn main() {
             }
             Some(unknown) => {
                 if flags.json {
-                    print_json_error(format!("Unknown setup subcommand: {unknown}"));
+                    print_json_error_with_type(
+                        format!("Unknown setup subcommand: {unknown}"),
+                        "unknown_subcommand",
+                    );
                 } else {
-                    eprintln!(
-                        "{} Unknown setup subcommand: {}",
-                        color::error_indicator(),
-                        unknown
+                    print_plain_error_with_type(
+                        format!("Unknown setup subcommand: {unknown}"),
+                        "unknown_subcommand",
                     );
                 }
                 exit(1);
             }
             None => {
                 if flags.json {
-                    print_json_error("Usage: agent-browser setup windows-browser --print-powershell [--port <port>] [--mode mirrored|nat|ssh]");
+                    print_json_error_with_type("Usage: agent-browser setup windows-browser --print-powershell [--port <port>] [--mode mirrored|nat|ssh]", "missing_arguments");
                 } else {
-                    eprintln!(
-                        "Usage: agent-browser setup windows-browser --print-powershell [--port <port>] [--mode mirrored|nat|ssh]"
-                    );
+                    print_plain_error_with_type("Usage: agent-browser setup windows-browser --print-powershell [--port <port>] [--mode mirrored|nat|ssh]", "missing_arguments");
                 }
                 exit(1);
             }
@@ -2488,20 +2607,12 @@ fn main() {
     }
 
     let mut cmd = match parse_command(&clean, &flags) {
-        Ok(c) => c,
-        Err(e) => {
-            if flags.json {
-                let error_type = match &e {
-                    ParseError::UnknownCommand { .. } => "unknown_command",
-                    ParseError::UnknownSubcommand { .. } => "unknown_subcommand",
-                    ParseError::MissingArguments { .. } => "missing_arguments",
-                    ParseError::InvalidValue { .. } => "invalid_value",
-                    ParseError::InvalidSessionName { .. } => "invalid_session_name",
-                };
-                print_json_error_with_type(e.format(), error_type);
-            } else {
-                eprintln!("{}", color::red(&e.format()));
-            }
+        Ok(command) => command,
+        Err(error) => {
+            print_public_cli_failure(
+                cli_failure_payload(&error.format(), Some(parse_failure_type(&error))),
+                flags.json,
+            );
             exit(1);
         }
     };
@@ -2528,7 +2639,7 @@ fn main() {
             if flags.json {
                 print_json_error(&error);
             } else {
-                eprintln!("{} {}", color::error_indicator(), error);
+                print_plain_error(error);
             }
             exit(1);
         }
@@ -2552,15 +2663,20 @@ fn main() {
         {
             let mut pass = String::new();
             if std::io::stdin().read_line(&mut pass).is_err() || pass.is_empty() {
-                eprintln!(
-                    "{} Failed to read password from stdin",
-                    color::error_indicator()
+                print_cli_error_code(
+                    "Failed to read password from stdin",
+                    "cli_private_input_unavailable",
+                    flags.json,
                 );
                 exit(1);
             }
             let pass = pass.trim_end_matches('\n').trim_end_matches('\r');
             if pass.is_empty() {
-                eprintln!("{} Password from stdin is empty", color::error_indicator());
+                print_cli_error_code(
+                    "Password from stdin is empty",
+                    "cli_private_input_empty",
+                    flags.json,
+                );
                 exit(1);
             }
             cmd["password"] = json!(pass);
@@ -2575,7 +2691,7 @@ fn main() {
             if flags.json {
                 print_json_error_with_type(msg, "invalid_session_name");
             } else {
-                eprintln!("{} {}", color::error_indicator(), msg);
+                print_plain_error(msg);
             }
             exit(1);
         }
@@ -2607,7 +2723,7 @@ fn main() {
             },
         };
         let output_opts = OutputOptions::from_flags(&flags);
-        output::print_response_with_opts(&resp, action, &output_opts);
+        print_cli_response(&resp, action, &output_opts);
         if !resp.success {
             exit(1);
         }
@@ -2627,7 +2743,7 @@ fn main() {
                 ..Default::default()
             },
         };
-        output::print_response_with_opts(
+        print_cli_response(
             &response,
             Some("service_connections_reconcile"),
             &OutputOptions::from_flags(&flags),
@@ -2670,7 +2786,7 @@ fn main() {
                 warning: None,
             },
         };
-        output::print_response_with_opts(&resp, action, &OutputOptions::from_flags(&flags));
+        print_cli_response(&resp, action, &OutputOptions::from_flags(&flags));
         if !resp.success {
             exit(1);
         }
@@ -2710,7 +2826,7 @@ fn main() {
                 .map(str::to_string),
         };
         let output_opts = OutputOptions::from_flags(&flags);
-        output::print_response_with_opts(&resp, action, &output_opts);
+        print_cli_response(&resp, action, &output_opts);
         if !resp.success {
             exit(1);
         }
@@ -2745,7 +2861,7 @@ fn main() {
                         "warning": resp.warning,
                     }));
                 } else {
-                    print_response_with_opts(&resp, action, &output_opts);
+                    print_cli_response(&resp, action, &output_opts);
                 }
                 return;
             }
@@ -2789,7 +2905,7 @@ fn main() {
                                     "warning": resp.warning,
                                 }));
                             } else {
-                                print_response_with_opts(&resp, action, &output_opts);
+                                print_cli_response(&resp, action, &output_opts);
                             }
                             return;
                         }
@@ -2804,7 +2920,7 @@ fn main() {
                         "error": resp.error,
                     }));
                 } else {
-                    print_response_with_opts(&resp, action, &output_opts);
+                    print_cli_response(&resp, action, &output_opts);
                 }
                 if !resp.success {
                     exit(1);
@@ -2839,7 +2955,7 @@ fn main() {
                                     "warning": resp.warning,
                                 }));
                             } else {
-                                print_response_with_opts(&resp, action, &output_opts);
+                                print_cli_response(&resp, action, &output_opts);
                             }
                             return;
                         }
@@ -2874,7 +2990,7 @@ fn main() {
             if flags.json {
                 print_json_error(error);
             } else {
-                eprintln!("{} {}", color::error_indicator(), error);
+                print_plain_error(error);
             }
             exit(1);
         }
@@ -2910,13 +3026,15 @@ fn main() {
         ..DaemonOptions::from_flags(&flags)
     };
 
-    let daemon_result = match ensure_daemon(&flags.session, &daemon_opts) {
+    let (daemon_result, readiness_samples) =
+        connection::ensure_daemon_with_latency(&flags.session, &daemon_opts);
+    let daemon_result = match daemon_result {
         Ok(result) => result,
         Err(e) => {
             if flags.json {
                 print_json_error(e);
             } else {
-                eprintln!("{} {}", color::error_indicator(), e);
+                print_plain_error(e);
             }
             exit(1);
         }
@@ -3000,7 +3118,7 @@ fn main() {
         if flags.json {
             print_json_error(msg);
         } else {
-            eprintln!("{} {}", color::error_indicator(), msg);
+            print_plain_error(msg);
         }
         exit(1);
     }
@@ -3010,7 +3128,7 @@ fn main() {
         if flags.json {
             print_json_error(msg);
         } else {
-            eprintln!("{} {}", color::error_indicator(), msg);
+            print_plain_error(msg);
         }
         exit(1);
     }
@@ -3020,7 +3138,7 @@ fn main() {
         if flags.json {
             print_json_error(msg);
         } else {
-            eprintln!("{} {}", color::error_indicator(), msg);
+            print_plain_error(msg);
         }
         exit(1);
     }
@@ -3030,7 +3148,7 @@ fn main() {
         if flags.json {
             print_json_error(msg);
         } else {
-            eprintln!("{} {}", color::error_indicator(), msg);
+            print_plain_error(msg);
         }
         exit(1);
     }
@@ -3040,7 +3158,7 @@ fn main() {
         if flags.json {
             print_json_error(msg);
         } else {
-            eprintln!("{} {}", color::error_indicator(), msg);
+            print_plain_error(msg);
         }
         exit(1);
     }
@@ -3081,7 +3199,7 @@ fn main() {
             if flags.json {
                 print_json_error(msg);
             } else {
-                eprintln!("{} {}", color::error_indicator(), msg);
+                print_plain_error(msg);
             }
             exit(1);
         }
@@ -3112,7 +3230,7 @@ fn main() {
                     if flags.json {
                         print_json_error(&msg);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), msg);
+                        print_plain_error(msg);
                     }
                     exit(1);
                 }
@@ -3124,7 +3242,7 @@ fn main() {
                     if flags.json {
                         print_json_error(&msg);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), msg);
+                        print_plain_error(msg);
                     }
                     exit(1);
                 }
@@ -3137,7 +3255,7 @@ fn main() {
                     if flags.json {
                         print_json_error(&msg);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), msg);
+                        print_plain_error(msg);
                     }
                     exit(1);
                 }
@@ -3177,7 +3295,7 @@ fn main() {
                 if flags.json {
                     print_json_error(msg);
                 } else {
-                    eprintln!("{} {}", color::error_indicator(), msg);
+                    print_plain_error(msg);
                 }
                 exit(1);
             }
@@ -3211,7 +3329,7 @@ fn main() {
                 if flags.json {
                     print_json_error(msg);
                 } else {
-                    eprintln!("{} {}", color::error_indicator(), msg);
+                    print_plain_error(msg);
                 }
                 exit(1);
             }
@@ -3227,7 +3345,7 @@ fn main() {
             if flags.json {
                 print_json_error(e);
             } else {
-                eprintln!("{} {}", color::error_indicator(), e);
+                print_plain_error(e);
             }
             exit(1);
         });
@@ -3427,18 +3545,14 @@ fn main() {
 
         match send_command(launch_cmd, &flags.session) {
             Ok(resp) if !resp.success => {
-                print_response_with_opts(&resp, Some("launch"), &OutputOptions::from_flags(&flags));
+                print_cli_response(&resp, Some("launch"), &OutputOptions::from_flags(&flags));
                 exit(1);
             }
             Err(e) => {
                 if flags.json {
                     print_json_error(e);
                 } else {
-                    eprintln!(
-                        "{} Could not configure browser: {}",
-                        color::error_indicator(),
-                        e
-                    );
+                    print_plain_error(format!("Could not configure browser: {e}"));
                 }
                 exit(1);
             }
@@ -3462,7 +3576,7 @@ fn main() {
                     if flags.json {
                         print_json_error(error_msg);
                     } else {
-                        eprintln!("{} {}", color::error_indicator(), error_msg);
+                        print_plain_error(error_msg);
                     }
                     exit(1);
                 }
@@ -3470,11 +3584,7 @@ fn main() {
                     if flags.json {
                         print_json_error(e);
                     } else {
-                        eprintln!(
-                            "{} Could not apply default viewport: {}",
-                            color::error_indicator(),
-                            e
-                        );
+                        print_plain_error(format!("Could not apply default viewport: {e}"));
                     }
                     exit(1);
                 }
@@ -3511,7 +3621,8 @@ fn main() {
     let output_opts = OutputOptions::from_flags(&flags);
 
     match send_command(cmd.clone(), &flags.session) {
-        Ok(resp) => {
+        Ok(mut resp) => {
+            connection::latency::append_response(&mut resp.data, readiness_samples);
             let success = resp.success;
             // Handle interactive confirmation
             if flags.confirm_interactive {
@@ -3536,12 +3647,10 @@ fn main() {
                         eprint!("  Allow? [y/N]: ");
 
                         let mut input = String::new();
-                        let approved = if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-                            std::io::stdin().read_line(&mut input).is_ok()
-                                && matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
-                        } else {
-                            false
-                        };
+                        let decision_available = std::io::IsTerminal::is_terminal(&std::io::stdin())
+                            && std::io::stdin().read_line(&mut input).is_ok();
+                        let approved = decision_available
+                            && matches!(input.trim().to_lowercase().as_str(), "y" | "yes");
 
                         let confirm_cmd = if approved {
                             json!({ "id": gen_id(), "action": "confirm", "confirmationId": cid })
@@ -3552,13 +3661,21 @@ fn main() {
                         match send_command(confirm_cmd, &flags.session) {
                             Ok(r) => {
                                 if !approved {
-                                    eprintln!("{} Action denied", color::error_indicator());
+                                    print_cli_error_code(
+                                        "Action denied",
+                                        if decision_available {
+                                            "cli_action_confirmation_denied"
+                                        } else {
+                                            "cli_action_confirmation_unavailable"
+                                        },
+                                        false,
+                                    );
                                     exit(1);
                                 }
-                                print_response_with_opts(&r, None, &output_opts);
+                                print_cli_response(&r, None, &output_opts);
                             }
                             Err(e) => {
-                                eprintln!("{} {}", color::error_indicator(), e);
+                                print_plain_error(e);
                                 exit(1);
                             }
                         }
@@ -3568,7 +3685,7 @@ fn main() {
             }
             // Extract action for context-specific output handling
             let action = cmd.get("action").and_then(|v| v.as_str());
-            print_response_with_opts(&resp, action, &output_opts);
+            print_cli_response(&resp, action, &output_opts);
             if !success {
                 exit(1);
             }
@@ -3577,7 +3694,7 @@ fn main() {
             if flags.json {
                 print_json_error(e);
             } else {
-                eprintln!("{} {}", color::error_indicator(), e);
+                print_plain_error(e);
             }
             exit(1);
         }
@@ -3648,9 +3765,17 @@ fn run_batch(flags: &Flags, bail: bool, dependent: bool, arg_commands: Option<Ve
         let mut input = String::new();
         if let Err(e) = std::io::stdin().read_to_string(&mut input) {
             if flags.json {
-                print_json_error(format!("Failed to read stdin: {}", e));
+                print_cli_error_code(
+                    format!("Failed to read stdin: {e}"),
+                    "cli_batch_input_unavailable",
+                    true,
+                );
             } else {
-                eprintln!("{} Failed to read stdin: {}", color::error_indicator(), e);
+                print_cli_error_code(
+                    format!("Failed to read stdin: {e}"),
+                    "cli_batch_input_unavailable",
+                    false,
+                );
             }
             exit(1);
         }
@@ -3659,15 +3784,13 @@ fn run_batch(flags: &Flags, bail: bool, dependent: bool, arg_commands: Option<Ve
             Ok(c) => c,
             Err(e) => {
                 if flags.json {
-                    print_json_error(format!(
-                        "Invalid JSON input: {}. Expected an array of string arrays, e.g. [[\"open\", \"https://example.com\"], [\"snapshot\"]]",
-                        e
-                    ));
+                    print_cli_error_code(format!(
+                        "Invalid JSON input: {}. Expected an array of string arrays, e.g. [[\"open\", \"https://example.com\"], [\"snapshot\"]]", e), "cli_batch_input_invalid", true);
                 } else {
-                    eprintln!(
-                        "{} Invalid JSON input: {}. Expected an array of string arrays.",
-                        color::error_indicator(),
-                        e
+                    print_cli_error_code(
+                        format!("Invalid JSON input: {e}. Expected an array of string arrays."),
+                        "cli_batch_input_invalid",
+                        false,
                     );
                 }
                 exit(1);
@@ -3701,22 +3824,19 @@ fn run_batch(flags: &Flags, bail: bool, dependent: bool, arg_commands: Option<Ve
             Ok(c) => c,
             Err(e) => {
                 had_error = true;
+                let mut failure = cli_failure_payload(&e.format(), Some(parse_failure_type(&e)));
+                failure["command"] = json!(cmd_args);
+                failure["batchIndex"] = json!(i + 1);
+                failure["failure"]["scope"] = json!("current_batch_entry_validation");
+                enrich_public_cli_failure(&mut failure, "cli_batch_entry");
                 if flags.json {
-                    results.push(json!({
-                        "command": cmd_args,
-                        "success": false,
-                        "error": e.format(),
-                    }));
+                    results.push(failure);
                     if bail {
                         break;
                     }
                 } else {
-                    eprintln!(
-                        "{} Command {}: {}",
-                        color::error_indicator(),
-                        i + 1,
-                        e.format()
-                    );
+                    failure["error"] = json!(format!("Command {}: {}", i + 1, e.format()));
+                    print_public_cli_failure(failure, false);
                     if bail {
                         exit(1);
                     }
@@ -3735,17 +3855,20 @@ fn run_batch(flags: &Flags, bail: bool, dependent: bool, arg_commands: Option<Ve
         match send_command(parsed, &flags.session) {
             Ok(resp) => {
                 if flags.json {
-                    results.push(json!({
-                        "command": cmd_args,
-                        "success": resp.success,
-                        "result": resp.data,
-                        "error": resp.error,
-                    }));
+                    let mut row = json!({"command":cmd_args,"success":resp.success,"result":resp.data,
+                        "error":resp.error,"id":resp.id,"failure":resp.failure,"terminalOutcome":resp.terminal_outcome});
+                    if !resp.success {
+                        enrich_public_cli_failure(
+                            &mut row,
+                            action.as_deref().unwrap_or("cli_batch_entry"),
+                        );
+                    }
+                    results.push(row);
                 } else {
                     if i > 0 {
                         println!();
                     }
-                    print_response_with_opts(&resp, action.as_deref(), &output_opts);
+                    print_cli_response(&resp, action.as_deref(), &output_opts);
                 }
                 if !resp.success {
                     had_error = true;
@@ -3760,16 +3883,19 @@ fn run_batch(flags: &Flags, bail: bool, dependent: bool, arg_commands: Option<Ve
             Err(e) => {
                 had_error = true;
                 if flags.json {
-                    results.push(json!({
-                        "command": cmd_args,
-                        "success": false,
-                        "error": e.to_string(),
-                    }));
+                    let mut failure = cli_failure_payload(&e, None);
+                    failure["command"] = json!(cmd_args);
+                    failure["batchIndex"] = json!(i + 1);
+                    enrich_public_cli_failure(
+                        &mut failure,
+                        action.as_deref().unwrap_or("cli_batch_entry"),
+                    );
+                    results.push(failure);
                     if bail {
                         break;
                     }
                 } else {
-                    eprintln!("{} Command {}: {}", color::error_indicator(), i + 1, e);
+                    print_plain_error(format!("Command {}: {}", i + 1, e));
                     if bail {
                         exit(1);
                     }
@@ -3798,11 +3924,10 @@ fn run_dependent_batch(flags: &Flags, bail: bool, commands: &[Vec<String>]) {
     let mut parsed_commands = match parsed_commands {
         Ok(commands) => commands,
         Err(error) => {
-            if flags.json {
-                print_json_error(error.format());
-            } else {
-                eprintln!("{} {}", color::error_indicator(), error.format());
-            }
+            print_public_cli_failure(
+                cli_failure_payload(&error.format(), Some(parse_failure_type(&error))),
+                flags.json,
+            );
             exit(1);
         }
     };
@@ -3822,7 +3947,7 @@ fn run_dependent_batch(flags: &Flags, bail: bool, commands: &[Vec<String>]) {
             if flags.json {
                 print_json_error(&error);
             } else {
-                eprintln!("{} {}", color::error_indicator(), error);
+                print_plain_error(error);
             }
             exit(1);
         }
@@ -3834,7 +3959,7 @@ fn run_dependent_batch(flags: &Flags, bail: bool, commands: &[Vec<String>]) {
             .and_then(|data| data.get("hadError"))
             .and_then(|value| value.as_bool())
             .unwrap_or(false);
-    print_response_with_opts(
+    print_cli_response(
         &response,
         Some("dependent_batch"),
         &OutputOptions::from_flags(flags),
@@ -3907,6 +4032,16 @@ fn command_targets_existing_daemon_before_prestart(cmd: &serde_json::Value) -> b
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn public_cli_usage_label_does_not_settle_runtime_or_original_effects() {
+        let runtime = cli_failure_payload("owner unavailable", Some("usage_error"));
+        assert!(runtime.get("failure").is_none());
+        let parser = cli_failure_payload("missing selector", Some("missing_arguments"));
+        assert_eq!(parser["failure"]["code"], "cli_missing_arguments");
+        assert_eq!(parser["failure"]["scope"], "current_invocation_validation");
+        assert_eq!(parser["failure"]["originalOutcome"], "not_inferred");
+    }
+
     use crate::test_utils::EnvGuard;
 
     #[test]

@@ -1,0 +1,1922 @@
+{
+  "schemaVersion": "agent-browser.client-argument-normalization.v1",
+  "normalizedCode": "client_argument_invalid",
+  "normalizationBoundary": "Only listed caller-input/configuration TypeError sites invoke clientArgumentError; all owner/transport/policy/readiness errors are excluded.",
+  "sourceAnchorRule": "Owning function plus original argument expression identifies each exact check; line is advisory.",
+  "reviewedChecks": [
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 190,
+      "expression": "`Unsupported service request action: ${String(input.action)}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 200,
+      "expression": "`service request ${field} must be a positive integer`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 205,
+      "expression": "`service request ${field} must be a boolean`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 215,
+      "expression": "`service request ${field} must be a string`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 223,
+      "expression": "'service request profileLeasePolicy must be reject or wait'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 226,
+      "expression": "'service request displayIsolation must be private_virtual_display, shared_display, or ambient_display'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 234,
+      "expression": "`service request ${field} must be an array of strings`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 240,
+      "expression": "'service request desktop_capture requires browserId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 243,
+      "expression": "'service request desktop_capture format must be png'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 246,
+      "expression": "'service request desktop_capture maxBytes must be a positive integer'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceRequest",
+      "line": 249,
+      "expression": "'service request desktop_capture maxBytes must not exceed 16777216'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceTabRequest",
+      "line": 290,
+      "expression": "'service tab request url must be a string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceTabRequest",
+      "line": 293,
+      "expression": "'service tab request allowManualAction must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceTabRequest",
+      "line": 296,
+      "expression": "'service tab request allowMonitorFreshnessRisk must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceTabRequest",
+      "line": 315,
+      "expression": "`service tab request ${routeField} contradicts the access-plan route`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceTabRequest",
+      "line": 334,
+      "expression": "'service tab request cannot execute remote-view route intent; use requestServiceRemoteViewOpen() to acquire the route and serviceTabHandle'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireRefreshableServiceTabHandle",
+      "line": 520,
+      "expression": "'service tab handle refresh request requires serviceTabHandle'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireRefreshableServiceTabHandle",
+      "line": 523,
+      "expression": "'service tab handle refresh request requires serviceTabHandle.tabId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceCdpFreeLaunchRequest",
+      "line": 568,
+      "expression": "'CDP-free launch request url must be a string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceCdpFreeLaunchRequest",
+      "line": 571,
+      "expression": "'CDP-free launch request allowManualAction must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceCdpFreeLaunchRequest",
+      "line": 574,
+      "expression": "'CDP-free launch request allowMonitorFreshnessRisk must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceExternalByopAdoptRequest",
+      "line": 618,
+      "expression": "'external BYOP adopt request requires runtimeProfile or profileId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceExternalByopAdoptRequest",
+      "line": 621,
+      "expression": "'external BYOP adopt request cdpUrl must be a string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceExternalByopAdoptRequest",
+      "line": 624,
+      "expression": "'external BYOP adopt request cdpPort must be a positive integer'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceExternalByopAdoptRequest",
+      "line": 629,
+      "expression": "'external BYOP adopt request requires exactly one of cdpUrl or cdpPort'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceExternalByopAdoptRequest",
+      "line": 632,
+      "expression": "'external BYOP adopt request url must be a string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceCdpAttachRequest",
+      "line": 663,
+      "expression": "'service CDP attach request requires cdpAttachmentAllowed=true'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceCdpAttachRequest",
+      "line": 666,
+      "expression": "'service CDP attach request cannot run when requiresCdpFree=true'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceCdpAttachRequest",
+      "line": 669,
+      "expression": "'service CDP attach request requires serviceTabHandle.targetId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceEvaluateRequest",
+      "line": 720,
+      "expression": "'service evaluate request requires script or expression'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceEvaluateRequest",
+      "line": 723,
+      "expression": "'service evaluate request requires returnByValue=true'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceEvaluateRequest",
+      "line": 726,
+      "expression": "'service evaluate request requires positive timeoutMs'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceEvaluateRequest",
+      "line": 729,
+      "expression": "'service evaluate request requires positive maxReturnBytes'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceEvaluateRequest",
+      "line": 732,
+      "expression": "'service evaluate request requires serviceTabHandle.targetId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDiagnosticsRequest",
+      "line": 764,
+      "expression": "`service diagnostics request ${field} must be a positive integer`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDiagnosticsRequest",
+      "line": 768,
+      "expression": "'service diagnostics request includeScreenshot must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDiagnosticsRequest",
+      "line": 771,
+      "expression": "'service diagnostics request screenshotDir must be a string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopCaptureRequest",
+      "line": 793,
+      "expression": "'service desktop capture request requires browserId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopCaptureRequest",
+      "line": 796,
+      "expression": "'service desktop capture request sessionName must be a non-empty string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopCaptureRequest",
+      "line": 799,
+      "expression": "'service desktop capture request format must be png'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopCaptureRequest",
+      "line": 802,
+      "expression": "'service desktop capture request maxBytes must be a positive integer'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopCaptureRequest",
+      "line": 805,
+      "expression": "'service desktop capture request maxBytes must not exceed 16777216'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopLocateRequest",
+      "line": 837,
+      "expression": "`service desktop locate request does not accept ${forbiddenField}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopLocateRequest",
+      "line": 840,
+      "expression": "'service desktop locate request requires browserId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopLocateRequest",
+      "line": 843,
+      "expression": "'service desktop locate request sessionName must be a non-empty string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopLocateRequest",
+      "line": 846,
+      "expression": "'service desktop locate request requires locatorId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopLocateRequest",
+      "line": 849,
+      "expression": "'service desktop locate request maxCandidates must be an integer between 1 and 32'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopLocateRequest",
+      "line": 852,
+      "expression": "'service desktop locate request includeVisualization must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopEvidenceObserveRequest",
+      "line": 890,
+      "expression": "`service desktop evidence observe request does not accept ${forbiddenField}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopEvidenceObserveRequest",
+      "line": 900,
+      "expression": "`service desktop evidence observe request requires ${field}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopEvidenceObserveRequest",
+      "line": 904,
+      "expression": "'service desktop evidence observe request sessionName must be a non-empty string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopEvidenceObserveRequest",
+      "line": 907,
+      "expression": "'service desktop evidence observe request requires evidenceSurface stacking_or_occlusion or passkey_chooser'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopEvidenceObserveRequest",
+      "line": 913,
+      "expression": "'service desktop evidence observe request includeFrame must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopInteractRequest",
+      "line": 955,
+      "expression": "`service desktop interact request does not accept ${forbiddenField}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopInteractRequest",
+      "line": 966,
+      "expression": "`service desktop interact request requires ${field}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopInteractRequest",
+      "line": 970,
+      "expression": "'service desktop interact request sessionName must be a non-empty string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopInteractRequest",
+      "line": 973,
+      "expression": "'service desktop interact request requires a supported recipeId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopPromptObserveRequest",
+      "line": 1014,
+      "expression": "`service desktop prompt observe request does not accept ${forbiddenField}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopPromptObserveRequest",
+      "line": 1023,
+      "expression": "`service desktop prompt observe request requires ${field}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopPromptObserveRequest",
+      "line": 1027,
+      "expression": "'service desktop prompt observe request sessionName must be a non-empty string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopPromptObserveRequest",
+      "line": 1030,
+      "expression": "'service desktop prompt observe request requires promptProfileId p110-external-prompt-v1'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceDesktopPromptObserveRequest",
+      "line": 1035,
+      "expression": "'service desktop prompt observe request includeVisualization must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProbeRequest",
+      "line": 1067,
+      "expression": "'service probe request requires probe.detectors array'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProbeRequest",
+      "line": 1072,
+      "expression": "'service probe request requires positive timeoutMs'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProbeRequest",
+      "line": 1075,
+      "expression": "'service probe request requires positive maxReturnBytes'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProbeRequest",
+      "line": 1078,
+      "expression": "'service probe request requires serviceTabHandle.targetId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProbeRequest",
+      "line": 1084,
+      "expression": "'service probe request probe.recordFreshness requires targetServiceId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProbeRequest",
+      "line": 1087,
+      "expression": "'service probe request probe.recordFreshness requires accountId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceUiActionRequest",
+      "line": 1120,
+      "expression": "'service UI action request requires uiAction.steps array'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceUiActionRequest",
+      "line": 1124,
+      "expression": "'service UI action request requires positive timeoutMs'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceUiActionRequest",
+      "line": 1128,
+      "expression": "'service UI action request maxTextBytes must be positive when supplied'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceUiActionRequest",
+      "line": 1131,
+      "expression": "'service UI action request requires serviceTabHandle.targetId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceNetworkCaptureRequest",
+      "line": 1163,
+      "expression": "'service network capture request requires positive timeoutMs'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceNetworkCaptureRequest",
+      "line": 1167,
+      "expression": "'service network capture request requires positive networkCapture.maxEvents'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceNetworkCaptureRequest",
+      "line": 1172,
+      "expression": "'service network capture request captureBodies requires positive maxBodyBytes'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceNetworkCaptureRequest",
+      "line": 1175,
+      "expression": "'service network capture request maxBodyBytes must be positive when supplied'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceNetworkCaptureRequest",
+      "line": 1178,
+      "expression": "'service network capture request requires serviceTabHandle.targetId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceFileTransferRequest",
+      "line": 1210,
+      "expression": "'service file transfer request requires positive timeoutMs'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceFileTransferRequest",
+      "line": 1213,
+      "expression": "'service file transfer request requires upload or download recipe'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceFileTransferRequest",
+      "line": 1222,
+      "expression": "'service file transfer request requires serviceTabHandle.targetId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertFileTransferUploadRecipe",
+      "line": 1243,
+      "expression": "'service file transfer upload requires selector or labelText'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertFileTransferUploadRecipe",
+      "line": 1247,
+      "expression": "'service file transfer upload requires files array'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertFileTransferUploadRecipe",
+      "line": 1251,
+      "expression": "'service file transfer upload requires positive maxFiles'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertFileTransferUploadRecipe",
+      "line": 1254,
+      "expression": "'service file transfer upload file count exceeds maxFiles'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertFileTransferDownloadRecipe",
+      "line": 1266,
+      "expression": "'service file transfer download requires selector'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertFileTransferDownloadRecipe",
+      "line": 1269,
+      "expression": "'service file transfer download requires directory'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertFileTransferDownloadRecipe",
+      "line": 1273,
+      "expression": "'service file transfer download maxBytes must be positive when supplied'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertNonemptyStringArray",
+      "line": 1283,
+      "expression": "`${label} must be a nonempty string array`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceTabHandleRefreshRequest",
+      "line": 1302,
+      "expression": "'service tab handle refresh request repairPolicy must be reject_only, reuse_compatible, open_if_missing, or replace_duplicates'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProfilePolicyMutationRequest",
+      "line": 1567,
+      "expression": "'profile policy mutation request requires profileId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProfilePolicyMutationRequest",
+      "line": 1570,
+      "expression": "'profile policy mutation request expectedRevision must be a positive integer'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProfilePolicyMutationRequest",
+      "line": 1575,
+      "expression": "'profile policy mutation request requires targetPolicy or mode and preset'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProfilePolicyMutationRequest",
+      "line": 1578,
+      "expression": "'profile policy mutation request requires both mode and preset'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "createServiceProfileTabEvictionRequest",
+      "line": 1606,
+      "expression": "`profile tab eviction request requires ${field}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "postServiceRequest",
+      "line": 1734,
+      "expression": "'postServiceRequest requires a fetch implementation'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "postServiceRequest",
+      "line": 1737,
+      "expression": "'postServiceRequest requires a baseUrl string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopLocateRequest",
+      "line": 2966,
+      "expression": "`service desktop locate request does not accept ${forbiddenField}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopLocateRequest",
+      "line": 2970,
+      "expression": "'service desktop locate request params must be an object'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopLocateRequest",
+      "line": 2975,
+      "expression": "`service desktop locate request does not accept params.${forbiddenParam}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopLocateRequest",
+      "line": 2979,
+      "expression": "'service desktop locate request requires browserId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopLocateRequest",
+      "line": 2983,
+      "expression": "'service desktop locate request sessionName must be a non-empty string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopLocateRequest",
+      "line": 2987,
+      "expression": "'service desktop locate request requires locator'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopLocateRequest",
+      "line": 2991,
+      "expression": "`service desktop locate request locator does not accept ${locatorField}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopLocateRequest",
+      "line": 2994,
+      "expression": "'service desktop locate request locator requires locatorId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopLocateRequest",
+      "line": 3000,
+      "expression": "'service desktop locate request locator.maxCandidates must be an integer between 1 and 32'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopLocateRequest",
+      "line": 3004,
+      "expression": "'service desktop locate request includeVisualization must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceObserveRequest",
+      "line": 3028,
+      "expression": "`service desktop evidence observe request does not accept ${forbiddenField}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceObserveRequest",
+      "line": 3032,
+      "expression": "`service desktop evidence observe request requires ${field}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceObserveRequest",
+      "line": 3039,
+      "expression": "'service desktop evidence observe request sessionName must be a non-empty string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceObserveRequest",
+      "line": 3045,
+      "expression": "'service desktop evidence observe request requires evidenceSurface stacking_or_occlusion or passkey_chooser'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceObserveRequest",
+      "line": 3055,
+      "expression": "'service desktop evidence observe request includeFrame must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceTrigger",
+      "line": 3067,
+      "expression": "'service desktop evidence observe stacking_or_occlusion does not accept serviceTabHandle or uiAction'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceTrigger",
+      "line": 3075,
+      "expression": "'service desktop evidence observe requires serviceTabHandle'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceTrigger",
+      "line": 3079,
+      "expression": "'service desktop evidence observe requires uiAction'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceTrigger",
+      "line": 3083,
+      "expression": "'service desktop evidence observe uiAction accepts only maxActions and steps'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceTrigger",
+      "line": 3086,
+      "expression": "'service desktop evidence observe uiAction.maxActions must be 1'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceTrigger",
+      "line": 3089,
+      "expression": "'service desktop evidence observe uiAction requires exactly one step'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopEvidenceTrigger",
+      "line": 3100,
+      "expression": "'service desktop evidence observe passkey_chooser requires one bounded selector click'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopInteractRequest",
+      "line": 3124,
+      "expression": "`service desktop interact request does not accept ${forbiddenField}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopInteractRequest",
+      "line": 3135,
+      "expression": "`service desktop interact request requires ${field}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopInteractRequest",
+      "line": 3142,
+      "expression": "'service desktop interact request sessionName must be a non-empty string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopInteractRequest",
+      "line": 3146,
+      "expression": "'service desktop interact request requires recipe'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopInteractRequest",
+      "line": 3150,
+      "expression": "`service desktop interact request recipe does not accept ${recipeField}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopInteractRequest",
+      "line": 3156,
+      "expression": "'service desktop interact request requires a supported recipeId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopPromptObserveRequest",
+      "line": 3177,
+      "expression": "`service desktop prompt observe request does not accept ${forbiddenField}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopPromptObserveRequest",
+      "line": 3181,
+      "expression": "`service desktop prompt observe request requires ${field}`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopPromptObserveRequest",
+      "line": 3188,
+      "expression": "'service desktop prompt observe request sessionName must be a non-empty string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopPromptObserveRequest",
+      "line": 3191,
+      "expression": "'service desktop prompt observe request requires promptProfileId p110-external-prompt-v1'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "validateDesktopPromptObserveRequest",
+      "line": 3196,
+      "expression": "'service desktop prompt observe request includeVisualization must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertPlainObject",
+      "line": 3251,
+      "expression": "`${label} must be an object`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "createServiceStatusMcpToolCall",
+      "line": 173,
+      "expression": "'service status MCP fullTabHistory must be a boolean'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "planServiceProfileRepair",
+      "line": 503,
+      "expression": "'planServiceProfileRepair requires id and profileCapability'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "applyServiceProfileRepair",
+      "line": 516,
+      "expression": "'applyServiceProfileRepair requires id, profileCapability, and plan'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "planServiceProfileReset",
+      "line": 531,
+      "expression": "'planServiceProfileReset requires id, profileCapability, and scope'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "planServiceProfileReset",
+      "line": 534,
+      "expression": "'authentication profile reset requires targetServiceId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "applyServiceProfileReset",
+      "line": 547,
+      "expression": "'applyServiceProfileReset requires id, profileCapability, and plan'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "watchServiceProfileLeases",
+      "line": 997,
+      "expression": "'watchServiceProfileLeases requires intervalMs >= 100'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "watchServiceProfileLeases",
+      "line": 1000,
+      "expression": "'watchServiceProfileLeases count must be a positive integer'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "planServiceProfileLeaseReconciliation",
+      "line": 1078,
+      "expression": "'planServiceProfileLeaseReconciliation requires leaseRevision, profileCapability, and expiresAt'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "applyServiceProfileLeaseReconciliation",
+      "line": 1093,
+      "expression": "'applyServiceProfileLeaseReconciliation requires profileCapability and plan'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "planServiceProfileLeaseRecovery",
+      "line": 1108,
+      "expression": "'planServiceProfileLeaseRecovery requires leaseRevision and profileCapability'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "applyServiceProfileLeaseRecovery",
+      "line": 1123,
+      "expression": "'applyServiceProfileLeaseRecovery requires profileCapability and plan'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "planServiceProfileRecovery",
+      "line": 1138,
+      "expression": "'planServiceProfileRecovery requires profileId, profileCapability, and expiresAt'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "acquireServiceProfile",
+      "line": 1153,
+      "expression": "'acquireServiceProfile requires profileId and profileCapability'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "applyServiceProfileRecovery",
+      "line": 1165,
+      "expression": "'applyServiceProfileRecovery requires profileCapability and plan'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "getServiceProfileRecoveryStatus",
+      "line": 1178,
+      "expression": "'getServiceProfileRecoveryStatus requires profileCapability'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "mutateServiceProfileLease",
+      "line": 1204,
+      "expression": "`${operation}ServiceProfileLease requires leaseRevision`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "mutateServiceProfileLease",
+      "line": 1207,
+      "expression": "`${operation}ServiceProfileLease requires profileCapability`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "mutateServiceProfileLease",
+      "line": 1210,
+      "expression": "'renewServiceProfileLease requires expiresAt'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "registerServiceLoginProfile",
+      "line": 1714,
+      "expression": "'registerServiceLoginProfile requires an id string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "registerServiceLoginProfile",
+      "line": 1718,
+      "expression": "'registerServiceLoginProfile requires loginId, siteId, targetServiceId, or targetServiceIds'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "registerServiceLoginProfile",
+      "line": 1721,
+      "expression": "'registerServiceLoginProfile requires a serviceName string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "registerExternalProfile",
+      "line": 1797,
+      "expression": "'registerExternalProfile requires an id string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "registerExternalProfile",
+      "line": 1800,
+      "expression": "'registerExternalProfile requires a serviceName string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "registerExternalProfile",
+      "line": 1803,
+      "expression": "'registerExternalProfile requires a userDataDir string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "registerExternalProfile",
+      "line": 1807,
+      "expression": "'registerExternalProfile requires loginId, siteId, targetServiceId, or targetServiceIds'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "createServiceProfileReadinessMonitor",
+      "line": 1878,
+      "expression": "'createServiceProfileReadinessMonitor requires loginId, siteId, targetServiceId, or targetServiceIds'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "updateServiceProfileFreshness",
+      "line": 1930,
+      "expression": "'updateServiceProfileFreshness requires loginId, siteId, targetServiceId, or targetServiceIds'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "upsertServiceBrowserPreferenceBinding",
+      "line": 2509,
+      "expression": "'upsertServiceBrowserPreferenceBinding requires browserBuild'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "upsertServiceBrowserPreferenceBinding",
+      "line": 2512,
+      "expression": "'upsertServiceBrowserPreferenceBinding requires preferredExecutableId'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "upsertServiceBrowserPreferenceBinding",
+      "line": 2519,
+      "expression": "'upsertServiceBrowserPreferenceBinding requires at least one target, account, service, or task filter'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "serviceGet",
+      "line": 2777,
+      "expression": "'service observability helpers require a fetch implementation'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "serviceGet",
+      "line": 2780,
+      "expression": "'service observability helpers require a baseUrl string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "servicePost",
+      "line": 2826,
+      "expression": "'service observability helpers require a fetch implementation'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "servicePost",
+      "line": 2829,
+      "expression": "'service observability helpers require a baseUrl string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "serviceDelete",
+      "line": 2857,
+      "expression": "'service observability helpers require a fetch implementation'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "serviceDelete",
+      "line": 2860,
+      "expression": "'service observability helpers require a baseUrl string'",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "assertServiceId",
+      "line": 2892,
+      "expression": "`${helperName} requires an id string`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "assertPlainObject",
+      "line": 2898,
+      "expression": "`${label} must be an object`",
+      "classification": "pre_dispatch_caller_input_or_configuration",
+      "normalizedCode": "client_argument_invalid"
+    },
+    {
+      "path": "packages/client/src/challenge-assistance.js",
+      "owningFunction": "createChallengeAssistanceClient",
+      "expression": "'challenge_assistance_ports_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "callTool",
+        "verifyClearance",
+        "verifyAccess",
+        "timeoutMs"
+      ]
+    },
+    {
+      "path": "packages/client/src/hosted-login-receiver.js",
+      "owningFunction": "createHostedLoginReceiver",
+      "expression": "'hosted_receiver_configuration_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "binding",
+        "scope",
+        "expectedUsername",
+        "browser",
+        "readPrincipal",
+        "readCaptureSafety",
+        "readReconciliationSafety",
+        "awaitMfa",
+        "authenticatedOrigins",
+        "maxTransitions"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-playbook.js",
+      "owningFunction": "createLoginPlaybook",
+      "expression": "'login_playbook_dependencies_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "browser",
+        "helper",
+        "checkpoints"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-verification.js",
+      "owningFunction": "createLoginVerifier",
+      "expression": "'login_verifier_configuration_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "client",
+        "verifyAccess",
+        "callerTaskId"
+      ]
+    },
+    {
+      "path": "packages/client/src/login-verification.js",
+      "owningFunction": "createLoginVerifier.verify",
+      "expression": "'login_verification_binding_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "requestId",
+        "attemptId",
+        "binding",
+        "applicationOrigin",
+        "expectedAccount",
+        "expectedOrganization"
+      ]
+    },
+    {
+      "path": "packages/client/src/native-image-challenge.js",
+      "owningFunction": "createImageClient",
+      "expression": "'native_image_ports_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "callTool",
+        "selectCandidates",
+        "resolvePolicy",
+        "verifyClearance",
+        "verifyAccess",
+        "timeoutMs"
+      ]
+    },
+    {
+      "path": "packages/client/src/native-image-challenge.js",
+      "owningFunction": "createImageClient",
+      "expression": "'native_image_capture_region_invalid'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "captureRegion"
+      ]
+    },
+    {
+      "path": "packages/client/src/native-receiving-browser.js",
+      "owningFunction": "createNativeReceivingBrowser",
+      "expression": "'native_receiving_configuration_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "readObservation",
+        "inputMatches",
+        "remote",
+        "desktop",
+        "guards",
+        "timeoutMs"
+      ]
+    },
+    {
+      "path": "packages/client/src/native-saved-login.js",
+      "owningFunction": "createNativeSavedLoginClient",
+      "expression": "'native_saved_login_configuration_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "callTool",
+        "store",
+        "verifyAccess",
+        "expectedAccount",
+        "timeoutMs"
+      ]
+    },
+    {
+      "path": "packages/client/src/native-saved-login.js",
+      "owningFunction": "createNativeSavedLoginClient.resolve",
+      "expression": "'native_saved_login_stable_identity_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "taskId",
+        "episodeId",
+        "allowAcknowledgedResume",
+        "steps"
+      ]
+    },
+    {
+      "path": "packages/client/src/owner-login-playbook.js",
+      "owningFunction": "createOwnerLoginPlaybook",
+      "expression": "'owner_login_dependencies_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "browser",
+        "auth",
+        "checkpoints"
+      ]
+    },
+    {
+      "path": "packages/client/src/owner-number-matching.js",
+      "owningFunction": "createOwnerNumberMatchingContinuation",
+      "expression": "'owner_number_matching_dependencies_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "auth",
+        "browser",
+        "checkpoints"
+      ]
+    },
+    {
+      "path": "packages/client/src/owner-totp-continuation.js",
+      "owningFunction": "createOwnerTotpContinuation",
+      "expression": "'owner_totp_dependencies_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "auth",
+        "browser",
+        "checkpoints"
+      ]
+    },
+    {
+      "path": "packages/client/src/playbooks.js",
+      "owningFunction": "createPlaybookClient",
+      "expression": "'playbook_transport_required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "callTool"
+      ]
+    },
+    {
+      "path": "packages/client/src/task-briefing.js",
+      "owningFunction": "getTaskBriefing",
+      "expression": "'taskId is required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "taskId"
+      ]
+    },
+    {
+      "path": "packages/client/src/task-briefing.js",
+      "owningFunction": "getTaskOperation",
+      "expression": "'taskId and requestId are required'",
+      "classification": "pre_dispatch_constructor_configuration_or_caller_identity",
+      "normalizedCode": "client_argument_invalid",
+      "checkedFields": [
+        "taskId",
+        "requestId"
+      ]
+    }
+  ],
+  "excludedChecks": [
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceTabHandle",
+      "line": 397,
+      "expression": "'service tab response did not include serviceTabHandle'",
+      "classification": "owner_or_readiness_or_policy_derived_not_argument_normalized"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceTabHandle",
+      "line": 401,
+      "expression": "`service tab handle is stale${reason}`",
+      "classification": "owner_or_readiness_or_policy_derived_not_argument_normalized"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "deriveServiceRemoteViewHandoffResumeIntent",
+      "line": 439,
+      "expression": "`durable handoff resume intent is missing ${missingField}`",
+      "classification": "owner_or_readiness_or_policy_derived_not_argument_normalized"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceRemoteViewHandoffUrl",
+      "line": 2274,
+      "expression": "'remote-view open response is missing a durable handoff URL'",
+      "classification": "owner_or_readiness_or_policy_derived_not_argument_normalized"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceRemoteViewOpenOperatorVisible",
+      "line": 2541,
+      "expression": "`remote-view open response is not operator-visible: ${summary.summary}`",
+      "classification": "owner_or_readiness_or_policy_derived_not_argument_normalized"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "line": 2781,
+      "expression": "'service access plan serviceRequest.request action must be tab_new'",
+      "classification": "owner_or_readiness_or_policy_derived_not_argument_normalized"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "line": 2789,
+      "expression": "'service access plan reuse requires complete browserId and sessionName route hints'",
+      "classification": "owner_or_readiness_or_policy_derived_not_argument_normalized"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "line": 2795,
+      "expression": "`service access plan serviceRequest.request ${routeField} contradicts shared acquisition`",
+      "classification": "owner_or_readiness_or_policy_derived_not_argument_normalized"
+    }
+  ],
+  "excludedOwnerCallPaths": [
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "summarizeServiceCdpFreeLaunchAvailability",
+      "expression": "assertPlainObject(data, 'CDP-free launch data')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "assertPlainObject(decision, 'service access plan decision')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "assertPlainObject(serviceRequest, 'service access plan serviceRequest')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "assertPlainObject(request, 'service access plan serviceRequest.request')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "assertPlainObject(decision, 'service access plan decision')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "assertPlainObject(serviceRequest, 'service access plan serviceRequest')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "assertPlainObject(request, 'service access plan serviceRequest.request')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertMonitorRunDueSummarySafe",
+      "expression": "assertPlainObject(summary, 'monitor run-due summary')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanBrowserCapabilityPreflight",
+      "expression": "assertPlainObject(recipe.request, 'service access plan decision.browserCapabilityPreflight.request')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "getServiceProfileAllocationForAccessPlan",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanPostSeedingProbe",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanPostSeedingProbe",
+      "expression": "assertPlainObject(decision, 'service access plan decision')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanPostSeedingProbe",
+      "expression": "assertPlainObject(recipe, 'service access plan decision.postSeedingProbe')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanMonitorRunDue",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanMonitorRunDue",
+      "expression": "assertPlainObject(decision, 'service access plan decision')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanMonitorRunDue",
+      "expression": "assertPlainObject(recipe, 'service access plan decision.monitorRunDue')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanBrowserCapabilityPreflight",
+      "expression": "assertPlainObject(accessPlan, 'service access plan')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanBrowserCapabilityPreflight",
+      "expression": "assertPlainObject(decision, 'service access plan decision')",
+      "classification": "owner_response_shape_not_caller_argument"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "accessPlanBrowserCapabilityPreflight",
+      "expression": "assertPlainObject(recipe, 'service access plan decision.browserCapabilityPreflight')",
+      "classification": "owner_response_shape_not_caller_argument"
+    }
+  ],
+  "qualifiedOwnerChecks": [
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceTabHandle",
+      "expression": "'service tab response did not include serviceTabHandle'",
+      "code": "client_service_tab_handle_missing",
+      "recipe": "serviceTabHandleReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceTabHandle",
+      "expression": "`service tab handle is stale${reason}`",
+      "code": "client_service_tab_handle_stale",
+      "recipe": "serviceTabHandleReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "deriveServiceRemoteViewHandoffResumeIntent",
+      "expression": "`durable handoff resume intent is missing ${missingField}`",
+      "code": "client_service_handoff_resume_incomplete",
+      "recipe": "serviceTabHandleReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceRemoteViewHandoffUrl",
+      "expression": "'remote-view open response is missing a durable handoff URL'",
+      "code": "client_service_handoff_url_missing",
+      "recipe": "serviceDurableHandoffReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "requireServiceRemoteViewOpenOperatorVisible",
+      "expression": "`remote-view open response is not operator-visible: ${summary.summary}`",
+      "code": "client_service_operator_not_visible",
+      "recipe": "serviceDurableHandoffReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "`service access plan requires manual profile seeding before tab request${typeof command === 'string' ? `: ${command}` : ''}`",
+      "code": "client_service_manual_seeding_required",
+      "recipe": "serviceAccessPlanSeedingReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "'service access plan requires CDP-free browser operation; use createServiceCdpFreeLaunchRequest for lifecycle-only launch tracking'",
+      "code": "client_service_cdp_free_required",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "`service access plan service request is unavailable${blocker}`",
+      "code": "client_service_access_plan_unavailable",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "'service access plan serviceRequest.request action must be tab_new'",
+      "code": "client_service_access_plan_action_mismatch",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "'service access plan reuse requires complete browserId and sessionName route hints'",
+      "code": "client_service_access_plan_reuse_unverified",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceTabRequest",
+      "expression": "`service access plan serviceRequest.request ${routeField} contradicts shared acquisition`",
+      "code": "client_service_access_plan_route_conflict",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "`service access plan requires manual profile seeding before CDP-free launch${typeof command === 'string' ? `: ${command}` : ''}`",
+      "code": "client_service_manual_seeding_required",
+      "recipe": "serviceAccessPlanSeedingReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "accessPlanServiceCdpFreeLaunchRequest",
+      "expression": "'service access plan does not require CDP-free browser operation'",
+      "code": "client_service_cdp_free_unexpected",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertMonitorRunDueSummarySafe",
+      "expression": "`service monitor run-due found expired profile freshness before ${options.actionLabel}: ${expiredTargetServiceIds.join(',')}`",
+      "code": "client_monitor_profile_freshness_expired",
+      "recipe": "serviceMonitorFreshnessReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertMonitorRunDueSummarySafe",
+      "expression": "`service monitor run-due could not verify profile freshness before ${options.actionLabel}: ${unverifiedTargetServiceIds.join(',')}`",
+      "code": "client_monitor_profile_freshness_unverified",
+      "recipe": "serviceMonitorFreshnessReadback"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "assertMonitorRunDueSummarySafe",
+      "expression": "`service monitor run-due requires inspection before ${options.actionLabel}: ${recommendedAction}`",
+      "code": "client_monitor_results_require_inspection",
+      "recipe": "serviceMonitorFreshnessReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanBrowserCapabilityPreflight",
+      "expression": "'access plan browserCapabilityPreflight is not available'",
+      "code": "client_service_access_plan_recipe_unavailable",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanMonitorRunDue",
+      "expression": "'access plan monitorRunDue is not available'",
+      "code": "client_service_access_plan_recipe_unavailable",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanPostSeedingProbe",
+      "expression": "'access plan postSeedingProbe is not available'",
+      "code": "client_service_access_plan_recipe_unavailable",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanPostSeedingProbe",
+      "expression": "'access plan postSeedingProbe is missing profileId'",
+      "code": "client_service_access_plan_profile_missing",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanPostSeedingProbe",
+      "expression": "'access plan postSeedingProbe is missing targetServiceId'",
+      "code": "client_service_access_plan_target_missing",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanPostSeedingProbe",
+      "expression": "'runServiceAccessPlanPostSeedingProbe requires url or an access-plan site policy URL'",
+      "code": "client_service_access_plan_url_missing",
+      "recipe": "serviceAccessPlanReadback"
+    },
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "runServiceAccessPlanPostSeedingProbe",
+      "expression": "`Post-seeding probe refused to verify ${profileId}: broker selected ${selectedProfileId || 'no profile'}.`",
+      "code": "client_service_profile_identity_mismatch",
+      "recipe": "serviceAccessPlanReadback"
+    }
+  ],
+  "intentionalCancellations": [
+    {
+      "path": "packages/client/src/service-observability.js",
+      "owningFunction": "waitForServicePoll",
+      "classification": "caller_abort_signal_or_reason",
+      "recovery": "A caller-requested cancellation ends this iterator. Start a new watch with a fresh non-aborted signal only when the caller wants observation to resume; no browser input or mutation is replayed."
+    }
+  ]
+}

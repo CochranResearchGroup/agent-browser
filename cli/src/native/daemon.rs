@@ -466,7 +466,7 @@ impl RuntimeHostRouter {
                     .map(|(_, config)| config)
             });
         let lanes = Arc::new(crate::runtime_host::RuntimeLaneRegistry::new(
-            crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
+            crate::runtime_host::current_lane_capacity()?.0,
         ));
         let browser_sessions =
             Arc::new(super::browser_session_host::BrowserSessionHosts::default());
@@ -545,6 +545,7 @@ impl RuntimeHostRouter {
         if let Some(lane) = self.lanes.get(session) {
             if !lane.configuration_committed {
                 if let Some(config) = config.as_ref() {
+                    let admission = self.lanes.admit_existing_lane(session)?;
                     let old = self
                         .lanes
                         .remove(session)
@@ -562,8 +563,8 @@ impl RuntimeHostRouter {
                         config.service_job_timeout_ms,
                         config.service_monitor_interval_ms,
                     );
-                    return self.lanes.insert(
-                        session.to_string(),
+                    return self.lanes.insert_admitted(
+                        admission,
                         RuntimeLane {
                             control_plane,
                             stream_client: old.stream_client,
@@ -578,6 +579,10 @@ impl RuntimeHostRouter {
             return Ok(lane);
         }
 
+        // Creation is serialized. Read current system defaults before starting
+        // a stream/control-plane; keep this admission through later lowering.
+        let (limit, source) = crate::runtime_host::current_lane_capacity()?;
+        let admission = self.lanes.admit_new_lane(session, limit, source)?;
         let configuration_committed = config.is_some();
         let config = config.unwrap_or_else(|| crate::runtime_host::RuntimeLaneConfig {
             service_reconcile_interval_ms: self.service_reconcile_interval_ms,
@@ -625,7 +630,7 @@ impl RuntimeHostRouter {
             config,
             configuration_committed,
         };
-        self.lanes.insert(session.to_string(), lane)
+        self.lanes.insert_admitted(admission, lane)
     }
 
     async fn close_lane(&self, session: &str) {

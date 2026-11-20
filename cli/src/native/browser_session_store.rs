@@ -33,6 +33,8 @@ pub(crate) mod mode_inspection;
 pub(crate) mod profile_build;
 #[path = "browser_runtime_reset_store.rs"]
 mod runtime_reset;
+#[path = "browser_task_operation_archive.rs"]
+pub(crate) mod task_operation_archive;
 #[path = "browser_terminal_history.rs"]
 mod terminal_history;
 #[path = "browser_workspace_observation.rs"]
@@ -698,6 +700,13 @@ impl BrowserSessionSqliteStore {
         &mut self,
         mutate: impl FnOnce(&mut BrowserSessionState) -> Result<T, String>,
     ) -> Result<T, String> {
+        self.mutate_session_state_with_connection(|state, _| mutate(state))
+    }
+
+    pub(crate) fn mutate_session_state_with_connection<T>(
+        &mut self,
+        mutate: impl FnOnce(&mut BrowserSessionState, &Connection) -> Result<T, String>,
+    ) -> Result<T, String> {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -708,7 +717,7 @@ impl BrowserSessionSqliteStore {
             BROWSER_SESSION_STATE_SCHEMA_V1,
         )?;
         let previous = state.clone();
-        let result = mutate(&mut state)?;
+        let result = mutate(&mut state, &transaction)?;
         super::browser_idle_retirement_store::reject_retirement_publication(
             &transaction,
             &previous,
@@ -1224,10 +1233,6 @@ fn workspace_projection(
                     "lifetime":managed.tab_lifetimes.get(id),"pendingHuman":managed.pending_human_tabs.get(id)
                 }))
             }).collect();
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| "browser_runtime_clock_readback_required")?
-        .as_millis() as u64;
     // Deliberately whitelist display fields. A resume capsule, issued
     // provider view and native correlation are private owner authority.
     let handoffs: std::collections::BTreeMap<_, _> = managed.remote_view_tab_handoffs.iter().map(|(id, link)| {
@@ -1244,8 +1249,9 @@ fn workspace_projection(
                     "sessionName":session.map(|session| session.name.as_str()).or_else(|| resume.map(|intent| intent.session_name.as_str())),
                     "profileId":session.map(|session| session.profile_id.as_str()).or_else(|| resume.map(|intent| intent.profile_id.as_str())),
                     "browserId":tab.map(|tab| tab.browser_id.as_str()),
-                    "createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,
-                    "linkState":if link.check_link_at(now_ms).is_ok() {"active"} else {"expired"},
+                    "createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,"retentionTime":link.retention_time,
+                    "expired":if link.expires_at_ms.is_none() {serde_json::json!(false)} else {serde_json::Value::Null},
+                    "linkState":if link.expires_at_ms.is_none() {"active"} else {"time_unqualified"},
                     "targetState":if tab.is_some() {"reported"} else if link.target_expired {"expired"} else {"ended"},
                     "taskMetadata":metadata,"tabLifetime":lifetime,
                     "pendingHuman":managed.pending_human_tabs.get(&link.tab_id)
@@ -1415,10 +1421,13 @@ fn initialize_runtime_schema(connection: &Connection) -> Result<(), String> {
 }
 
 fn validate_runtime_schema(connection: &Connection) -> Result<(), String> {
+    validate_runtime_schema_with_max(connection, BROWSER_RUNTIME_DATABASE_MAX_SCHEMA)
+}
+fn validate_runtime_schema_with_max(connection: &Connection, maximum: i64) -> Result<(), String> {
     let version = connection
         .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
         .map_err(|error| format!("browser_runtime_database_schema_read_failed:{error}"))?;
-    if !(1..=BROWSER_RUNTIME_DATABASE_MAX_SCHEMA).contains(&version) {
+    if !(1..=maximum).contains(&version) {
         return Err(format!(
             "browser_runtime_database_schema_unsupported:{version}"
         ));
@@ -1446,19 +1455,59 @@ pub(super) fn save_document(
 ) -> Result<(), String> {
     let json = serde_json::to_string(value)
         .map_err(|error| format!("browser_runtime_document_serialize_failed:{error}"))?;
-    let json = if kind == SESSION_STATE_DOCUMENT {
-        terminal_history::prepare_json(connection, &json)?
-    } else {
-        json
-    };
-    connection
-        .execute(
+    // SAVEPOINT is valid in autocommit and inside an owner's existing writer
+    // transaction. Archives, schema promotion and publication roll back together;
+    // releasing this savepoint never commits an enclosing transaction.
+    let session = kind == SESSION_STATE_DOCUMENT;
+    if session {
+        connection
+            .execute_batch("SAVEPOINT qualified_handoff_session_document")
+            .map_err(|error| format!("browser_runtime_document_save_failed:{error}"))?;
+    }
+    let result: Result<(), String> = (|| {
+        let json = if session {
+            task_operation_archive::strip_archived_json(
+                connection,
+                terminal_history::prepare_json(connection, &json)?,
+            )?
+        } else {
+            json
+        };
+        // Most writes contain no retained origin, and an already guarded store
+        // needs no new document walk. Avoid a second whole-session Rust parse.
+        if session && json.contains("\"retentionTime\"") {
+            let version: i64 = connection
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .map_err(|error| format!("browser_runtime_database_schema_read_failed:{error}"))?;
+            if version < 8 {
+                let has_retention_authority: bool = connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM json_each(?1, '$.remoteViewTabHandoffs') AS link WHERE json_type(link.value, '$.retentionTime') = 'object')",
+                    params![json], |row| row.get(0),
+                ).map_err(|error| format!("browser_runtime_document_serialize_failed:{error}"))?;
+                if has_retention_authority {
+                    connection
+                        .pragma_update(None, "user_version", 8)
+                        .map_err(|error| format!("browser_runtime_document_save_failed:{error}"))?;
+                }
+            }
+        }
+        connection.execute(
             "INSERT INTO state_documents(kind, schema_version, json) VALUES (?1, ?2, ?3)
              ON CONFLICT(kind) DO UPDATE SET schema_version=excluded.schema_version, json=excluded.json",
             params![kind, schema_version, json],
-        )
-        .map_err(|error| format!("browser_runtime_document_save_failed:{error}"))?;
-    Ok(())
+        ).map_err(|error| format!("browser_runtime_document_save_failed:{error}"))?;
+        if session {
+            connection
+                .execute_batch("RELEASE qualified_handoff_session_document")
+                .map_err(|error| format!("browser_runtime_document_save_failed:{error}"))?;
+        }
+        Ok(())
+    })();
+    if session && result.is_err() {
+        connection.execute_batch("ROLLBACK TO qualified_handoff_session_document; RELEASE qualified_handoff_session_document")
+            .map_err(|error| format!("browser_runtime_document_save_failed:rollback_failed:{error}"))?;
+    }
+    result
 }
 
 fn load_document<T: DeserializeOwned>(
@@ -1844,6 +1893,97 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn headless_original_identity_survives_restart_without_accepting_replacement_or_native_custody()
+    {
+        let directory = TempDirectory::new("headless-original-identity");
+        let database = directory.0.join("runtime.sqlite3");
+        let connection = Connection::open(&database).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let mut store = BrowserSessionSqliteStore { connection };
+        let mut state = BrowserSessionState::default();
+        let browser = ManagedBrowserInstance {
+            id: "headless".into(),
+            profile_id: "profile".into(),
+            pid: 42,
+            cdp_endpoint: "ws://127.0.0.1:9/devtools/browser/original".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        state.browsers.insert(browser.id.clone(), browser.clone());
+        store.save_session_state(&state).unwrap();
+        assert_eq!(store.original_browser_identity(&state, &browser), None);
+        let mut launch = agent_browser_service_model::BrowserLaunch {
+            browser_id: browser.id.clone(),
+            pid: browser.pid,
+            cdp_endpoint: browser.cdp_endpoint.clone(),
+            desktop: None,
+            process_identity: Some(agent_browser_service_model::RecordedProcessIdentity {
+                pid: 42,
+                start_token: "boot:original".into(),
+                executable_path: Some("/fixture/chrome".into()),
+                browser_family: Some("chrome".into()),
+            }),
+        };
+        store
+            .retain_headless_launch_process("profile", &launch)
+            .unwrap();
+        drop(store);
+        let reader = BrowserSessionSqliteStore::open_read_only(&database).unwrap();
+        let original = reader.original_browser_identity(&state, &browser).unwrap();
+        assert_eq!(original.start_token, "boot:original");
+        drop(reader);
+        let mut writer = BrowserSessionSqliteStore::open(&directory.0).unwrap();
+        for changed in ["profile", "pid", "endpoint", "desktop"] {
+            let mut replacement = browser.clone();
+            match changed {
+                "profile" => replacement.profile_id = "peer".into(),
+                "pid" => replacement.pid += 1,
+                "endpoint" => replacement.cdp_endpoint.push_str("-replacement"),
+                _ => {
+                    replacement.desktop =
+                        Some(agent_browser_service_model::RemoteViewFixedDesktop {
+                            desktop_id: "native".into(),
+                            generation: 1,
+                            friendly_route_label: String::new(),
+                        })
+                }
+            }
+            state
+                .browsers
+                .insert(browser.id.clone(), replacement.clone());
+            writer.save_session_state(&state).unwrap();
+            assert_eq!(
+                writer.original_browser_identity(&state, &replacement),
+                None,
+                "{changed}"
+            );
+        }
+        state.browsers.insert(browser.id.clone(), browser.clone());
+        writer.save_session_state(&state).unwrap();
+        launch.process_identity.as_mut().unwrap().start_token = "boot:reused".into();
+        assert!(writer
+            .retain_headless_launch_process("profile", &launch)
+            .unwrap_err()
+            .contains("identity_conflict"));
+        assert_eq!(
+            writer.original_browser_identity(&state, &browser).unwrap(),
+            original
+        );
+        launch.browser_id = "missing-original".into();
+        launch.process_identity = None;
+        writer
+            .retain_headless_launch_process("profile", &launch)
+            .unwrap();
+        let missing = ManagedBrowserInstance {
+            id: launch.browser_id.clone(),
+            ..browser
+        };
+        state.browsers.insert(missing.id.clone(), missing.clone());
+        writer.save_session_state(&state).unwrap();
+        assert_eq!(writer.original_browser_identity(&state, &missing), None);
     }
 
     #[test]
@@ -2514,6 +2654,7 @@ mod tests {
                 tab_id: "retained-target".into(),
                 created_at_ms: None,
                 expires_at_ms: None,
+                retention_time: None,
                 view: None,
                 resume: None,
                 recreation: None,
@@ -2746,6 +2887,112 @@ mod tests {
     }
 
     #[test]
+    fn qualified_handoff_schema_guard_is_atomic_and_preserves_outer_rollback() {
+        let connection = Connection::open_in_memory().unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let store = BrowserSessionSqliteStore { connection };
+        let mut legacy = BrowserSessionState::default();
+        legacy.remote_view_tab_handoffs.insert("same-link".into(), serde_json::from_value(serde_json::json!({
+            "id":"same-link","sessionId":"original-task","tabId":"original-tab","createdAtMs":1,"expiresAtMs":2
+        })).unwrap());
+        store.save_session_state(&legacy).unwrap();
+        let schema = || {
+            store
+                .connection
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .unwrap()
+        };
+        let initial_schema = schema();
+        assert!(
+            initial_schema < 8,
+            "Legacy finite metadata does not invent qualified origin"
+        );
+        let mut qualified = legacy.clone();
+        qualified
+            .remote_view_tab_handoffs
+            .get_mut("same-link")
+            .unwrap()
+            .renew_link_lifetime(
+                Some(
+                    agent_browser_service_model::ServiceTimeOrigin::new(
+                        "service-epoch".into(),
+                        100,
+                        100,
+                    )
+                    .unwrap(),
+                ),
+                20,
+            )
+            .unwrap();
+        let mut archived_failure = qualified.clone();
+        for index in 0..1002 {
+            archived_failure.session_history.push(
+                agent_browser_service_model::TerminalBrowserSession {
+                    id: format!("ended-{index}"),
+                    name: format!("task-{index}"),
+                    profile_id: "profile".into(),
+                    browser_id: "browser".into(),
+                    created_at_ms: index,
+                    last_activity_at_ms: index,
+                    ended_at_ms: index,
+                    reason: agent_browser_service_model::SessionEndReason::HeartbeatExpired,
+                },
+            );
+        }
+        store.connection.execute_batch("CREATE TRIGGER fail_qualified_write BEFORE UPDATE ON state_documents WHEN NEW.kind='browser_session_state' BEGIN SELECT RAISE(ABORT,'fixture'); END;").unwrap();
+        assert!(store
+            .save_session_state(&archived_failure)
+            .unwrap_err()
+            .starts_with("browser_runtime_document_save_failed"));
+        assert_eq!(
+            schema(),
+            initial_schema,
+            "Failed publication rolls back reader promotion"
+        );
+        assert_eq!(store.load_session_state().unwrap(), legacy);
+        assert_eq!(
+            store
+                .connection
+                .query_row("SELECT count(*) FROM terminal_history_archive", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap(),
+            0,
+            "Failed write also rolls back archival rows"
+        );
+        store
+            .connection
+            .execute_batch("DROP TRIGGER fail_qualified_write; BEGIN IMMEDIATE")
+            .unwrap();
+        store.save_session_state(&qualified).unwrap();
+        assert!(
+            !store.connection.is_autocommit(),
+            "Nested savepoint cannot commit its owner's writer"
+        );
+        assert_eq!(schema(), 8);
+        store.connection.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(schema(), initial_schema);
+        assert_eq!(store.load_session_state().unwrap(), legacy);
+        store.save_session_state(&qualified).unwrap();
+        assert_eq!(schema(), 8);
+        assert_eq!(store.load_session_state().unwrap(), qualified);
+        assert_eq!(
+            validate_runtime_schema_with_max(&store.connection, 7).unwrap_err(),
+            "browser_runtime_database_schema_unsupported:8",
+            "The previous reader limit rejects the new authority-bearing document"
+        );
+        validate_runtime_schema(&store.connection).unwrap();
+        store
+            .save_session_state(&BrowserSessionState::default())
+            .unwrap();
+        assert_eq!(
+            schema(),
+            8,
+            "Removing a link never downgrades the database reader guard"
+        );
+    }
+
+    #[test]
     fn operational_status_lists_retained_handoffs_without_private_resume_routes() {
         let directory = TempDirectory::new("handoff-inventory");
         let legacy_path = directory.0.join("state.json");
@@ -2758,6 +3005,30 @@ mod tests {
             "resume":{"sessionName":"original-task","profileId":"profile-a","disposablePolicyId":null,
                 "url":"https://provider.invalid/PRIVATE-RESUME-CANARY"}
         })).unwrap());
+        let mut legacy = state.remote_view_tab_handoffs["opaque-link"].clone();
+        legacy.id = "legacy-finite".into();
+        legacy.expires_at_ms = Some(1);
+        state
+            .remote_view_tab_handoffs
+            .insert(legacy.id.clone(), legacy.clone());
+        let mut qualified = legacy;
+        qualified.id = "qualified-finite".into();
+        qualified
+            .renew_link_lifetime(
+                Some(
+                    agent_browser_service_model::ServiceTimeOrigin::new(
+                        "service-epoch".into(),
+                        100,
+                        100,
+                    )
+                    .unwrap(),
+                ),
+                20,
+            )
+            .unwrap();
+        state
+            .remote_view_tab_handoffs
+            .insert(qualified.id.clone(), qualified);
         store.save_session_state(&state).unwrap();
         drop(store);
         let path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
@@ -2769,6 +3040,24 @@ mod tests {
         assert!(link["expiresAtMs"].is_null());
         assert_eq!(link["profileId"], "profile-a");
         assert_eq!(link["targetState"], "expired");
+        for id in ["legacy-finite", "qualified-finite"] {
+            let finite = &status["workspace"]["handoffs"][id];
+            assert_eq!(
+                finite["linkState"], "time_unqualified",
+                "Read-only status never guesses finite expiry from guest time"
+            );
+            assert!(finite["expired"].is_null());
+        }
+        assert_eq!(
+            status["workspace"]["handoffs"]["qualified-finite"]["retentionTime"]["origin"]
+                ["earliestUtcMs"],
+            100
+        );
+        assert_eq!(
+            status["workspace"]["handoffs"]["qualified-finite"]["expiresAtMs"],
+            120
+        );
+        assert!(status["workspace"]["handoffs"]["legacy-finite"]["retentionTime"].is_null());
         assert!(!status.to_string().contains("PRIVATE-RESUME-CANARY"));
         assert!(link.get("resume").is_none());
         assert_eq!(sha256_file(&path).unwrap(), before);

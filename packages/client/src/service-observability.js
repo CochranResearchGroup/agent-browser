@@ -1,3 +1,6 @@
+import { clientOwnerFailure } from './client-owner-failure.js';
+import { clientArgumentError } from './client-argument-error.js';
+import { isResponseFailure, responseFailureError } from './response-failure.js';
 // @ts-check
 
 import { postServiceRequest, requestServiceTab } from './service-request.js';
@@ -169,7 +172,7 @@ export function getServiceStatus(options) {
 export function createServiceStatusMcpToolCall(options = {}) {
   assertPlainObject(options, 'service status MCP options');
   if (options.fullTabHistory !== undefined && typeof options.fullTabHistory !== 'boolean') {
-    throw new TypeError('service status MCP fullTabHistory must be a boolean');
+    throw clientArgumentError('service status MCP fullTabHistory must be a boolean', "packages/client/src/service-observability.js", "createServiceStatusMcpToolCall");
   }
   return {
     name: 'service_status',
@@ -284,9 +287,9 @@ export function getServiceRemoteViewRoutePreflight(options) {
 export function runServiceAccessPlanBrowserCapabilityPreflight({ accessPlan, ...options }) {
   const recipe = accessPlanBrowserCapabilityPreflight(accessPlan);
   if (recipe.available !== true) {
-    throw new Error('access plan browserCapabilityPreflight is not available');
+    throw clientOwnerFailure(new Error('access plan browserCapabilityPreflight is not available'), 'client_service_access_plan_recipe_unavailable', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanBrowserCapabilityPreflight', 'serviceAccessPlanReadback');
   }
-  assertPlainObject(recipe.request, 'service access plan decision.browserCapabilityPreflight.request');
+  assertOwnerPlainObject(recipe.request, 'service access plan decision.browserCapabilityPreflight.request', "runServiceAccessPlanBrowserCapabilityPreflight");
   return getServiceBrowserCapabilityPreflight({
     ...options,
     ...recipe.request,
@@ -413,7 +416,7 @@ export function getServiceProfileAllocation({ id, ...options }) {
  * @returns {Promise<ServiceProfileAllocationResponse>}
  */
 export function getServiceProfileAllocationForAccessPlan({ accessPlan, ...options }) {
-  assertPlainObject(accessPlan, 'service access plan');
+  assertOwnerPlainObject(accessPlan, 'service access plan', "getServiceProfileAllocationForAccessPlan");
   const selectedProfileId =
     nestedString(accessPlan, ['selectedProfile', 'id']) ??
     nestedString(accessPlan, ['decision', 'profileId']) ??
@@ -499,7 +502,7 @@ export function planServiceProfileRepair({
 }) {
   assertServiceId(id, 'planServiceProfileRepair');
   if (!profileCapability) {
-    throw new TypeError('planServiceProfileRepair requires id and profileCapability');
+    throw clientArgumentError('planServiceProfileRepair requires id and profileCapability', "packages/client/src/service-observability.js", "planServiceProfileRepair");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -512,7 +515,7 @@ export function planServiceProfileRepair({
 export function applyServiceProfileRepair({ id, profileCapability, plan, ...options }) {
   assertServiceId(id, 'applyServiceProfileRepair');
   if (!profileCapability || !plan || typeof plan !== 'object') {
-    throw new TypeError('applyServiceProfileRepair requires id, profileCapability, and plan');
+    throw clientArgumentError('applyServiceProfileRepair requires id, profileCapability, and plan', "packages/client/src/service-observability.js", "applyServiceProfileRepair");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -527,10 +530,10 @@ export function planServiceProfileReset({
 }) {
   assertServiceId(id, 'planServiceProfileReset');
   if (!profileCapability || !scope) {
-    throw new TypeError('planServiceProfileReset requires id, profileCapability, and scope');
+    throw clientArgumentError('planServiceProfileReset requires id, profileCapability, and scope', "packages/client/src/service-observability.js", "planServiceProfileReset");
   }
   if (scope === 'authentication' && !targetServiceId) {
-    throw new TypeError('authentication profile reset requires targetServiceId');
+    throw clientArgumentError('authentication profile reset requires targetServiceId', "packages/client/src/service-observability.js", "planServiceProfileReset");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -543,7 +546,7 @@ export function planServiceProfileReset({
 export function applyServiceProfileReset({ id, profileCapability, plan, ...options }) {
   assertServiceId(id, 'applyServiceProfileReset');
   if (!profileCapability || !plan || typeof plan !== 'object') {
-    throw new TypeError('applyServiceProfileReset requires id, profileCapability, and plan');
+    throw clientArgumentError('applyServiceProfileReset requires id, profileCapability, and plan', "packages/client/src/service-observability.js", "applyServiceProfileReset");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -993,10 +996,10 @@ export function getServiceProfileLeases(options) {
  */
 export async function* watchServiceProfileLeases({ intervalMs = 1000, count, ...options }) {
   if (!Number.isInteger(intervalMs) || intervalMs < 100) {
-    throw new TypeError('watchServiceProfileLeases requires intervalMs >= 100');
+    throw clientArgumentError('watchServiceProfileLeases requires intervalMs >= 100', "packages/client/src/service-observability.js", "watchServiceProfileLeases");
   }
   if (count !== undefined && (!Number.isInteger(count) || count < 1)) {
-    throw new TypeError('watchServiceProfileLeases count must be a positive integer');
+    throw clientArgumentError('watchServiceProfileLeases count must be a positive integer', "packages/client/src/service-observability.js", "watchServiceProfileLeases");
   }
   let observations = 0;
   while (count === undefined || observations < count) {
@@ -1074,7 +1077,7 @@ export function planServiceProfileLeaseReconciliation({
 }) {
   assertServiceId(id, 'planServiceProfileLeaseReconciliation');
   if (!leaseRevision || !profileCapability || !expiresAt) {
-    throw new TypeError('planServiceProfileLeaseReconciliation requires leaseRevision, profileCapability, and expiresAt');
+    throw clientArgumentError('planServiceProfileLeaseReconciliation requires leaseRevision, profileCapability, and expiresAt', "packages/client/src/service-observability.js", "planServiceProfileLeaseReconciliation");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -1089,7 +1092,7 @@ export function applyServiceProfileLeaseReconciliation({
 }) {
   assertServiceId(id, 'applyServiceProfileLeaseReconciliation');
   if (!profileCapability || !plan || typeof plan !== 'object') {
-    throw new TypeError('applyServiceProfileLeaseReconciliation requires profileCapability and plan');
+    throw clientArgumentError('applyServiceProfileLeaseReconciliation requires profileCapability and plan', "packages/client/src/service-observability.js", "applyServiceProfileLeaseReconciliation");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -1104,7 +1107,7 @@ export function planServiceProfileLeaseRecovery({
 }) {
   assertServiceId(id, 'planServiceProfileLeaseRecovery');
   if (!leaseRevision || !profileCapability) {
-    throw new TypeError('planServiceProfileLeaseRecovery requires leaseRevision and profileCapability');
+    throw clientArgumentError('planServiceProfileLeaseRecovery requires leaseRevision and profileCapability', "packages/client/src/service-observability.js", "planServiceProfileLeaseRecovery");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -1119,7 +1122,7 @@ export function applyServiceProfileLeaseRecovery({
 }) {
   assertServiceId(id, 'applyServiceProfileLeaseRecovery');
   if (!profileCapability || !plan || typeof plan !== 'object') {
-    throw new TypeError('applyServiceProfileLeaseRecovery requires profileCapability and plan');
+    throw clientArgumentError('applyServiceProfileLeaseRecovery requires profileCapability and plan', "packages/client/src/service-observability.js", "applyServiceProfileLeaseRecovery");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -1134,7 +1137,7 @@ export function planServiceProfileRecovery({
 }) {
   assertServiceId(profileId, 'planServiceProfileRecovery');
   if (!profileCapability || !expiresAt) {
-    throw new TypeError('planServiceProfileRecovery requires profileId, profileCapability, and expiresAt');
+    throw clientArgumentError('planServiceProfileRecovery requires profileId, profileCapability, and expiresAt', "packages/client/src/service-observability.js", "planServiceProfileRecovery");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -1149,7 +1152,7 @@ export function acquireServiceProfile({
 }) {
   assertServiceId(profileId, 'acquireServiceProfile');
   if (!profileCapability) {
-    throw new TypeError('acquireServiceProfile requires profileId and profileCapability');
+    throw clientArgumentError('acquireServiceProfile requires profileId and profileCapability', "packages/client/src/service-observability.js", "acquireServiceProfile");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -1161,7 +1164,7 @@ export function acquireServiceProfile({
 /** @param {ServiceProfileRecoveryApplyOptions} options @returns {Promise<ServiceProfileRecoveryApplyResponse>} */
 export function applyServiceProfileRecovery({ profileCapability, plan, ...options }) {
   if (!profileCapability || !plan || typeof plan !== 'object') {
-    throw new TypeError('applyServiceProfileRecovery requires profileCapability and plan');
+    throw clientArgumentError('applyServiceProfileRecovery requires profileCapability and plan', "packages/client/src/service-observability.js", "applyServiceProfileRecovery");
   }
   return servicePost(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -1174,7 +1177,7 @@ export function applyServiceProfileRecovery({ profileCapability, plan, ...option
 export function getServiceProfileRecoveryStatus({ recoveryId, profileCapability, ...options }) {
   assertServiceId(recoveryId, 'getServiceProfileRecoveryStatus');
   if (!profileCapability) {
-    throw new TypeError('getServiceProfileRecoveryStatus requires profileCapability');
+    throw clientArgumentError('getServiceProfileRecoveryStatus requires profileCapability', "packages/client/src/service-observability.js", "getServiceProfileRecoveryStatus");
   }
   return serviceGet(
     { ...options, headers: { authorization: `Bearer ${profileCapability}` } },
@@ -1200,13 +1203,13 @@ async function mutateServiceProfileLease(operation, mutationOptions) {
   } = mutationOptions;
   assertServiceId(id, `${operation}ServiceProfileLease`);
   if (typeof leaseRevision !== 'string' || leaseRevision.length === 0) {
-    throw new TypeError(`${operation}ServiceProfileLease requires leaseRevision`);
+    throw clientArgumentError(`${operation}ServiceProfileLease requires leaseRevision`, "packages/client/src/service-observability.js", "mutateServiceProfileLease");
   }
   if (typeof profileCapability !== 'string' || profileCapability.length === 0) {
-    throw new TypeError(`${operation}ServiceProfileLease requires profileCapability`);
+    throw clientArgumentError(`${operation}ServiceProfileLease requires profileCapability`, "packages/client/src/service-observability.js", "mutateServiceProfileLease");
   }
   if (operation === 'renew' && (typeof expiresAt !== 'string' || expiresAt.length === 0)) {
-    throw new TypeError('renewServiceProfileLease requires expiresAt');
+    throw clientArgumentError('renewServiceProfileLease requires expiresAt', "packages/client/src/service-observability.js", "mutateServiceProfileLease");
   }
   return servicePost(
     {
@@ -1632,7 +1635,7 @@ export function createServiceIncidentHandoff(options = {}) {
 export function runServiceAccessPlanMonitorRunDue({ accessPlan, ...options }) {
   const recipe = accessPlanMonitorRunDue(accessPlan);
   if (recipe.available !== true) {
-    throw new Error('access plan monitorRunDue is not available');
+    throw clientOwnerFailure(new Error('access plan monitorRunDue is not available'), 'client_service_access_plan_recipe_unavailable', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanMonitorRunDue', 'serviceAccessPlanReadback');
   }
   return runDueServiceMonitors(options).then((monitorRunDue) => ({
     ...monitorRunDue,
@@ -1710,14 +1713,14 @@ export function registerServiceLoginProfile({
   ...options
 }) {
   if (typeof id !== 'string' || id.length === 0) {
-    throw new TypeError('registerServiceLoginProfile requires an id string');
+    throw clientArgumentError('registerServiceLoginProfile requires an id string', "packages/client/src/service-observability.js", "registerServiceLoginProfile");
   }
   const targetId = loginId ?? siteId ?? targetServiceId;
   if (!targetId && targetServiceIds.length === 0) {
-    throw new TypeError('registerServiceLoginProfile requires loginId, siteId, targetServiceId, or targetServiceIds');
+    throw clientArgumentError('registerServiceLoginProfile requires loginId, siteId, targetServiceId, or targetServiceIds', "packages/client/src/service-observability.js", "registerServiceLoginProfile");
   }
   if (typeof serviceName !== 'string' || serviceName.length === 0) {
-    throw new TypeError('registerServiceLoginProfile requires a serviceName string');
+    throw clientArgumentError('registerServiceLoginProfile requires a serviceName string', "packages/client/src/service-observability.js", "registerServiceLoginProfile");
   }
 
   const targets = uniqueStrings([...targetServiceIds, targetId]);
@@ -1793,17 +1796,17 @@ export function registerExternalProfile({
   ...options
 }) {
   if (typeof id !== 'string' || id.length === 0) {
-    throw new TypeError('registerExternalProfile requires an id string');
+    throw clientArgumentError('registerExternalProfile requires an id string', "packages/client/src/service-observability.js", "registerExternalProfile");
   }
   if (typeof serviceName !== 'string' || serviceName.length === 0) {
-    throw new TypeError('registerExternalProfile requires a serviceName string');
+    throw clientArgumentError('registerExternalProfile requires a serviceName string', "packages/client/src/service-observability.js", "registerExternalProfile");
   }
   if (typeof userDataDir !== 'string' || userDataDir.length === 0) {
-    throw new TypeError('registerExternalProfile requires a userDataDir string');
+    throw clientArgumentError('registerExternalProfile requires a userDataDir string', "packages/client/src/service-observability.js", "registerExternalProfile");
   }
   const targetId = loginId ?? siteId ?? targetServiceId;
   if (!targetId && targetServiceIds.length === 0) {
-    throw new TypeError('registerExternalProfile requires loginId, siteId, targetServiceId, or targetServiceIds');
+    throw clientArgumentError('registerExternalProfile requires loginId, siteId, targetServiceId, or targetServiceIds', "packages/client/src/service-observability.js", "registerExternalProfile");
   }
 
   const targets = uniqueStrings([...targetServiceIds, targetId]);
@@ -1874,9 +1877,7 @@ export function createServiceProfileReadinessMonitor({
 }) {
   const targetId = loginId ?? siteId ?? targetServiceId ?? targetServiceIds[0];
   if (typeof targetId !== 'string' || targetId.length === 0) {
-    throw new TypeError(
-      'createServiceProfileReadinessMonitor requires loginId, siteId, targetServiceId, or targetServiceIds',
-    );
+    throw clientArgumentError('createServiceProfileReadinessMonitor requires loginId, siteId, targetServiceId, or targetServiceIds', "packages/client/src/service-observability.js", "createServiceProfileReadinessMonitor");
   }
   const monitorId = id ?? serviceProfileReadinessMonitorId(serviceName, targetId);
   return {
@@ -1926,9 +1927,7 @@ export async function updateServiceProfileFreshness({
   const targetId = loginId ?? siteId ?? targetServiceId;
   const targets = uniqueStrings([...targetServiceIds, targetId]);
   if (targets.length === 0) {
-    throw new TypeError(
-      'updateServiceProfileFreshness requires loginId, siteId, targetServiceId, or targetServiceIds',
-    );
+    throw clientArgumentError('updateServiceProfileFreshness requires loginId, siteId, targetServiceId, or targetServiceIds', "packages/client/src/service-observability.js", "updateServiceProfileFreshness");
   }
   return servicePost(options, `/api/service/profiles/${encodeURIComponent(id)}/freshness`, {
     loginId,
@@ -1983,15 +1982,15 @@ export async function runServiceAccessPlanPostSeedingProbe({
 }) {
   const recipe = accessPlanPostSeedingProbe(accessPlan);
   if (recipe.available !== true) {
-    throw new Error('access plan postSeedingProbe is not available');
+    throw clientOwnerFailure(new Error('access plan postSeedingProbe is not available'), 'client_service_access_plan_recipe_unavailable', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanPostSeedingProbe', 'serviceAccessPlanReadback');
   }
   const profileId = recipe.profileId;
   const targetServiceId = recipe.targetServiceId ?? recipe.targetServiceIds?.[0];
   if (typeof profileId !== 'string' || profileId.length === 0) {
-    throw new Error('access plan postSeedingProbe is missing profileId');
+    throw clientOwnerFailure(new Error('access plan postSeedingProbe is missing profileId'), 'client_service_access_plan_profile_missing', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanPostSeedingProbe', 'serviceAccessPlanReadback');
   }
   if (typeof targetServiceId !== 'string' || targetServiceId.length === 0) {
-    throw new Error('access plan postSeedingProbe is missing targetServiceId');
+    throw clientOwnerFailure(new Error('access plan postSeedingProbe is missing targetServiceId'), 'client_service_access_plan_target_missing', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanPostSeedingProbe', 'serviceAccessPlanReadback');
   }
 
   const serviceName = stringOrUndefined(
@@ -2005,7 +2004,7 @@ export async function runServiceAccessPlanPostSeedingProbe({
   );
   const probeUrl = url ?? accessPlanProbeUrl(accessPlan);
   if (!probeUrl) {
-    throw new Error('runServiceAccessPlanPostSeedingProbe requires url or an access-plan site policy URL');
+    throw clientOwnerFailure(new Error('runServiceAccessPlanPostSeedingProbe requires url or an access-plan site policy URL'), 'client_service_access_plan_url_missing', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanPostSeedingProbe', 'serviceAccessPlanReadback');
   }
   const requestContext = optionalRequestContext({
     serviceName,
@@ -2023,9 +2022,9 @@ export async function runServiceAccessPlanPostSeedingProbe({
   });
   const selectedProfileId = lookup?.selectedProfile?.id;
   if (selectedProfileId !== profileId) {
-    throw new Error(
+    throw clientOwnerFailure(new Error(
       `Post-seeding probe refused to verify ${profileId}: broker selected ${selectedProfileId || 'no profile'}.`,
-    );
+    ), 'client_service_profile_identity_mismatch', accessPlan, 'packages/client/src/service-observability.js', 'runServiceAccessPlanPostSeedingProbe', 'serviceAccessPlanReadback');
   }
 
   const tab = await requestServiceTab({
@@ -2178,29 +2177,29 @@ function serviceLoginProfileSeedingSetupScopes(targetServiceId) {
 }
 
 function accessPlanPostSeedingProbe(accessPlan) {
-  assertPlainObject(accessPlan, 'service access plan');
+  assertOwnerPlainObject(accessPlan, 'service access plan', "accessPlanPostSeedingProbe");
   const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
-  assertPlainObject(decision, 'service access plan decision');
+  assertOwnerPlainObject(decision, 'service access plan decision', "accessPlanPostSeedingProbe");
   const recipe = /** @type {Record<string, unknown>} */ (decision).postSeedingProbe;
-  assertPlainObject(recipe, 'service access plan decision.postSeedingProbe');
+  assertOwnerPlainObject(recipe, 'service access plan decision.postSeedingProbe', "accessPlanPostSeedingProbe");
   return /** @type {import('./service-observability.generated.js').ServiceAccessPlanPostSeedingProbe} */ (recipe);
 }
 
 function accessPlanMonitorRunDue(accessPlan) {
-  assertPlainObject(accessPlan, 'service access plan');
+  assertOwnerPlainObject(accessPlan, 'service access plan', "accessPlanMonitorRunDue");
   const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
-  assertPlainObject(decision, 'service access plan decision');
+  assertOwnerPlainObject(decision, 'service access plan decision', "accessPlanMonitorRunDue");
   const recipe = /** @type {Record<string, unknown>} */ (decision).monitorRunDue;
-  assertPlainObject(recipe, 'service access plan decision.monitorRunDue');
+  assertOwnerPlainObject(recipe, 'service access plan decision.monitorRunDue', "accessPlanMonitorRunDue");
   return /** @type {import('./service-observability.generated.js').ServiceAccessPlanMonitorRunDue} */ (recipe);
 }
 
 function accessPlanBrowserCapabilityPreflight(accessPlan) {
-  assertPlainObject(accessPlan, 'service access plan');
+  assertOwnerPlainObject(accessPlan, 'service access plan', "accessPlanBrowserCapabilityPreflight");
   const decision = /** @type {Record<string, unknown>} */ (accessPlan).decision;
-  assertPlainObject(decision, 'service access plan decision');
+  assertOwnerPlainObject(decision, 'service access plan decision', "accessPlanBrowserCapabilityPreflight");
   const recipe = /** @type {Record<string, unknown>} */ (decision).browserCapabilityPreflight;
-  assertPlainObject(recipe, 'service access plan decision.browserCapabilityPreflight');
+  assertOwnerPlainObject(recipe, 'service access plan decision.browserCapabilityPreflight', "accessPlanBrowserCapabilityPreflight");
   return /** @type {import('./service-observability.generated.js').ServiceAccessPlanBrowserCapabilityPreflight} */ (recipe);
 }
 
@@ -2505,19 +2504,17 @@ export function upsertServiceBrowserPreferenceBinding({
   ...options
 }) {
   if (typeof browserBuild !== 'string' || browserBuild.length === 0) {
-    throw new TypeError('upsertServiceBrowserPreferenceBinding requires browserBuild');
+    throw clientArgumentError('upsertServiceBrowserPreferenceBinding requires browserBuild', "packages/client/src/service-observability.js", "upsertServiceBrowserPreferenceBinding");
   }
   if (typeof preferredExecutableId !== 'string' || preferredExecutableId.length === 0) {
-    throw new TypeError('upsertServiceBrowserPreferenceBinding requires preferredExecutableId');
+    throw clientArgumentError('upsertServiceBrowserPreferenceBinding requires preferredExecutableId', "packages/client/src/service-observability.js", "upsertServiceBrowserPreferenceBinding");
   }
   const targets = uniqueStrings([targetServiceId, siteId, loginId, ...targetServiceIds]);
   const accounts = uniqueStrings([accountId, ...accountIds]);
   const services = uniqueStrings([serviceName, ...serviceNames]);
   const tasks = uniqueStrings([taskName, ...taskNames]);
   if (targets.length === 0 && accounts.length === 0 && services.length === 0 && tasks.length === 0) {
-    throw new TypeError(
-      'upsertServiceBrowserPreferenceBinding requires at least one target, account, service, or task filter',
-    );
+    throw clientArgumentError('upsertServiceBrowserPreferenceBinding requires at least one target, account, service, or task filter', "packages/client/src/service-observability.js", "upsertServiceBrowserPreferenceBinding");
   }
   const bindingId =
     typeof id === 'string' && id.length > 0
@@ -2773,23 +2770,19 @@ export function getServiceTrace(options) {
  */
 async function serviceGet({ baseUrl, fetch = globalThis.fetch, signal, headers = {}, query }, pathname) {
   if (typeof fetch !== 'function') {
-    throw new TypeError('service observability helpers require a fetch implementation');
+    throw clientArgumentError('service observability helpers require a fetch implementation', "packages/client/src/service-observability.js", "serviceGet");
   }
   if (typeof baseUrl !== 'string' || baseUrl.length === 0) {
-    throw new TypeError('service observability helpers require a baseUrl string');
+    throw clientArgumentError('service observability helpers require a baseUrl string', "packages/client/src/service-observability.js", "serviceGet");
   }
 
   const url = new URL(pathname, baseUrl);
   appendQuery(url, query);
 
   const response = await fetch(url, { method: 'GET', headers, signal });
-  if (!response.ok) {
-    throw new Error(`agent-browser service read failed: ${response.status}`);
-  }
-
   const payload = await response.json();
-  if (!payload?.success) {
-    throw new Error(`agent-browser service read failed: ${JSON.stringify(payload)}`);
+  if (!response.ok || !payload?.success || isResponseFailure(payload)) {
+    throw responseFailureError(payload, 'service_observability_read_failed');
   }
 
   return payload.data;
@@ -2826,10 +2819,10 @@ async function servicePost(
   query = undefined,
 ) {
   if (typeof fetch !== 'function') {
-    throw new TypeError('service observability helpers require a fetch implementation');
+    throw clientArgumentError('service observability helpers require a fetch implementation', "packages/client/src/service-observability.js", "servicePost");
   }
   if (typeof baseUrl !== 'string' || baseUrl.length === 0) {
-    throw new TypeError('service observability helpers require a baseUrl string');
+    throw clientArgumentError('service observability helpers require a baseUrl string', "packages/client/src/service-observability.js", "servicePost");
   }
 
   const url = new URL(pathname, baseUrl);
@@ -2841,13 +2834,9 @@ async function servicePost(
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });
-  if (!response.ok) {
-    throw new Error(`agent-browser service write failed: ${response.status}`);
-  }
-
   const payload = await response.json();
-  if (!payload?.success) {
-    throw new Error(`agent-browser service write failed: ${JSON.stringify(payload)}`);
+  if (!response.ok || !payload?.success || isResponseFailure(payload)) {
+    throw responseFailureError(payload, 'service_observability_write_failed');
   }
 
   return payload.data;
@@ -2861,20 +2850,16 @@ async function servicePost(
  */
 async function serviceDelete({ baseUrl, fetch = globalThis.fetch, signal }, pathname) {
   if (typeof fetch !== 'function') {
-    throw new TypeError('service observability helpers require a fetch implementation');
+    throw clientArgumentError('service observability helpers require a fetch implementation', "packages/client/src/service-observability.js", "serviceDelete");
   }
   if (typeof baseUrl !== 'string' || baseUrl.length === 0) {
-    throw new TypeError('service observability helpers require a baseUrl string');
+    throw clientArgumentError('service observability helpers require a baseUrl string', "packages/client/src/service-observability.js", "serviceDelete");
   }
 
   const response = await fetch(new URL(pathname, baseUrl), { method: 'DELETE', signal });
-  if (!response.ok) {
-    throw new Error(`agent-browser service delete failed: ${response.status}`);
-  }
-
   const payload = await response.json();
-  if (!payload?.success) {
-    throw new Error(`agent-browser service delete failed: ${JSON.stringify(payload)}`);
+  if (!response.ok || !payload?.success || isResponseFailure(payload)) {
+    throw responseFailureError(payload, 'service_observability_delete_failed');
   }
 
   return payload.data;
@@ -2900,13 +2885,13 @@ function appendQuery(url, query) {
  */
 function assertServiceId(id, helperName) {
   if (typeof id !== 'string' || id.length === 0) {
-    throw new TypeError(`${helperName} requires an id string`);
+    throw clientArgumentError(`${helperName} requires an id string`, "packages/client/src/service-observability.js", "assertServiceId");
   }
 }
 
 function assertPlainObject(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
+    throw clientArgumentError(`${label} must be an object`, "packages/client/src/service-observability.js", "assertPlainObject");
   }
 }
 
@@ -3233,4 +3218,15 @@ function highestTraceAttentionSeverity(contexts) {
     return 'info';
   }
   return 'none';
+}
+
+/** @param {unknown} value @param {string} label @param {string} owningFunction */
+function assertOwnerPlainObject(value, label, owningFunction) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    const cdpFree = owningFunction === 'summarizeServiceCdpFreeLaunchAvailability';
+    const monitor = owningFunction === 'assertMonitorRunDueSummarySafe';
+    const code = cdpFree ? 'client_service_cdp_free_response_invalid' : monitor ? 'client_monitor_response_invalid' : 'client_service_access_plan_response_invalid';
+    const recipe = cdpFree ? 'serviceCdpFreeOwnerReadback' : monitor ? 'serviceMonitorFreshnessReadback' : 'serviceAccessPlanReadback';
+    throw clientOwnerFailure(new TypeError(`${label} must be an object`), code, value, "packages/client/src/service-observability.js", owningFunction, recipe);
+  }
 }

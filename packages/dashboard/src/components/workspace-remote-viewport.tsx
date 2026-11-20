@@ -1,4 +1,7 @@
 "use client";
+import {dashboardResponseFailureError,dashboardConfirmationFailure,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
@@ -120,9 +123,8 @@ async function readWorkspaceApiResponse<T extends { error?: string | null }>(res
   const body = await response.text();
   try {
     return JSON.parse(body) as T;
-  } catch {
-    const detail = body.trim().slice(0, 240) || response.statusText || "empty response";
-    throw new Error(`HTTP ${response.status}: ${detail}`);
+  } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
+    throw dashboardResponseFailureError({success:false},"dashboard_response_invalid",{source:"packages/dashboard/src/components/workspace-remote-viewport.tsx",owningFunction:"readWorkspaceApiResponse",...{}});
   }
 }
 
@@ -295,7 +297,7 @@ function workspaceCdpWebSocketUrl(streamUrl: string | null): string | null {
     resolved.search = "";
     resolved.hash = "";
     return resolved.toString();
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
     return null;
   }
 }
@@ -305,7 +307,7 @@ function workspaceCdpStreamPort(streamUrl: string | null): number | null {
   try {
     const port = new URL(streamUrl, window.location.href).port;
     return port ? Number(port) : null;
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
     return null;
   }
 }
@@ -326,7 +328,7 @@ function installGuacamoleTouchClickBridge(frame: HTMLIFrameElement | null): (() 
   try {
     win = frame.contentWindow as GuacamoleFrameWindow | null;
     doc = frame.contentDocument;
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
     return null;
   }
   if (!win || !doc || win.__agentBrowserTouchClickBridgeCleanup) return null;
@@ -522,7 +524,7 @@ function openGuacamoleInteractionSettings(frame: HTMLIFrameElement | null): bool
   try {
     win = frame.contentWindow as GuacamoleFrameWindow | null;
     doc = frame.contentDocument;
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
     return false;
   }
   if (!win || !doc) return false;
@@ -538,7 +540,7 @@ function openGuacamoleInteractionSettings(frame: HTMLIFrameElement | null): bool
   if (scope.$apply) {
     try {
       scope.$apply(openMenu);
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
       openMenu();
       scope.$evalAsync?.(() => undefined);
     }
@@ -634,7 +636,7 @@ function resolveWorkspaceStreamUrl(stream?: ServiceViewStream | null, mode: "fra
   if (typeof window === "undefined") return streamUrl;
   try {
     return new URL(streamUrl, window.location.href).toString();
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
     return streamUrl;
   }
 }
@@ -649,7 +651,7 @@ function buildWorkspaceFrameUrl(streamUrl: string | null, refreshNonce: number):
       resolved.searchParams.set("agentBrowserRefresh", String(refreshNonce));
     }
     return resolved.toString();
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
     return streamUrl;
   }
 }
@@ -661,7 +663,7 @@ function buildCdpSnapshotUrl(streamUrl: string | null, targetId?: string | null)
     const target = targetId?.trim();
     if (target) resolved.searchParams.set("targetId", target);
     return resolved.toString();
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
     return streamUrl;
   }
 }
@@ -697,7 +699,7 @@ function detectWorkspaceFrameFailure(frame: HTMLIFrameElement | null): Workspace
     if (href.startsWith("chrome-error://") || title.includes("refused to connect") || title.includes("not available")) {
       return "browser-error";
     }
-  } catch {
+  } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
     return null;
   }
   return null;
@@ -869,7 +871,7 @@ function WorkspaceCdpStreamCanvas({
         let msg: StreamMessage;
         try {
           msg = JSON.parse(event.data) as StreamMessage;
-        } catch {
+        } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
           return;
         }
 
@@ -955,8 +957,8 @@ function WorkspaceCdpStreamCanvas({
           error?: string | null;
         }>(response);
         if (disposed) return;
-        if (!response.ok) {
-          throw new Error(json.error || `Frame request returned HTTP ${response.status}.`);
+        if ((!response.ok) || responseFailureMetadata(json)) {
+          throw dashboardResponseFailureError(json,"dashboard_viewport_owner_failure",{source:"packages/dashboard/src/components/workspace-remote-viewport.tsx",owningFunction:"poll",...{}});
         }
         if (json.frame) {
           drawFrame(json.frame);
@@ -971,7 +973,7 @@ function WorkspaceCdpStreamCanvas({
           frameReceived: Boolean(json.frame) || current.frameReceived,
           message: json.frame ? "" : json.error || "Waiting for CDP frames through HTTPS polling.",
         }));
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
         if (disposed) return;
         setState((current) => ({
           ...current,
@@ -1154,12 +1156,12 @@ function WorkspaceCdpSnapshotViewer({
           error?: string | null;
         };
         if (disposed) return;
-        if (!response.ok || json.success === false) {
-          throw new Error(json.error || `Snapshot request returned HTTP ${response.status}.`);
+        if ((!response.ok || json.success === false) || responseFailureMetadata(json)) {
+          throw dashboardResponseFailureError(json,"dashboard_viewport_owner_failure",{source:"packages/dashboard/src/components/workspace-remote-viewport.tsx",owningFunction:"fetchSnapshot",...{}});
         }
         const format = json.format || "jpeg";
         const dataUrl = json.dataUrl || (json.data ? `data:image/${format};base64,${json.data}` : null);
-        if (!dataUrl) throw new Error("Snapshot response did not include image data.");
+        if (!dataUrl) throw dashboardResponseFailureError(json,"dashboard_viewport_capture_invalid",{source:"packages/dashboard/src/components/workspace-remote-viewport.tsx",owningFunction:"fetchSnapshot",...{}});
         setState({
           dataUrl,
           connected: true,
@@ -1167,7 +1169,7 @@ function WorkspaceCdpSnapshotViewer({
           targetLabel: [json.title, json.url, json.targetId].filter(Boolean).join(" / "),
         });
         if (json.targetId) onTargetResolved(json.targetId);
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
         if (disposed || (err instanceof DOMException && err.name === "AbortError")) return;
         setState((current) => ({
           ...current,
@@ -1405,7 +1407,7 @@ export function WorkspaceRemoteViewport({
     try {
       await onRefresh();
       setError("");
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
       setError(err instanceof Error ? err.message : "Service status unavailable");
     } finally {
       setLoading(false);
@@ -1557,7 +1559,7 @@ export function WorkspaceRemoteViewport({
       download.click();
       download.remove();
       setFocusMessage("Downloaded a PNG capture from the selected foreign browser target.");
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
       setFocusMessage(err instanceof Error ? `Foreign browser capture failed: ${err.message}` : "Foreign browser capture failed.");
     } finally {
       setRecoveryPending(null);
@@ -1616,7 +1618,7 @@ export function WorkspaceRemoteViewport({
       });
       setForeignBorrow(status);
       setFocusMessage(`Borrow control is active until ${status.expiresAt ? new Date(status.expiresAt).toLocaleTimeString() : "grant expiry"}. Browser lifecycle ownership did not change.`);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
       setFocusMessage(err instanceof Error ? `Borrow control failed: ${err.message}` : "Borrow control failed.");
     } finally {
       setForeignBorrowPending(false);
@@ -1634,7 +1636,7 @@ export function WorkspaceRemoteViewport({
       });
       setForeignBorrow(status);
       setFocusMessage("Borrow control released. The foreign browser remains running and non-owned.");
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
       setFocusMessage(err instanceof Error ? `Release control failed: ${err.message}` : "Release control failed.");
     } finally {
       setForeignBorrowPending(false);
@@ -1819,7 +1821,7 @@ export function WorkspaceRemoteViewport({
           return;
         }
         dispatchViewportController({ type: "preflight_succeeded", targetToken: preflightTargetToken });
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
         if (disposed) return;
         dispatchViewportController({
           type: "preflight_failed",
@@ -2051,7 +2053,7 @@ export function WorkspaceRemoteViewport({
         setFocusMessage(tabSelection.recoveredFromStaleSelection
           ? "Recovered stale selected tab identity and queued view focus against the current live target."
           : "Queued view focus and maximize before opening the workspace viewport.");
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
         if (focusGenerationRef.current !== focusGeneration) return;
         setFocusMessage(err instanceof Error
           ? `Remote-view focus request failed: ${err.message}`
@@ -2143,7 +2145,7 @@ export function WorkspaceRemoteViewport({
         await root.requestFullscreen();
         return;
       }
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
       // Keep the CSS fullscreen fallback available if the browser rejects native fullscreen.
     }
     enableFullscreenFallback();
@@ -2174,8 +2176,8 @@ export function WorkspaceRemoteViewport({
       }),
     });
     const json = await readWorkspaceApiResponse<ApiResponse<unknown>>(resp);
-    if (!resp.ok || !json.success) {
-      throw new Error(workspaceRecoveryFailureMessage(json, action));
+    if ((!resp.ok || !json.success) || responseFailureMetadata(json)) {
+      throw dashboardResponseFailureError(json,"dashboard_viewport_owner_failure",{source:"packages/dashboard/src/components/workspace-remote-viewport.tsx",owningFunction:"WorkspaceRemoteViewport",...{}});
     }
     return json;
   }, [activePort, activeSessionName]);
@@ -2255,7 +2257,7 @@ export function WorkspaceRemoteViewport({
         ? "Switched the retained remote browser route."
         : "Reattached the retained remote browser route.");
       void refreshProjection();
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
       setFocusMessage(err instanceof Error
         ? `Browser route recovery failed: ${err.message}`
         : "Browser route recovery failed.");
@@ -2286,7 +2288,7 @@ export function WorkspaceRemoteViewport({
       // key while its lease request is completing.
       setFocusMessage("Reconnected the service-owned observer lease.");
       void refreshProjection();
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
       setFocusMessage(err instanceof Error ? `Viewer reconnect failed: ${err.message}` : "Viewer reconnect failed.");
     } finally {
       setRecoveryPending(null);
@@ -2311,14 +2313,14 @@ export function WorkspaceRemoteViewport({
       });
       const lease = (response.data as { viewerLease?: { id?: string; state?: string; viewerRole?: string } } | undefined)?.viewerLease;
       if (!lease?.id || lease.state !== "controlling" || lease.viewerRole !== "controller") {
-        throw new Error("Controller takeover did not return a current controlling lease.");
+        throw dashboardConfirmationFailure(response,"dashboard_viewport_receipt_unconfirmed",{source:"packages/dashboard/src/components/workspace-remote-viewport.tsx",owningFunction:"WorkspaceRemoteViewport",...{browserId:browser.id,routeId:workspaceRouteId}});
       }
       setOperatorController({ browserId: browser.id, routeId: workspaceRouteId, leaseId: lease.id });
       streamFrameRetryRef.current = 0;
       setStreamRefreshNonce(Date.now());
       setFocusMessage("Controller lease takeover was accepted and the viewport is reconnecting.");
       void refreshProjection();
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
       setFocusMessage(err instanceof Error ? `Controller takeover failed: ${err.message}` : "Controller takeover failed.");
     } finally {
       setRecoveryPending(null);
@@ -2344,7 +2346,7 @@ export function WorkspaceRemoteViewport({
       setStreamRefreshNonce(Date.now());
       setFocusMessage("Released retained viewer leases for this workspace route.");
       void refreshProjection();
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
       setFocusMessage(err instanceof Error ? `Viewer release failed: ${err.message}` : "Viewer release failed.");
     } finally {
       setRecoveryPending(null);
@@ -2365,7 +2367,7 @@ export function WorkspaceRemoteViewport({
       setAutomaticAttemptKeys([]);
       setConnectionRetryNonce((current) => current + 1);
       refreshWorkspaceViewport();
-    } catch (error) {
+    } catch (error) {void reportDashboardComponentFailure(error,"workspace-remote-viewport.tsx");
       setFocusMessage(error instanceof Error ? error.message : "Browser connection recovery failed.");
     } finally {
       setRecoveryPending(null);
@@ -2454,7 +2456,7 @@ export function WorkspaceRemoteViewport({
         : "Queued viewer takeover and reconnect for this workspace viewport.");
       void refreshProjection();
       return true;
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-remote-viewport.tsx");
       setFocusMessage(err instanceof Error
         ? `Viewer takeover request failed: ${err.message}`
         : "Viewer takeover request failed; refresh the workspace viewport or inspect readiness.");

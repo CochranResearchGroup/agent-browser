@@ -1039,7 +1039,43 @@ fn acquire_profile_claim_for_intent<R: ServiceStateRepository>(
                 .as_ref()
                 .map(|blocker| blocker.code.as_str())
                 .unwrap_or("not_admitted");
-            return Err(format!("profile_acquisition_preflight_{code}"));
+            let failure = match code {
+                "runtime_owner_lifecycle_missing" => {
+                    "profile_acquisition_preflight_runtime_owner_lifecycle_missing"
+                }
+                "live_foreign_principal_authority" => {
+                    "profile_acquisition_preflight_live_foreign_principal_authority"
+                }
+                "existing_session_profile_identity_inconsistent" => {
+                    "profile_acquisition_preflight_existing_session_profile_identity_inconsistent"
+                }
+                "existing_session_profile_identity_unproven" => {
+                    "profile_acquisition_preflight_existing_session_profile_identity_unproven"
+                }
+                "runtime_browser_record_missing" => {
+                    "profile_acquisition_preflight_runtime_browser_record_missing"
+                }
+                "terminal_owner_cleanup_satisfied" => {
+                    "profile_acquisition_preflight_terminal_owner_cleanup_satisfied"
+                }
+                "terminal_owner_evidence_incomplete" => {
+                    "profile_acquisition_preflight_terminal_owner_evidence_incomplete"
+                }
+                _ => "profile_acquisition_preflight_unclassified",
+            };
+            // This describes the existing refusal, never new authority. Retain
+            // an unknown blocker only as a bounded token, not private prose.
+            let blocker = if code.len() <= 128
+                && !code.is_empty()
+                && code
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+            {
+                code
+            } else {
+                "unclassified"
+            };
+            return Err(format!("{failure}: blocker={blocker}"));
         }
         state
             .acquire_lease_claim_with_receipt(request)
@@ -1403,11 +1439,24 @@ async fn acquire_profile_command(
     if retry_daemon_session_route != daemon_state.session_id {
         return Err("profile_acquisition_daemon_route_mismatch".to_string());
     }
-    let created_at = service_now_timestamp();
-    let expires_at = optional_command_string(command, "expiresAt").unwrap_or_else(|| {
-        (chrono::Utc::now() + chrono::Duration::minutes(5))
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-    });
+    let time = profile_authority_time("profile_acquisition_time_unavailable")?;
+    let created_at = profile_time_created(&time);
+    let default_expiry = ephemeral_profile_claim_expiry(&created_at)?;
+    profile_deadline_admission(
+        &time,
+        &default_expiry,
+        "profile_acquisition_authority_time_invalid",
+        "profile_acquisition_time_uncertain",
+        "profile_acquisition_time_uncertain",
+    )?;
+    let expires_at = optional_command_string(command, "expiresAt").unwrap_or(default_expiry);
+    profile_deadline_admission(
+        &time,
+        &expires_at,
+        "profile_acquisition_authority_time_invalid",
+        "profile_acquisition_plan_expired",
+        "profile_acquisition_time_uncertain",
+    )?;
     let idempotency_key = optional_command_string(command, "idempotencyKey")
         .unwrap_or_else(|| format!("profile-acquisition-{}", uuid::Uuid::new_v4()));
     let policy = if command
@@ -1629,8 +1678,9 @@ fn issue_profile_effect_authorization<R: ServiceStateRepository>(
         return Ok(None);
     };
     let state = repository.load_snapshot()?;
-    let issued_at = service_now_timestamp();
-    let issued = chrono::DateTime::parse_from_rfc3339(&issued_at)
+    let time = profile_authority_time("lease_authority_time_unavailable")?;
+    let created = profile_time_created(&time);
+    let issued = chrono::DateTime::parse_from_rfc3339(&created)
         .map_err(|_| "lease_authority_time_invalid".to_string())?;
     let claim_expires_at = chrono::DateTime::parse_from_rfc3339(claim.expires_at())
         .map_err(|_| "lease_authority_claim_expiry_invalid".to_string())?;
@@ -1638,6 +1688,13 @@ fn issue_profile_effect_authorization<R: ServiceStateRepository>(
         std::cmp::min(issued + chrono::Duration::minutes(2), claim_expires_at)
             .with_timezone(&chrono::Utc)
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let issued_at = profile_deadline_admission(
+        &time,
+        &authorization_expires_at,
+        "lease_authority_claim_expiry_invalid",
+        "lease_authority_claim_expired",
+        "lease_authority_time_uncertain",
+    )?;
     let intent = agent_browser_lease_authority::LeaseEffectIntent {
         action_class: "browser_launch".to_string(),
         audience: daemon_session_route.to_string(),
@@ -1660,6 +1717,39 @@ fn ephemeral_profile_claim_expiry(now: &str) -> Result<String, String> {
         .map_err(|_| "profile_acquisition_authority_time_invalid".to_string())
 }
 
+/// Sample the supported authority before entering any Service State writer.
+/// The response bounds qualify admission, not delivery or completion time.
+fn profile_authority_time(code: &str) -> Result<crate::connection::stable_time::Stamp, String> {
+    crate::connection::stable_time::authority_now().map_err(|cause| {
+        format!("{code}: cause={cause}; inspect the original plan/receipt and repair the supported time client; independent diagnosis remains available")
+    })
+}
+
+fn profile_time_created(time: &crate::connection::stable_time::Stamp) -> String {
+    chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(time.earliest_utc_ns).to_rfc3339()
+}
+
+/// A straddling interval is unknown, never proof that a sealed plan expired.
+fn profile_deadline_admission(
+    time: &crate::connection::stable_time::Stamp,
+    expires_at: &str,
+    invalid: &str,
+    expired: &str,
+    uncertain: &str,
+) -> Result<String, String> {
+    let expires =
+        chrono::DateTime::parse_from_rfc3339(expires_at).map_err(|_| invalid.to_string())?;
+    let earliest = chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(time.earliest_utc_ns);
+    let latest = chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(time.latest_utc_ns);
+    if earliest >= expires {
+        return Err(expired.to_string());
+    }
+    if latest >= expires {
+        return Err(uncertain.to_string());
+    }
+    Ok(latest.to_rfc3339())
+}
+
 fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
     let state = load_service_state_for_maintenance(command)?;
     let profile_id = required_command_string(command, "profileId")?;
@@ -1675,7 +1765,8 @@ fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
         task_name: optional_command_string(command, "taskName").unwrap_or_default(),
         target_service_ids: optional_command_string_array(command, "targetServiceIds")?,
     };
-    let created_at = service_now_timestamp();
+    let time = profile_authority_time("profile_recovery_time_unavailable")?;
+    let created_at = profile_time_created(&time);
     let expires_at = optional_command_string(command, "expiresAt")
         .map(Ok)
         .unwrap_or_else(|| {
@@ -1687,6 +1778,13 @@ fn plan_profile_recovery_command(command: &Value) -> Result<Value, String> {
                 })
                 .map_err(|_| "profile_recovery_now_invalid".to_string())
         })?;
+    profile_deadline_admission(
+        &time,
+        &expires_at,
+        "profile_recovery_expiry_invalid",
+        "profile_recovery_plan_expired",
+        "profile_recovery_time_uncertain",
+    )?;
     let idempotency_key = optional_command_string(command, "idempotencyKey")
         .unwrap_or_else(|| format!("profile-recovery-{}", uuid::Uuid::new_v4()));
     let outcome = plan_terminal_owner_recovery(
@@ -1770,6 +1868,17 @@ async fn apply_profile_recovery_command(
     {
         return Err("profile_recovery_principal_mismatch".to_string());
     }
+    verify_plan_integrity(&plan, raw_capability.as_bytes())?;
+    if let Some(receipt) = snapshot
+        .replay_profile_recovery(profile_recovery_receipt_identity(&plan))
+        .map_err(profile_recovery_receipt_replay_error)?
+    {
+        let outcome = replay_outcome(receipt);
+        return Ok(json!({
+            "outcome":outcome.acquisition,"receipt":outcome.receipt,"replayed":true,
+            "trace":profile_lifecycle_trace(command, &plan.identities.profile_id),
+        }));
+    }
     if daemon_state.session_id != plan.identities.daemon_session_route {
         return Err("profile_recovery_daemon_route_mismatch".to_string());
     }
@@ -1781,7 +1890,14 @@ async fn apply_profile_recovery_command(
         .get(&plan.identities.profile_id)
         .and_then(|profile| profile.user_data_dir.clone())
         .ok_or_else(|| "profile_recovery_profile_identity_unavailable".to_string())?;
-    let now = service_now_timestamp();
+    let time = profile_authority_time("profile_recovery_time_unavailable")?;
+    let now = profile_deadline_admission(
+        &time,
+        &plan.expires_at,
+        "profile_recovery_expiry_invalid",
+        "profile_recovery_plan_expired",
+        "profile_recovery_time_uncertain",
+    )?;
     let recovery_identities = plan.identities.clone();
     let recovery_repository = repository.clone();
     let recovery_authority = authority.clone();
@@ -1842,10 +1958,18 @@ fn plan_profile_reset_command(command: &Value) -> Result<Value, String> {
             "trace": profile_lifecycle_trace(command, profile_id),
         }));
     }
-    let created_at = service_now_timestamp();
+    let time = profile_authority_time("profile_reset_time_unavailable")?;
+    let created_at = profile_time_created(&time);
     let expires_at = optional_command_string(command, "expiresAt")
         .map(Ok)
         .unwrap_or_else(|| profile_reset_default_expiry(&created_at))?;
+    profile_deadline_admission(
+        &time,
+        &expires_at,
+        "profile_reset_expiry_invalid",
+        "profile_reset_plan_expired",
+        "profile_reset_time_uncertain",
+    )?;
     let idempotency_key = optional_command_string(command, "idempotencyKey")
         .unwrap_or_else(|| format!("profile-reset-{}", uuid::Uuid::new_v4()));
     let plan = plan_profile_reset(
@@ -1881,12 +2005,23 @@ fn apply_profile_reset_command(command: &Value) -> Result<Value, String> {
     if authority.principal_id != plan.principal_id {
         return Err("profile_reset_principal_mismatch".to_string());
     }
-    let (receipt, replayed) = apply_profile_reset(
-        &repository,
-        &plan,
-        &service_now_timestamp(),
-        raw_capability.as_bytes(),
-    )?;
+    verify_profile_reset_plan(&plan, raw_capability.as_bytes())?;
+    let original = snapshot
+        .replay_profile_reset(profile_reset_receipt_identity(&plan))
+        .map_err(profile_reset_receipt_replay_error)?;
+    let (receipt, replayed) = if let Some(receipt) = original {
+        (receipt, true)
+    } else {
+        let time = profile_authority_time("profile_reset_time_unavailable")?;
+        let now = profile_deadline_admission(
+            &time,
+            &plan.expires_at,
+            "profile_reset_expiry_invalid",
+            "profile_reset_plan_expired",
+            "profile_reset_time_uncertain",
+        )?;
+        apply_profile_reset(&repository, &plan, &now, raw_capability.as_bytes())?
+    };
     Ok(json!({
         "receipt": receipt,
         "replayed": replayed,
@@ -2459,7 +2594,12 @@ fn profile_capability_from_command(command: &Value) -> Result<String, String> {
 fn absolute_command_path(command: &Value, field: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(required_command_string(command, field)?);
     if !path.is_absolute() {
-        return Err(format!("profile_recovery_{field}_must_be_absolute"));
+        return Err(match field {
+            "planFile" => "profile_recovery_plan_file_must_be_absolute",
+            "profileCapabilityFile" => "profile_recovery_profile_capability_file_must_be_absolute",
+            _ => "profile_recovery_argument_must_be_absolute",
+        }
+        .to_string());
     }
     Ok(path)
 }
@@ -2470,7 +2610,20 @@ fn required_command_string<'a>(command: &'a Value, field: &str) -> Result<&'a st
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| format!("profile_recovery_{field}_required"))
+        .ok_or_else(|| {
+            match field {
+                "action" => "profile_recovery_action_required",
+                "id" => "profile_recovery_id_required",
+                "profileId" => "profile_recovery_profile_id_required",
+                "sessionName" => "profile_recovery_session_name_required",
+                "recoveryId" => "profile_recovery_recovery_id_required",
+                "scope" => "profile_recovery_scope_required",
+                "planFile" => "profile_recovery_plan_file_required",
+                "profileCapabilityFile" => "profile_recovery_profile_capability_file_required",
+                _ => "profile_recovery_argument_required",
+            }
+            .to_string()
+        })
 }
 
 fn optional_command_string(command: &Value, field: &str) -> Option<String> {
@@ -2486,9 +2639,13 @@ fn optional_command_string_array(command: &Value, field: &str) -> Result<Vec<Str
     let Some(values) = command.get(field) else {
         return Ok(Vec::new());
     };
-    let values = values
-        .as_array()
-        .ok_or_else(|| format!("profile_recovery_{field}_invalid"))?;
+    let values = values.as_array().ok_or_else(|| {
+        match field {
+            "targetServiceIds" => "profile_recovery_target_service_ids_invalid",
+            _ => "profile_recovery_argument_invalid",
+        }
+        .to_string()
+    })?;
     values
         .iter()
         .map(|value| {
@@ -2497,7 +2654,13 @@ fn optional_command_string_array(command: &Value, field: &str) -> Result<Vec<Str
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(str::to_string)
-                .ok_or_else(|| format!("profile_recovery_{field}_invalid"))
+                .ok_or_else(|| {
+                    match field {
+                        "targetServiceIds" => "profile_recovery_target_service_ids_invalid",
+                        _ => "profile_recovery_argument_invalid",
+                    }
+                    .to_string()
+                })
         })
         .collect()
 }
@@ -3336,6 +3499,42 @@ fn digest_json(value: &impl Serialize) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn recovery_field_refusals_have_public_snake_case_codes() {
+        assert_eq!(
+            super::required_command_string(&serde_json::json!({}), "profileId")
+                .err()
+                .unwrap(),
+            "profile_recovery_profile_id_required"
+        );
+        assert_eq!(
+            super::required_command_string(&serde_json::json!({}), "profileCapabilityFile")
+                .err()
+                .unwrap(),
+            "profile_recovery_profile_capability_file_required"
+        );
+        assert_eq!(
+            super::absolute_command_path(&serde_json::json!({"planFile":"relative"}), "planFile")
+                .err()
+                .unwrap(),
+            "profile_recovery_plan_file_must_be_absolute"
+        );
+        assert_eq!(
+            super::optional_command_string_array(
+                &serde_json::json!({"targetServiceIds":[1]}),
+                "targetServiceIds"
+            )
+            .err()
+            .unwrap(),
+            "profile_recovery_target_service_ids_invalid"
+        );
+        assert_eq!(
+            super::required_command_string(&serde_json::json!({}), "futureField")
+                .err()
+                .unwrap(),
+            "profile_recovery_argument_required"
+        );
+    }
     use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
 
@@ -5000,6 +5199,151 @@ mod tests {
         )
         .unwrap();
         assert_eq!(lease_outcome.state, ProfileAcquisitionState::Blocked);
+    }
+
+    #[test]
+    fn profile_reset_plan_requires_reliable_deadline_authority() {
+        use crate::native::service_principal::{
+            register_profile_capability, ServicePrincipalRegistrationRequest,
+        };
+        let mut initial = state();
+        let profile = initial.profiles.get_mut("last30days-facebook").unwrap();
+        profile.target_service_ids = vec!["qbo".into()];
+        profile.authenticated_service_ids = vec!["qbo".into()];
+        let capability = "synthetic-deadline-authority-capability-at-least-thirty-two-bytes";
+        register_profile_capability(
+            &mut initial.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:last30days".into(),
+                display_name: None,
+                profile_id: "last30days-facebook".into(),
+                registered_at: Some("2026-09-10T12:00:00Z".into()),
+                registered_by: Some("test".into()),
+            },
+            capability,
+        )
+        .unwrap();
+        let _time = crate::connection::stable_time::Fixture::set(Err(
+            "stable_time_client_start_failed".into(),
+        ));
+        let result = plan_profile_reset_command(&json!({
+            "action":"service_profile_reset_plan", "serviceState":initial,
+            "profileId":"last30days-facebook", "profileCapability":capability,
+            "scope":"authentication", "targetServiceId":"qbo", "idempotencyKey":"time-qualified-reset",
+        }));
+        assert!(
+            matches!(&result, Err(error) if error.contains("stable_time_client_start_failed")),
+            "deadline planning must preserve the actual reliable-time client refusal"
+        );
+    }
+
+    #[test]
+    fn profile_reset_apply_uses_service_deadline_instead_of_guest_utc() {
+        use crate::native::service_principal::{
+            register_profile_capability, ServicePrincipalRegistrationRequest,
+        };
+        let env = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_SOCKET_DIR",
+        ]);
+        let directory =
+            std::env::temp_dir().join(format!("ab-profile-time-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        env.set("HOME", directory.to_str().unwrap());
+        env.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        env.set(
+            "AGENT_BROWSER_HOME",
+            directory.join("agent-home").to_str().unwrap(),
+        );
+        env.set(
+            "AGENT_BROWSER_SOCKET_DIR",
+            directory.join("s").to_str().unwrap(),
+        );
+        let mut initial = state();
+        let profile = initial.profiles.get_mut("last30days-facebook").unwrap();
+        profile.target_service_ids = vec!["qbo".into()];
+        profile.authenticated_service_ids = vec!["qbo".into()];
+        let capability = "synthetic-profile-apply-deadline-capability-at-least-thirty-two-bytes";
+        register_profile_capability(
+            &mut initial.service_principals,
+            ServicePrincipalRegistrationRequest {
+                principal_id: "principal:last30days".into(),
+                display_name: None,
+                profile_id: "last30days-facebook".into(),
+                registered_at: Some("2026-01-01T00:00:00Z".into()),
+                registered_by: Some("test".into()),
+            },
+            capability,
+        )
+        .unwrap();
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        repository
+            .mutate(|current| {
+                *current = initial.clone();
+                Ok(())
+            })
+            .unwrap();
+        let _time = crate::connection::stable_time::Fixture::set(Ok(
+            crate::connection::stable_time::fixture_stamp(1_767_225_600_000),
+        ));
+        let planned = plan_profile_reset_command(&json!({
+            "action":"service_profile_reset_plan", "profileId":"last30days-facebook",
+            "profileCapability":capability, "scope":"authentication", "targetServiceId":"qbo",
+            "expiresAt":"2026-01-01T00:05:00Z", "idempotencyKey":"qualified-apply",
+        }))
+        .unwrap();
+        let apply = json!({
+            "action":"service_profile_reset_apply", "profileId":"last30days-facebook",
+            "profileCapability":capability, "plan":planned["plan"],
+        });
+        {
+            let mut overlap = crate::connection::stable_time::fixture_stamp(1_767_225_900_000);
+            overlap.earliest_utc_ns -= 1_000_000;
+            overlap.latest_utc_ns += 1_000_000;
+            let _overlap = crate::connection::stable_time::Fixture::set(Ok(overlap));
+            assert_eq!(
+                apply_profile_reset_command(&apply).unwrap_err(),
+                "profile_reset_time_uncertain"
+            );
+        }
+        {
+            let _expired = crate::connection::stable_time::Fixture::set(Ok(
+                crate::connection::stable_time::fixture_stamp(1_767_225_960_000),
+            ));
+            assert_eq!(
+                apply_profile_reset_command(&apply).unwrap_err(),
+                "profile_reset_plan_expired"
+            );
+        }
+        {
+            let _outage = crate::connection::stable_time::Fixture::set(Err(
+                "stable_time_client_start_failed".into(),
+            ));
+            let error = apply_profile_reset_command(&apply).unwrap_err();
+            assert!(error.starts_with("profile_reset_time_unavailable:"));
+            assert!(error.contains("stable_time_client_start_failed"));
+        }
+        let applied = apply_profile_reset_command(&apply);
+        let replay = if applied.is_ok() {
+            let _outage = crate::connection::stable_time::Fixture::set(Err(
+                "stable_time_client_start_failed".into(),
+            ));
+            Some(apply_profile_reset_command(&apply))
+        } else {
+            None
+        };
+        drop(repository);
+        crate::test_utils::remove_owned_fixture_dir(&directory).unwrap();
+        assert!(
+            applied.is_ok(),
+            "qualified admission is before expiry regardless of guest UTC: {:?}",
+            applied.as_ref().err()
+        );
+        let replay = replay.unwrap().unwrap();
+        assert_eq!(replay["replayed"], true);
+        assert_eq!(replay["receipt"], applied.unwrap()["receipt"]);
     }
 
     #[test]

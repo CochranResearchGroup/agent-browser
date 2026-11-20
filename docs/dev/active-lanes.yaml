@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: RECOVERABLE-WORK-749
+    product_lane: PL-PLATFORM
+    objective: Recoverable task capacity, executable refusal recourse, Native coordination and measured latency
+    plan: docs/dev/plans/0307-2026-11-19-recoverable-work749.md
+    branch: platform/spec749-integration
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#749, CochranResearchGroup/agent-browser#750, CochranResearchGroup/agent-browser#751, CochranResearchGroup/agent-browser#752, CochranResearchGroup/agent-browser#753, CochranResearchGroup/agent-browser#754, CochranResearchGroup/agent-browser#755, CochranResearchGroup/agent-browser#756, CochranResearchGroup/agent-browser#757, CochranResearchGroup/agent-browser#758, CochranResearchGroup/agent-browser#760, CochranResearchGroup/agent-browser#761, CochranResearchGroup/agent-browser#762, CochranResearchGroup/agent-browser#763, CochranResearchGroup/agent-browser#764, CochranResearchGroup/agent-browser#765, CochranResearchGroup/agent-browser#766, CochranResearchGroup/agent-browser#767, CochranResearchGroup/agent-browser#768, CochranResearchGroup/agent-browser#769]
+    plan_state: CLOSED
+    custody_state: MERGED_RETAINED
+    dependencies: []
+    overlaps: [LINKEDIN-COMMAND-STATE-LATENCY]
+    reconciled_overlaps: ["Root owns shared time/profile expiry, help/docs/CONTEXT, catalog and integration; capacity owns Auth/challenge; coordination owns finite handoff/schema8; latency owns startup/registry; a bounded provider worker delivered769 and capacity now qualifies that clean source. Shared writes serialized via named commits; foreign Contacts worktree and unknown artifacts preserved."]
+    validation_status: PR759 source acceptance;177 distinct Native/CLI and430 model tests;2923 contracts/all1526 originals; strict lint/docs/client/dashboard; final260-operation continuation and kernel-v2 budget pass; provider989 merged; one review/one remediation; uninstalled
+    updated_at: 2026-11-20
   - id: LINKEDIN-COMMAND-STATE
     product_lane: PL-BUGFIX
     objective: Reduce aggregate history deserialization during retained-task inspection

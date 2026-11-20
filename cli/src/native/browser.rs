@@ -190,19 +190,50 @@ fn runtime_handoff_candidate_indices(
 /// Converts common error messages into AI-friendly, actionable descriptions.
 pub fn to_ai_friendly_error(error: &str) -> String {
     let lower = error.to_lowercase();
-    // Contract validation can name timeoutMs without timing out. Preserve the
-    // cause before applying browser-error heuristics or failure classification.
-    if lower.starts_with("evaluate requires ") {
+    // Preserve owner provenance before applying legacy presentation heuristics.
+    // Page exceptions and typed transport causes can contain selector/timeout
+    // words without being selector, job or no-effect evidence.
+    if lower.starts_with("evaluate requires ")
+        || error.starts_with("Evaluation error: ")
+        || [
+            "CDP error (",
+            "CDP command timed out: ",
+            "Failed to serialize CDP command: ",
+            "Failed to send CDP command: ",
+            "Failed to deserialize CDP response for ",
+            "CDP WebSocket connect failed: ",
+            "Navigation failed: ",
+            "Timeout waiting for Page.",
+            "Timeout waiting for load state: ",
+            "Timeout waiting for networkidle",
+            "Auto-launch failed: ",
+            "Failed to connect: ",
+            "Failed to send: ",
+            "Failed to read: ",
+            "Invalid response: ",
+            "Failed to start daemon: ",
+            "Daemon process exited during startup",
+            "Daemon failed to start (",
+        ]
+        .iter()
+        .any(|prefix| error.starts_with(prefix))
+        || error.split_once(':').is_some_and(|(code, _)| {
+            !code.is_empty()
+                && code
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        })
+    {
         return error.to_string();
     }
-    if lower.contains("strict mode violation") {
+    if lower.starts_with("strict mode violation") {
         return "Element matched multiple results. Use a more specific selector.".to_string();
     }
-    if lower.contains("element is not visible") {
+    if lower.starts_with("element is not visible") {
         return "Element exists but is not visible. Wait for it to become visible or scroll it into view."
             .to_string();
     }
-    if lower.contains("intercept") {
+    if lower.starts_with("element intercepted") {
         return "Another element is covering the target element. Try scrolling or closing overlays."
             .to_string();
     }
@@ -218,11 +249,14 @@ pub fn to_ai_friendly_error(error: &str) -> String {
     {
         return error.to_string();
     }
-    if lower.contains("timeout") {
+    if lower.starts_with("timeout waiting for ") {
         return "Operation timed out. The page may still be loading or the element may not exist."
             .to_string();
     }
-    if lower.contains("element not found") || lower.contains("no element") {
+    if lower == "element not found"
+        || lower.starts_with("element not found: ")
+        || lower.starts_with("no element found for ")
+    {
         return "Element not found. Verify the selector is correct and the element exists in the DOM."
             .to_string();
     }
@@ -1398,9 +1432,30 @@ impl BrowserManager {
         script: &str,
         timeout_ms: u64,
     ) -> Result<Value, String> {
+        self.evaluate_impl(script, timeout_ms, None).await
+    }
+
+    /// Sample only the Runtime.evaluate transport round trip when selected.
+    pub(crate) async fn evaluate_with_latency(
+        &self,
+        script: &str,
+        timeout_ms: u64,
+        samples: &mut Vec<Value>,
+    ) -> Result<Value, String> {
+        self.evaluate_impl(script, timeout_ms, Some(samples)).await
+    }
+
+    async fn evaluate_impl(
+        &self,
+        script: &str,
+        timeout_ms: u64,
+        samples: Option<&mut Vec<Value>>,
+    ) -> Result<Value, String> {
         let session_id = self.active_session_id()?.to_string();
         let request = bounded_evaluation_request(script, timeout_ms);
-
+        let capture = samples
+            .as_ref()
+            .map(|_| crate::connection::latency::PhaseCapture::start("cdp"));
         let result = self
             .client
             .send_command_with_timeout(
@@ -1409,8 +1464,15 @@ impl BrowserManager {
                 Some(&session_id),
                 request.transport_timeout,
             )
-            .await
-            .map_err(|error| error.to_string())?;
+            .await;
+        if let (Some(capture), Some(samples)) = (capture, samples) {
+            crate::connection::latency::finish(
+                capture,
+                "Runtime.evaluate CDP command round trip",
+                samples,
+            );
+        }
+        let result = result.map_err(|error| error.to_string())?;
         let result: EvaluateResult = serde_json::from_value(result).map_err(|error| {
             format!("Failed to deserialize CDP response for Runtime.evaluate: {error}")
         })?;
@@ -4475,6 +4537,31 @@ mod tests {
         assert_eq!(
             to_ai_friendly_error("Element not found"),
             "Element not found. Verify the selector is correct and the element exists in the DOM."
+        );
+    }
+
+    #[test]
+    fn test_to_ai_friendly_error_preserves_owner_and_page_provenance() {
+        for error in [
+            "Evaluation error: Error: element not found timeout cancelled before dispatch",
+            "CDP error (Runtime.evaluate): page reported element is not visible",
+            "CDP command timed out: Page.navigate",
+            "Navigation failed: net::ERR_CONNECTION_TIMED_OUT",
+            "Timeout waiting for Page.loadEventFired",
+            "Failed to read: timeout on original response",
+            "browser_control_human_active: wait timeout metadata",
+            "arbitrary provider prose contains timeout and element not found",
+            "custom intercept message from unrelated service",
+        ] {
+            assert_eq!(to_ai_friendly_error(error), error, "{error}");
+        }
+        let error = "Evaluation error: Error: Service job was cancelled before dispatch";
+        let failure =
+            crate::native::service_failure::classify_service_failure(&to_ai_friendly_error(error));
+        assert_eq!(failure.code, "browser_action_evaluation_exception");
+        assert_eq!(
+            failure.effect_state,
+            crate::native::service_failure::ServiceEffectState::EffectUncertain
         );
     }
 

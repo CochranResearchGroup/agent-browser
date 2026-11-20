@@ -1,4 +1,7 @@
 "use client";
+import {dashboardResponseFailureError,dashboardConfirmationFailure,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
@@ -136,7 +139,7 @@ function parseOutputObject(raw: unknown): Record<string, unknown> | null {
     try {
       const parsed = JSON.parse(raw);
       if (typeof parsed === "object" && parsed !== null) return parsed;
-    } catch { /* not JSON */ }
+    } catch (error) {void reportDashboardComponentFailure(error,"chat-panel.tsx"); /* not JSON */ }
     return null;
   }
   if (typeof raw === "object" && raw !== null) return raw as Record<string, unknown>;
@@ -1094,7 +1097,7 @@ export function ChatPanel({
           return;
         }
         setOperatorStatus(payload.data);
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"chat-panel.tsx");
         if (!cancelled) setOperatorError(err instanceof Error ? err.message : String(err));
       }
     }
@@ -1155,7 +1158,7 @@ export function ChatPanel({
           return;
         }
       }
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"chat-panel.tsx");
       // ignore
     }
     setMessages([]);
@@ -1170,7 +1173,7 @@ export function ChatPanel({
     }
     try {
       localStorage.setItem(storageKey, JSON.stringify(stripImagesForStorage(messages)));
-    } catch {
+    } catch (error) {void reportDashboardComponentFailure(error,"chat-panel.tsx");
       // ignore quota
     }
   }, [messages, isLoading, storageKey]);
@@ -1193,10 +1196,10 @@ export function ChatPanel({
       });
       const data = (await response.json()) as CodexInspectResponse;
       if (!response.ok && !data.data?.failure) {
-        throw new Error(data.error || `Codex inspection failed with HTTP ${response.status}`);
+        throw dashboardResponseFailureError(data,"dashboard_chat_owner_failure",{source:"packages/dashboard/src/components/chat-panel.tsx",owningFunction:"ChatPanel",...{}});
       }
       if (!data.data?.observation && !data.data?.failure) {
-        throw new Error(data.error || `Codex inspection failed with HTTP ${response.status}`);
+        throw dashboardResponseFailureError(data,"dashboard_chat_owner_failure",{source:"packages/dashboard/src/components/chat-panel.tsx",owningFunction:"ChatPanel",...{}});
       }
       const observation = data.data.observation;
       const failure = data.data.failure;
@@ -1212,7 +1215,7 @@ export function ChatPanel({
           ledger,
         },
       ]);
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"chat-panel.tsx");
       setCodexError(err instanceof Error ? err.message : String(err));
     } finally {
       setCodexSubmitting(false);
@@ -1254,8 +1257,8 @@ export function ChatPanel({
         }),
       });
       const payload = (await response.json()) as OperatorTurnResponse;
-      if (!response.ok || !payload.success || !payload.data) {
-        throw new Error(payload.error || `Operator turn failed with HTTP ${response.status}`);
+      if ((!response.ok || !payload.success || !payload.data) || responseFailureMetadata(payload)) {
+        throw dashboardResponseFailureError(payload,"dashboard_chat_owner_failure",{source:"packages/dashboard/src/components/chat-panel.tsx",owningFunction:"ChatPanel",...{}});
       }
       setOperatorTurn(payload.data);
       setAppliedOperatorActionId(null);
@@ -1277,7 +1280,7 @@ export function ChatPanel({
       if (payload.data.toolGroups) {
         setOperatorStatus((prev) => prev ? { ...prev, toolGroups: payload.data?.toolGroups } : prev);
       }
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"chat-panel.tsx");
       setOperatorError(err instanceof Error ? err.message : String(err));
     } finally {
       setOperatorSubmitting(false);
@@ -1349,12 +1352,12 @@ export function ChatPanel({
           }),
         });
         const confirmPayload = (await confirmResponse.json().catch(() => ({}))) as OperatorConfirmResponse;
-        if (!confirmResponse.ok || !confirmPayload.success || !confirmPayload.data?.confirmedAction) {
-          throw new Error(confirmPayload.error || `Operator confirmation failed with HTTP ${confirmResponse.status}`);
+        if ((!confirmResponse.ok || !confirmPayload.success || !confirmPayload.data?.confirmedAction) || responseFailureMetadata(confirmPayload)) {
+          throw dashboardResponseFailureError(confirmPayload,"dashboard_chat_owner_failure",{source:"packages/dashboard/src/components/chat-panel.tsx",owningFunction:"ChatPanel",...{}});
         }
         const confirmedAction = confirmPayload.data.confirmedAction;
         if (confirmedAction.kind !== "service_request" || !confirmedAction.request) {
-          throw new Error("Confirmed operator action did not return a service request.");
+          throw dashboardConfirmationFailure(confirmPayload,"dashboard_operator_confirmation_unconfirmed",{source:"packages/dashboard/src/components/chat-panel.tsx",owningFunction:"ChatPanel",...{operationId:action.confirmationId}});
         }
         appendOperatorActivity({
           type: "result",
@@ -1375,8 +1378,8 @@ export function ChatPanel({
           body: JSON.stringify(confirmedAction.request),
         });
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok || payload?.success === false) {
-          throw new Error(payload?.error || `Service request failed with HTTP ${response.status}`);
+        if ((!response.ok || payload?.success === false) || responseFailureMetadata(payload)) {
+          throw dashboardResponseFailureError(payload,"dashboard_chat_owner_failure",{source:"packages/dashboard/src/components/chat-panel.tsx",owningFunction:"ChatPanel",...{}});
         }
         appendOperatorActivity({
           type: "result",
@@ -1392,7 +1395,7 @@ export function ChatPanel({
         });
         appendOperatorDashboardAction(operatorSelectionActionFromServiceResult(confirmedAction, payload));
         setAppliedOperatorActionId(action.id);
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"chat-panel.tsx");
         setOperatorError(err instanceof Error ? err.message : String(err));
       } finally {
         setOperatorSubmitting(false);
@@ -1417,8 +1420,8 @@ export function ChatPanel({
           body: JSON.stringify(action.request),
         });
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok || payload?.success === false) {
-          throw new Error(payload?.error || `Service request failed with HTTP ${response.status}`);
+        if ((!response.ok || payload?.success === false) || responseFailureMetadata(payload)) {
+          throw dashboardResponseFailureError(payload,"dashboard_chat_owner_failure",{source:"packages/dashboard/src/components/chat-panel.tsx",owningFunction:"ChatPanel",...{}});
         }
         appendOperatorActivity({
           type: "result",
@@ -1434,7 +1437,7 @@ export function ChatPanel({
         });
         appendOperatorDashboardAction(operatorSelectionActionFromServiceResult(action, payload));
         setAppliedOperatorActionId(action.id);
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"chat-panel.tsx");
         setOperatorError(err instanceof Error ? err.message : String(err));
       } finally {
         setOperatorSubmitting(false);
@@ -1844,7 +1847,7 @@ export function ChatPanel({
                 try {
                   const parsed = JSON.parse(visibleError.message);
                   return parsed.message || parsed.error || visibleError.message;
-                } catch {
+                } catch (error) {void reportDashboardComponentFailure(error,"chat-panel.tsx");
                   return visibleError.message || "Something went wrong.";
                 }
               })()}

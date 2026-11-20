@@ -49,7 +49,21 @@ fn required_string(command: &Value, field: &str) -> Result<String, String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| format!("challenge_task_{field}_required"))
+        .ok_or_else(|| {
+            let code = match field {
+                "agentName" => "challenge_task_agent_name_required",
+                "challengeProfileId" => "challenge_task_challenge_profile_id_required",
+                "challengeTaskId" => "challenge_task_challenge_task_id_required",
+                "downstreamIntentId" => "challenge_task_downstream_intent_id_required",
+                "idempotencyKey" => "challenge_task_idempotency_key_required",
+                "operationId" => "challenge_task_operation_id_required",
+                "serviceName" => "challenge_task_service_name_required",
+                "sitePolicyDigest" => "challenge_task_site_policy_digest_required",
+                "taskName" => "challenge_task_task_name_required",
+                _ => "challenge_task_argument_required",
+            };
+            format!("{code}:field={field}")
+        })
 }
 
 fn caller_principal(command: &Value) -> Result<String, String> {
@@ -87,7 +101,7 @@ fn parse_start_intent(command: &Value) -> Result<ChallengeTaskStartIntent, Strin
         command
             .get("fixtureScenarioId")
             .cloned()
-            .ok_or_else(|| "challenge_task_fixtureScenarioId_required".to_string())?,
+            .ok_or_else(|| "challenge_task_fixture_scenario_id_required".to_string())?,
     )
     .map_err(|_| "challenge_task_fixture_not_registered".to_string())?;
     let site_policy_digest = required_string(command, "sitePolicyDigest")?;
@@ -311,12 +325,43 @@ pub(crate) fn handle_service_challenge_task(command: &Value) -> Result<Value, St
     match action {
         "service_challenge_task_start" => {
             let intent = parse_start_intent(command)?;
-            let created_at = Utc::now().to_rfc3339();
+            let snapshot = repository.load_snapshot()?;
+            let input =
+                challenge_task_start_input(&snapshot, intent.clone(), "1970-01-01T00:00:00Z")?;
+            if let agent_browser_service_model::ServiceChallengeTaskStartDecision::Replayed(
+                record,
+            ) = agent_browser_service_model::prepare_service_challenge_task_start(
+                &snapshot.challenge_tasks,
+                input,
+            )
+            .map_err(|error| error.cli_message())?
+            {
+                return Ok(task_projection(&record, true));
+            }
+            let origin = crate::connection::stable_time::authority_now()?.service_origin()?;
+            let deadline = origin
+                .deadline_ms(intent.deadline_ms)
+                .map_err(str::to_owned)?;
+            let created_at = chrono::DateTime::from_timestamp_millis(origin.earliest_utc_ms as i64)
+                .ok_or("challenge_task_created_at_invalid")?
+                .to_rfc3339();
+            let deadline_at = chrono::DateTime::from_timestamp_millis(deadline as i64)
+                .ok_or("challenge_task_deadline_invalid")?
+                .to_rfc3339();
             let (record, replayed) = repository.mutate(|state| {
                 let input = challenge_task_start_input(state, intent.clone(), &created_at)?;
-                state
+                let (mut record, replayed) = state
                     .start_service_challenge_task(input)
-                    .map_err(|error| error.cli_message())
+                    .map_err(|error| error.cli_message())?;
+                if !replayed {
+                    record.deadline_origin = Some(origin.clone());
+                    record.relative_deadline_ms = Some(intent.deadline_ms);
+                    record.deadline_at = deadline_at.clone();
+                    state
+                        .challenge_tasks
+                        .insert(record.task_id.clone(), record.clone());
+                }
+                Ok((record, replayed))
             })?;
             Ok(task_projection(&record, replayed))
         }
@@ -333,8 +378,62 @@ pub(crate) fn handle_service_challenge_task(command: &Value) -> Result<Value, St
             let task_id = required_string(command, "challengeTaskId")?;
             let principal_id = caller_principal(command)?;
             let operation_id = required_string(command, "operationId")?;
-            let resumed_at = Utc::now().to_rfc3339();
+            let snapshot = repository.load_snapshot()?;
+            let original = snapshot
+                .status_service_challenge_task(&task_id, &principal_id)
+                .map_err(|error| error.cli_message())?;
+            if project_service_challenge_task(&original, false).effect_pending {
+                return Err("challenge_task_effect_outcome_unknown".into());
+            }
+            // Existing replay/terminal checks precede timing and current-tab work.
+            let probe = ServiceChallengeTaskResumeInput {
+                task_id: task_id.clone(),
+                principal_id: principal_id.clone(),
+                operation_id: operation_id.clone(),
+                resumed_at: original.created_at.clone(),
+            };
+            if let agent_browser_service_model::ServiceChallengeTaskResumeDecision::Replayed(
+                record,
+            ) = agent_browser_service_model::prepare_service_challenge_task_resume(
+                &snapshot.challenge_tasks,
+                probe,
+            )
+            .map_err(|error| error.cli_message())?
+            {
+                return Ok(task_projection(&record, true));
+            }
+            if original.deadline_origin.is_none() || original.relative_deadline_ms.is_none() {
+                return Err("challenge_task_deadline_origin_unqualified".into());
+            }
+            let now = crate::connection::stable_time::authority_now()?.service_origin()?;
+            original.require_qualified_deadline(&now)?;
+            let resumed_at = chrono::DateTime::from_timestamp_millis(now.latest_utc_ms as i64)
+                .ok_or("challenge_task_resumed_at_invalid")?
+                .to_rfc3339();
             let (record, replayed) = repository.mutate(|state| {
+                let current = state
+                    .status_service_challenge_task(&task_id, &principal_id)
+                    .map_err(|error| error.cli_message())?;
+                if project_service_challenge_task(&current, false).effect_pending {
+                    return Err("challenge_task_effect_outcome_unknown".into());
+                }
+                let input = ServiceChallengeTaskResumeInput {
+                    task_id: task_id.clone(),
+                    principal_id: principal_id.clone(),
+                    operation_id: operation_id.clone(),
+                    resumed_at: resumed_at.clone(),
+                };
+                if let agent_browser_service_model::ServiceChallengeTaskResumeDecision::Replayed(
+                    record,
+                ) = agent_browser_service_model::prepare_service_challenge_task_resume(
+                    &state.challenge_tasks,
+                    input.clone(),
+                )
+                .map_err(|error| error.cli_message())?
+                {
+                    return Ok((*record, true));
+                }
+                current.require_qualified_deadline(&now)?;
                 state
                     .resume_service_challenge_task(ServiceChallengeTaskResumeInput {
                         task_id: task_id.clone(),
@@ -515,6 +614,145 @@ mod tests {
             "maxTransitions": 8,
             "serviceTabHandle": current,
         })
+    }
+
+    #[test]
+    fn public_challenge_start_requires_reliable_relative_deadline_origin() {
+        // Exercise the existing public adapter and real disposable repository.
+        // A guest timestamp must not mint a relative deadline when the supported
+        // time client has failed, even though all task identity checks pass.
+        let home =
+            std::env::temp_dir().join(format!("ab-challenge-origin-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&home).unwrap();
+        let environment =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        environment.set("HOME", home.to_str().unwrap());
+        environment.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let repository =
+            super::super::service_store::LockedServiceStateRepository::default_json().unwrap();
+        let state = service_state();
+        let command = start_command(&state);
+        repository
+            .mutate(|retained| {
+                *retained = state.clone();
+                Ok(())
+            })
+            .unwrap();
+        let before = repository.load_snapshot().unwrap();
+        let _time = crate::connection::stable_time::Fixture::set(Err(
+            "stable_time_client_start_failed".to_string(),
+        ));
+        let result = handle_service_challenge_task(&command);
+        let after = repository.load_snapshot().unwrap();
+        std::fs::remove_dir_all(&home).unwrap();
+        assert!(
+            matches!(&result, Err(cause) if cause.contains("stable_time_client_start_failed")),
+            "relative-deadline creation must expose the actual time-client cause: {result:?}",
+        );
+        assert_eq!(
+            after.challenge_tasks, before.challenge_tasks,
+            "unavailable reliable time must not create a task with a guest-derived deadline"
+        );
+    }
+
+    #[test]
+    fn public_challenge_origin_survives_reopen_and_completed_replay_without_time() {
+        use crate::connection::stable_time::{Fixture, Stamp};
+        let home =
+            std::env::temp_dir().join(format!("ab-challenge-origin-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&home).unwrap();
+        let environment =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        environment.set("HOME", home.to_str().unwrap());
+        environment.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let repository =
+            super::super::service_store::LockedServiceStateRepository::default_json().unwrap();
+        let state = service_state();
+        let command = start_command(&state);
+        repository
+            .mutate(|retained| {
+                *retained = state.clone();
+                Ok(())
+            })
+            .unwrap();
+        // A deliberately historical qualified UTC instant proves guest UTC is
+        // not used to mint or admit this 120-second relative lifetime.
+        let stamp = Stamp {
+            epoch: "11111111-1111-4111-8111-111111111111".into(),
+            counter: 1,
+            frequency_hz: 1000,
+            earliest_utc_ns: 1767225600000000000,
+            latest_utc_ns: 1767225600000000000,
+        };
+        let _time = Fixture::set(Ok(stamp.clone()));
+        let started = handle_service_challenge_task(&command).unwrap();
+        let id = started["challengeTaskId"].as_str().unwrap();
+        assert_eq!(started["createdAt"], "2026-01-01T00:00:00+00:00");
+        let reopened =
+            super::super::service_store::LockedServiceStateRepository::default_json().unwrap();
+        let retained = reopened.load_snapshot().unwrap();
+        assert_eq!(
+            retained.challenge_tasks[id].relative_deadline_ms,
+            Some(120000)
+        );
+        assert_eq!(
+            retained.challenge_tasks[id]
+                .deadline_origin
+                .as_ref()
+                .unwrap(),
+            &stamp.service_origin().unwrap()
+        );
+        let resume = json!({"action":"service_challenge_task_resume", "challengeTaskId":id,
+            "clientSubjectId":"principal-1", "operationId":"qualified-completion"});
+        let _later = Fixture::set(Ok(Stamp {
+            counter: 1001,
+            earliest_utc_ns: stamp.earliest_utc_ns + 1_000_000_000,
+            latest_utc_ns: stamp.latest_utc_ns + 1_000_000_000,
+            ..stamp.clone()
+        }));
+        let completed = handle_service_challenge_task(&resume).unwrap();
+        assert_eq!(completed["state"], "completed");
+        let mut legacy_command = command.clone();
+        legacy_command["idempotencyKey"] = json!("retained-legacy-origin");
+        let legacy = handle_service_challenge_task(&legacy_command).unwrap();
+        let legacy_id = legacy["challengeTaskId"].as_str().unwrap();
+        let _outage = Fixture::set(Err("stable_time_client_start_failed".into()));
+        assert_eq!(
+            handle_service_challenge_task(&resume).unwrap()["replayed"],
+            true
+        );
+        assert_eq!(
+            handle_service_challenge_task(&command).unwrap()["replayed"],
+            true
+        );
+        // A legacy active original retains read/cancel, but cannot be silently
+        // qualified from its old guest-derived deadline or replay a new effect.
+        repository
+            .mutate(|state| {
+                let original = state.challenge_tasks.get_mut(legacy_id).unwrap();
+                original.deadline_origin = None;
+                original.relative_deadline_ms = None;
+                Ok(())
+            })
+            .unwrap();
+        let mut new_intent = resume.clone();
+        new_intent["challengeTaskId"] = json!(legacy_id);
+        new_intent["operationId"] = json!("new-legacy-effect");
+        assert_eq!(
+            handle_service_challenge_task(&new_intent).unwrap_err(),
+            "challenge_task_deadline_origin_unqualified"
+        );
+        let status = json!({"action":"service_challenge_task_status", "challengeTaskId":legacy_id,"clientSubjectId":"principal-1"});
+        assert_eq!(
+            handle_service_challenge_task(&status).unwrap()["challengeTaskId"],
+            legacy_id
+        );
+        let cancel = json!({"action":"service_challenge_task_cancel", "challengeTaskId":legacy_id,"clientSubjectId":"principal-1","operationId":"cancel-legacy"});
+        assert_eq!(
+            handle_service_challenge_task(&cancel).unwrap()["state"],
+            "cancelled"
+        );
+        std::fs::remove_dir_all(&home).unwrap();
     }
 
     #[test]

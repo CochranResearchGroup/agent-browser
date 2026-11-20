@@ -1,5 +1,7 @@
 "use client";
 
+import { dashboardLocalFailure, responseFailureMetadata } from "./response-failure.ts";
+
 export type DashboardReadPolicy = {
   cacheGroup?: string;
   freshForMs?: number;
@@ -40,6 +42,7 @@ export class DashboardReadPausedError extends Error {
   constructor() {
     super("Dashboard reads are paused while this document is hidden.");
     this.name = "DashboardReadPausedError";
+    dashboardLocalFailure(this,"dashboard_read_paused","packages/dashboard/src/lib/dashboard-read-coordinator.ts","DashboardReadPausedError");
   }
 }
 
@@ -118,6 +121,11 @@ export class DashboardReadCoordinator {
         headers: policy.revalidate ? { "X-Agent-Browser-Revalidate": "1" } : undefined,
       }).then(async (response) => {
         const body = await response.blob();
+        let applicationFailure = false;
+        if (response.headers.get("content-type")?.includes("application/json")) {
+          try { applicationFailure = responseFailureMetadata(JSON.parse(await body.text())) !== null; }
+          catch { applicationFailure = true; }
+        }
         const snapshot: ResponseSnapshot = {
           body,
           byteCount: body.size,
@@ -130,6 +138,7 @@ export class DashboardReadCoordinator {
         };
         if (
           response.ok
+          && !applicationFailure
           && freshForMs > 0
           && this.cacheGroupRevision(policy.cacheGroup) === cacheGroupRevision
           && this.flights.get(key)?.promise === promise

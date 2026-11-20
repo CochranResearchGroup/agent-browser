@@ -434,10 +434,120 @@ pub(super) fn published_assignment(
         .assignment)
 }
 
+// Headless launches have no Native desktop assignment, so they cannot use a
+// BrowserLaunchCustodyRecord. Retain the same owner-captured immutable process
+// evidence as a per-launch document in this store, without granting desktop or
+// lifecycle authority. The launcher calls this while holding its unreaped child.
+const HEADLESS_PROCESS_SCHEMA: &str = "agent-browser.headless-launch-process.v1";
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct HeadlessLaunchProcess {
+    browser_id: String,
+    profile_id: String,
+    cdp_endpoint: String,
+    process: agent_browser_service_model::RecordedProcessIdentity,
+}
+fn headless_process_kind(browser_id: &str, pid: u32, endpoint: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut digest = Sha256::new();
+    let pid_bytes = pid.to_le_bytes();
+    for value in [browser_id.as_bytes(), &pid_bytes, endpoint.as_bytes()] {
+        digest.update((value.len() as u64).to_le_bytes());
+        digest.update(value);
+    }
+    format!("headless_launch_process:{:x}", digest.finalize())
+}
+impl BrowserSessionSqliteStore {
+    /// Retain only an original launch observation, never a later live-process read.
+    pub(crate) fn retain_headless_launch_process(
+        &mut self,
+        profile_id: &str,
+        launch: &BrowserLaunch,
+    ) -> Result<(), String> {
+        if launch.desktop.is_some() {
+            return Ok(());
+        }
+        let Some(process) = &launch.process_identity else {
+            return Ok(());
+        };
+        if process.pid != launch.pid
+            || process.start_token.is_empty()
+            || process.executable_path.as_deref().is_none_or(str::is_empty)
+        {
+            return Err("browser_session_headless_launch_identity_invalid".into());
+        }
+        let record = HeadlessLaunchProcess {
+            browser_id: launch.browser_id.clone(),
+            profile_id: profile_id.into(),
+            cdp_endpoint: launch.cdp_endpoint.clone(),
+            process: process.clone(),
+        };
+        let kind = headless_process_kind(&record.browser_id, launch.pid, &record.cdp_endpoint);
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| "browser_session_headless_launch_identity_store_busy")?;
+        let previous: Option<HeadlessLaunchProcess> =
+            load_optional_document(&transaction, &kind, HEADLESS_PROCESS_SCHEMA)?;
+        if previous
+            .as_ref()
+            .is_some_and(|previous| previous != &record)
+        {
+            return Err("browser_session_headless_launch_identity_conflict".into());
+        }
+        save_document(&transaction, &kind, HEADLESS_PROCESS_SCHEMA, &record)?;
+        let version: i64 = transaction
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .map_err(|_| "browser_session_headless_launch_identity_schema_unavailable")?;
+        if version < 2 {
+            transaction
+                .execute_batch("PRAGMA user_version=2;")
+                .map_err(|_| "browser_session_headless_launch_identity_schema_unavailable")?;
+        }
+        transaction
+            .commit()
+            .map_err(|_| "browser_session_headless_launch_identity_publication_failed".into())
+    }
+}
+fn published_headless_process(
+    connection: &Connection,
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+) -> Result<Option<agent_browser_service_model::RecordedProcessIdentity>, LaunchCustodyStoreError> {
+    if current(connection)?.browsers.get(&browser.id) != Some(browser) {
+        return Err(LaunchCustodyStoreError::Conflict);
+    }
+    let record: Option<HeadlessLaunchProcess> = load_optional_document(
+        connection,
+        &headless_process_kind(&browser.id, browser.pid, &browser.cdp_endpoint),
+        HEADLESS_PROCESS_SCHEMA,
+    )
+    .map_err(|_| LaunchCustodyStoreError::InvalidRecord)?;
+    let Some(record) = record else {
+        return Ok(None);
+    };
+    if record.browser_id != browser.id
+        || record.profile_id != browser.profile_id
+        || record.cdp_endpoint != browser.cdp_endpoint
+        || record.process.pid != browser.pid
+        || record.process.start_token.is_empty()
+        || record
+            .process
+            .executable_path
+            .as_deref()
+            .is_none_or(str::is_empty)
+    {
+        return Err(LaunchCustodyStoreError::Conflict);
+    }
+    Ok(Some(record.process))
+}
+
 pub(super) fn published_process_identity(
     connection: &Connection,
     browser: &agent_browser_service_model::ManagedBrowserInstance,
 ) -> Result<Option<agent_browser_service_model::RecordedProcessIdentity>, LaunchCustodyStoreError> {
+    if browser.desktop.is_none() {
+        return published_headless_process(connection, browser);
+    }
     Ok(published_launch_record(connection, browser)?.observed_process_identity)
 }
 

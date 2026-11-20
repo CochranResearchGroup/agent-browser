@@ -1,3 +1,6 @@
+import {withClientResultRecovery} from './client-recovery.js';
+import {clientFailureError} from './client-recovery.js';
+import {createTeachingCapacity} from './teaching-capacity.js';
 // @ts-check
 import {readFile,lstat,open,link,unlink} from 'node:fs/promises';
 import {join,isAbsolute} from 'node:path';
@@ -14,7 +17,7 @@ const guideId=value=>typeof value==='string'&&/^[a-z0-9][a-z0-9-]{0,119}$/.test(
 const hash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const task=value=>typeof value==='string'&&value.trim().length>0&&value.length<=4000&&!/\p{Cc}/u.test(value);
 /** @param {string} code @returns {never} */
-const error=code=>{throw Error(code);};
+const error=code=>{throw clientFailureError(code,{source:'packages/client/src/teaching-review.js',owningFunction:'error'});};
 function content(guide) {
   const value=clone(guide);delete value.guideId;
   delete value.teaching.lineage;delete value.teaching.review;delete value.teaching.validation;
@@ -29,7 +32,8 @@ function versionId(root,revision) {return `${root.length<=96?root:'teaching-'+sh
  * @param {import('./teaching-review.d.ts').TeachingReviewOptions} options
  * @returns {import('./teaching-review.d.ts').TeachingReviewClient}
  */
-export function createTeachingReviewClient({candidateDirectory,browser,sourceStatus,readOperatorDecision,readFreshRepeat,readOperatorAnswer,acceptedVersion}) {
+export function createTeachingReviewClient({candidateDirectory,browser,sourceStatus,readOperatorDecision,readFreshRepeat,readOperatorAnswer,acceptedVersion,teachingCapacity}) {
+  const capacity=createTeachingCapacity(teachingCapacity);
   const retainedConfiguration=acceptedVersion===undefined?undefined:clone(acceptedVersion);
   if(retainedConfiguration&&(!guideId(retainedConfiguration.guideId)||!hash(retainedConfiguration.sha256)))error('teaching_accepted_version_invalid');
   if(!isAbsolute(candidateDirectory??'') || !browser?.inspectTeachingDraft || !browser?.validateTeachingCandidate)error('teaching_review_configuration_required');
@@ -53,7 +57,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
   async function chain(root) {
     const records=[candidate(await read(root))];
     if(records[0].guide.teaching.lineage)error('teaching_review_root_invalid');
-    for(let revision=2;revision<=256;revision++) {
+    for(let revision=2;;revision++) {
       let next;
       try {next=await read(versionId(root,revision));} catch(err) {if(err.code==='ENOENT')return records;throw err;}
       const previous=records.at(-1),meta=next.guide.teaching?.lineage;
@@ -73,7 +77,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
   function prior(records,operationId,intentSha256) {
     const record=records.find(item=>item.guide.teaching?.lineage?.operationId===operationId);
     if(!record)return;
-    if(record.guide.teaching.lineage.intentSha256!==intentSha256)return {status:'conflict',reason:'operation_intent_changed',...receipt(record,'conflict')};
+    if(record.guide.teaching.lineage.intentSha256!==intentSha256)return withClientResultRecovery({status:'conflict',reason:'operation_intent_changed',...receipt(record,'conflict')},{source:"packages/client/src/teaching-review.js",owningFunction:"prior"});
     return {...receipt(record,'saved'),recoveredOriginal:true};
   }
   async function publish(guide) {
@@ -97,7 +101,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     try {
       const observed=await sourceStatus(request);
       if(observed.recordingId!==request.recordingId||observed.videoSha256!==request.videoSha256||observed.sourceTaskId!==request.sourceTaskId)return {...scope,state:'unavailable',replayable:false,reason:'source_binding_changed'};
-      if(observed.state==='unchecked')return {...scope,state:'unchecked',replayable:false,reason:'source_not_checked'};
+      if(observed.state==='unchecked')return {...scope,state:'unchecked',replayable:false,reason:observed.reason==='teaching_source_expiry_unqualified'?observed.reason:'source_not_checked',...(observed.clientRecovery?{clientRecovery:observed.clientRecovery}:{})};
       if(!['available','unavailable'].includes(observed.state))return {...scope,state:'unchecked',replayable:false,reason:'source_state_unverified'};
       const available=observed.state==='available';
       if(observed.gaps!==undefined&&(!Array.isArray(observed.gaps)||observed.gaps.length>256||observed.gaps.some(gap=>!Number.isFinite(gap.tMs)||gap.tMs<0||!id(gap.reason)||!id(gap.scope))))return {...scope,state:'unchecked',replayable:false,reason:'source_gap_metadata_unverified'};
@@ -215,8 +219,8 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     const intentSha256=digest({taskId,guideId:name,expectedSha256,operationId,kind,data:intentData});
     const recovered=prior(records,operationId,intentSha256);if(recovered)return recovered;
     const head=records.at(-1);
-    if(base.sha256!==expectedSha256||head.guide.guideId!==name||head.sha256!==expectedSha256)return {status:'conflict',reason:'stale_revision',current:receipt(head,'saved'),ordinaryReuseAllowed:false};
-    if(meta.revision>=256)error('teaching_review_lineage_capacity');
+    if(base.sha256!==expectedSha256||head.guide.guideId!==name||head.sha256!==expectedSha256)return withClientResultRecovery({status:'conflict',reason:'stale_revision',current:receipt(head,'saved'),ordinaryReuseAllowed:false},{source:"packages/client/src/teaching-review.js",owningFunction:"mutate"});
+    if(meta.revision>=capacity().policy.maximumLineageRevisions)error('teaching_review_lineage_capacity');
     const retained=acceptedReference(base);
     if(kind==='promote'&&retained){let observed;try{observed=await read(retained.guideId);}catch{error('teaching_accepted_version_changed');}if(observed.sha256!==retained.sha256)error('teaching_accepted_version_changed');}
     const guide=await transform(clone(base.guide),base);
@@ -228,12 +232,13 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     if(validated.valid!==true||validated.guideId!==guide.guideId||validated.taskId!==taskId||validated.executionAllowed!==false||validated.operatorReviewQualified!==false)error('teaching_candidate_validation_failed');
     try {return receipt(await publish(guide),'saved');}
     catch(err) {
-      if(err.code!=='EEXIST')return {status:'unknown',reason:'publication_result_unconfirmed',rootGuideId:meta.rootGuideId,operationId,ordinaryReuseAllowed:false};
+      if(err.code!=='EEXIST')return withClientResultRecovery({status:'unknown',reason:'publication_result_unconfirmed',rootGuideId:meta.rootGuideId,operationId,ordinaryReuseAllowed:false},{source:"packages/client/src/teaching-review.js",owningFunction:"mutate"});
       const observed=await chain(meta.rootGuideId),result=prior(observed,operationId,intentSha256);
       return result??{status:'conflict',reason:'concurrent_revision',current:receipt(observed.at(-1),'saved'),ordinaryReuseAllowed:false};
     }
   }
   return {
+    capacity,
     async open({taskId,guideId:name}) {
       const record=await read(name),guide=await browser.inspectTeachingDraft(taskId,name);
       if(digest(guide.teaching)!==digest(record.guide.teaching))error('teaching_review_readback_changed');
@@ -294,7 +299,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
       if(result.status!=='saved')return result;
       const proof=await validation(await read(result.guideId));
       if(proof.state!=='verified')error('teaching_fresh_repeat_required');
-      return {...result,status:'promoted',ordinaryReuseAllowed:true,acceptedVersion:{guideId:proof.executedGuideId,sha256:proof.executedSha256}};
+      return withClientResultRecovery({...result,status:'promoted',ordinaryReuseAllowed:true,acceptedVersion:{guideId:proof.executedGuideId,sha256:proof.executedSha256}},{source:"packages/client/src/teaching-review.js",owningFunction:"createTeachingReviewClient.promote"});
     },
     async lookupOperation({rootGuideId,operationId}) {
       if(!id(operationId))error('teaching_review_request_invalid');

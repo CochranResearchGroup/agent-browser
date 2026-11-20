@@ -54,6 +54,7 @@ impl BrowserHostedContinuity {
         request_id: &str,
         fingerprint: &str,
         expected: u64,
+        maximum_requests: usize,
     ) -> Result<bool, String> {
         if request_id.is_empty()
             || request_id.len() > 128
@@ -76,7 +77,7 @@ impl BrowserHostedContinuity {
         if self.requests.values().any(|row| row.pending) {
             return Err("browser_reconnect_pending_no_replay".into());
         }
-        if self.requests.len() >= 128 {
+        if self.requests.len() >= maximum_requests {
             return Err("browser_reconnect_request_capacity_reached".into());
         }
         self.revision
@@ -130,18 +131,18 @@ mod tests {
     #[test]
     fn hosted_reconnect_pending_and_changed_request_never_replay() {
         let mut state = BrowserHostedContinuity::default();
-        assert_eq!(state.admit("id", "digest", 0), Ok(true));
+        assert_eq!(state.admit("id", "digest", 0, 128), Ok(true));
         state.record("id", "digest", "reopen", true);
         assert!(state
-            .admit("id", "digest", 0)
+            .admit("id", "digest", 0, 128)
             .unwrap_err()
             .contains("no_replay"));
         assert!(state
-            .admit("id", "changed", 1)
+            .admit("id", "changed", 1, 128)
             .unwrap_err()
             .contains("identity_conflict"));
         assert!(state
-            .admit("other", "digest", 1)
+            .admit("other", "digest", 1, 128)
             .unwrap_err()
             .contains("no_replay"));
         let restored: BrowserHostedContinuity =
@@ -152,9 +153,9 @@ mod tests {
     fn hosted_reconnect_completed_replay_is_readback_only() {
         let mut state = BrowserHostedContinuity::default();
         state.record("id", "digest", "reconnect", false);
-        assert_eq!(state.admit("id", "digest", 0), Ok(false));
+        assert_eq!(state.admit("id", "digest", 0, 128), Ok(false));
         assert!(state
-            .admit("new", "digest", 0)
+            .admit("new", "digest", 0, 128)
             .unwrap_err()
             .contains("revision_conflict"));
     }

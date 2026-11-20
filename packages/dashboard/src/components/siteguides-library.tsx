@@ -1,12 +1,15 @@
 'use client';
+import {dashboardLocalFailure} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 import {useEffect,useState} from 'react';
 import type {LibraryProfile} from '@/lib/workspace-profile-library';
 import {Button} from '@/components/ui/button';
 import {requestSiteGuides,confirmTeachingReceipt,teachingOperationId,type SiteGuideSummary,type TeachingContext,type TeachingView,type SiteGuidesTransport} from '@/lib/workspace-siteguides';
 // Descriptive original-operation references only. These client records never
 // establish receipt authority and never authorize replay after an unknown result.
-const readPending=(key:string)=>{try{return JSON.parse(sessionStorage.getItem(key)??'null');}catch{return null;}};
-const retainPending=(key:string,value:unknown)=>{try{if(value===null)sessionStorage.removeItem(key);else sessionStorage.setItem(key,JSON.stringify(value));}catch{/* UI still keeps the in-memory reference. */}};
+const readPending=(key:string)=>{try{return JSON.parse(sessionStorage.getItem(key)??'null');}catch (error){void reportDashboardComponentFailure(error,"siteguides-library.tsx");return null;}};
+const retainPending=(key:string,value:unknown)=>{try{if(value===null)sessionStorage.removeItem(key);else sessionStorage.setItem(key,JSON.stringify(value));}catch (error){void reportDashboardComponentFailure(error,"siteguides-library.tsx");/* UI still keeps the in-memory reference. */}};
 export interface TeachingInterpretationResult {
  readonly guideId?:string;
  readonly status?:'unavailable'|'unknown'|'pending'|'not_observed';
@@ -38,10 +41,10 @@ export function SiteGuidesLibrary({context,profiles=[],sitePolicyId,onProfile,tr
  const [repeatRef,setRepeatRef]=useState(''),[start,setStart]=useState(''),[end,setEnd]=useState(''),[report,setReport]=useState('');
  const [ack,setAck]=useState(false);
  const [answers,setAnswers]=useState<Record<string,string>>({});
- const load=async()=>{try{setGuides((await transport({operation:'list'})).guides);}catch(error){setMessage(String(error));}};
+ const load=async()=>{try{setGuides((await transport({operation:'list'})).guides);}catch(error){void reportDashboardComponentFailure(error,"siteguides-library.tsx");setMessage(String(error));}};
  useEffect(()=>{void load();},[transport]);
  const open=async(taskId:string,guideId:string)=>{const result=await transport({operation:'open',taskId,guideId});setOrdinary(null);setView(result.view);setHistory(result.history);};
- async function run(work:()=>Promise<void>){setBusy(true);setMessage('');try{await work();}catch(error){setMessage(String(error));}finally{setBusy(false);}}
+ async function run(work:()=>Promise<void>){setBusy(true);setMessage('');try{await work();}catch(error){void reportDashboardComponentFailure(error,"siteguides-library.tsx");setMessage(String(error));}finally{setBusy(false);}}
  async function mutate(operation:string,extra:Record<string,unknown>={}) {
   if(!view)return;
   const request={operation,taskId:view.guide.teaching.sourceTaskId,guideId:view.guideId,sourceTaskId:view.guide.teaching.sourceTaskId,rootGuideId:view.rootGuideId,expectedSha256:view.sha256,operationId:teachingOperationId(),...extra};
@@ -60,11 +63,11 @@ export function SiteGuidesLibrary({context,profiles=[],sitePolicyId,onProfile,tr
   await mutate('record_decision',{decisionRef,operationId});
  }
  async function submitAnswer(question:TeachingView['round'][number]) {
-  if(!view||!onInterpret)throw Error('Connect the existing agent to revise this answer.');
+  if(!view||!onInterpret)throw dashboardLocalFailure(Error('Connect the existing agent to revise this answer.'),"dashboard_teaching_context_invalid","packages/dashboard/src/components/siteguides-library.tsx","submitAnswer");
   const effective=view.teachingContext??context;
-  if(!effective)throw Error('Choose explicit known-site/intended metadata for this retained guide. A new browser is not substitute demonstration evidence.');
+  if(!effective)throw dashboardLocalFailure(Error('Choose explicit known-site/intended metadata for this retained guide. A new browser is not substitute demonstration evidence.'),"dashboard_teaching_context_invalid","packages/dashboard/src/components/siteguides-library.tsx","submitAnswer");
   const cached=readPending('siteguides-speech-originals:'+view.guide.teaching.sourceTaskId),input=cached?.segments?.length?cached:view.mediaReferences;
-  if(!(input?.bundle||input?.speechSource)||!input?.segments?.length)throw Error('Original Speech operation references are unavailable. Reopen the exact existing recording and transcript operations before agent revision.');
+  if(!(input?.bundle||input?.speechSource)||!input?.segments?.length)throw dashboardLocalFailure(Error('Original Speech operation references are unavailable. Reopen the exact existing recording and transcript operations before agent revision.'),"dashboard_teaching_context_invalid","packages/dashboard/src/components/siteguides-library.tsx","submitAnswer");
   const answerRef=teachingOperationId(),operationId=teachingOperationId();
   const scope={purpose:'teaching_answer',taskId:view.guide.teaching.sourceTaskId,rootGuideId:view.rootGuideId,answeredGuideId:view.guideId,answeredSha256:view.sha256,contentSha256:view.contentSha256,questionId:question.id,questionSha256:question.questionSha256,answer:answers[question.id]};
   const request={...scope,kind:'answer',guideId:view.guideId,expectedSha256:view.sha256,operationId,answerRef,sourceKey:input.sourceKey,bundle:input.bundle,speechSource:input.speechSource,segments:input.segments,sitePolicyId:effective.sitePolicyId,account:effective.account,organization:effective.organization};
@@ -138,7 +141,7 @@ export function TeachSite({context,transport=requestSiteGuides,onNativeView,onIn
  const [sources,setSources]=useState<Array<{sourceKey:string;recordingId:string;narrationSourceId:string}>>([]);
  const [canStartNew,setCanStartNew]=useState(false);
  useEffect(()=>{setCanStartNew(ownerAllowsDistinctSubmission(readPending(pendingKey)?.diagnosis));},[pendingKey]);
- async function run(work:()=>Promise<void>){setBusy(true);setMessage('');try{await work();}catch(error){setMessage(String(error));}finally{setBusy(false);}}
+ async function run(work:()=>Promise<void>){setBusy(true);setMessage('');try{await work();}catch(error){void reportDashboardComponentFailure(error,"siteguides-library.tsx");setMessage(String(error));}finally{setBusy(false);}}
  return <section aria-label="Teach this site"><h3>Teach this site</h3>
   {context?<p>Task {context.taskId}; profile {context.profileId}; site {context.sitePolicyId}; intended account {context.account||'unspecified'}; organization {context.organization||'unspecified'}. Intended identity does not establish authentication freshness.</p>:<p>Select a browser task to teach this site.</p>}
   <Button disabled={!context||!onNativeView} onClick={onNativeView}>Open native Remote View</Button><p>Use the existing native recording and narration controls. This manager lists scoped source references supplied by the existing recording owner through server configuration; it does not automatically discover recordings. Select finalized evidence after recording finishes.</p>

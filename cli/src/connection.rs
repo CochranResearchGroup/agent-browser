@@ -14,6 +14,9 @@ use std::time::{Duration, Instant};
 
 use crate::process_identity::{RecordedProcessIdentity, VerifiedProcessTermination};
 
+pub(crate) mod latency;
+pub(crate) mod stable_time;
+
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
@@ -887,19 +890,97 @@ fn daemon_auth_token_available(session: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// The kernel owns this admission for the lifetime of this non-inherited file
+/// handle. The permanent inode is never removed, including after owner death.
 struct DaemonStartupLock {
-    path: PathBuf,
-    token: String,
+    _file: fs::File,
 }
 
-impl Drop for DaemonStartupLock {
-    fn drop(&mut self) {
-        if fs::read_to_string(&self.path)
-            .ok()
-            .is_some_and(|value| value.trim() == self.token)
-        {
-            let _ = fs::remove_file(&self.path);
+/// Legacy markers are evidence only. A positively absent PID permits current
+/// v2 writers to proceed without changing legacy bytes. A live/unqualified
+/// marker defers only cold startup, not verified reuse or independent reads.
+/// Uncontrolled mixed-generation cold writers do not share this protocol.
+fn qualify_legacy_startup_marker(path: &Path) -> Result<(), String> {
+    let unqualified = |cause: &str| {
+        format!("runtime_host_legacy_startup_owner_unqualified:{cause}; retain the marker and inspect the selected-runtime preserve transaction before retrying cold startup")
+    };
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => return Err(unqualified("legacy marker is not a regular file")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err(unqualified("legacy marker metadata unavailable")),
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK);
+    }
+    let file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => {
+            return Err(unqualified(
+                "legacy marker cannot be read as a regular owner record",
+            ))
         }
+    };
+    let original = file
+        .metadata()
+        .map_err(|_| unqualified("legacy marker metadata unavailable"))?;
+    if !original.is_file() {
+        return Err(unqualified("legacy marker is not a regular file"));
+    }
+    let mut token = String::new();
+    (&file)
+        .take(129)
+        .read_to_string(&mut token)
+        .map_err(|_| unqualified("legacy marker is unreadable or malformed"))?;
+    if token.len() > 128 {
+        return Err(unqualified(
+            "legacy marker exceeds its bounded owner format",
+        ));
+    }
+    let (pid, stamp) = token
+        .trim()
+        .split_once(':')
+        .ok_or_else(|| unqualified("legacy marker has no original PID"))?;
+    let pid = pid
+        .parse::<u32>()
+        .ok()
+        .filter(|pid| *pid != 0)
+        .ok_or_else(|| unqualified("legacy marker PID is invalid"))?;
+    // The old timestamp is format only, never age or ownership evidence.
+    if stamp.is_empty() || !stamp.bytes().all(|value| value.is_ascii_digit()) {
+        return Err(unqualified("legacy marker format is unqualified"));
+    }
+    let observation = crate::process_identity::observe_process(pid);
+    // Observe the current name again: a concurrent legacy publication is not
+    // proof of the owner we just inspected. This does not claim exclusion of
+    // future old-version writers, which never participate in the v2 lock.
+    let current = match fs::symlink_metadata(path) {
+        Ok(current) => current,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err(unqualified("legacy marker name cannot be revalidated")),
+    };
+    if !current.is_file() {
+        return Err(unqualified("legacy marker name changed during inspection"));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if (original.dev(), original.ino()) != (current.dev(), current.ino()) {
+            return Err(unqualified(
+                "legacy marker identity changed during inspection",
+            ));
+        }
+    }
+    match observation {
+        crate::process_identity::ProcessObservation::Missing => Ok(()),
+        crate::process_identity::ProcessObservation::Observed(_) => Err("runtime_host_legacy_startup_owner_live:legacy marker names a currently live PID; retain the marker and inspect the selected-runtime preserve transaction before retrying cold startup".to_string()),
+        crate::process_identity::ProcessObservation::Failed { .. } =>
+            Err(unqualified("original legacy PID observation is unavailable")),
     }
 }
 
@@ -908,59 +989,65 @@ fn acquire_runtime_host_startup_lock(session: &str) -> Result<Option<DaemonStart
         return Ok(None);
     }
     let socket_dir = ensure_socket_dir_exists()?;
-    let path = socket_dir.join(format!(
-        "{}.startup.lock",
-        crate::runtime_host::endpoint_key(session)
-    ));
+    let endpoint = crate::runtime_host::endpoint_key(session);
+    let path = socket_dir.join(format!("{endpoint}.startup.v2.lock"));
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    let file = options.open(&path).map_err(|error| {
+        format!(
+            "runtime_host_startup_guard_unavailable:cannot open the private kernel guard: {error}"
+        )
+    })?;
+    if !file
+        .metadata()
+        .map_err(|error| {
+            format!(
+        "runtime_host_startup_guard_unavailable:cannot inspect the open kernel guard: {error}"
+    )
+        })?
+        .is_file()
+    {
+        return Err(
+            "runtime_host_startup_guard_unavailable:kernel guard is not a regular file".into(),
+        );
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(fs::Permissions::from_mode(0o600))
+            .map_err(|error| {
+                format!(
+            "runtime_host_startup_guard_unavailable:cannot secure the open kernel guard: {error}"
+        )
+            })?;
+    }
     let started = Instant::now();
-    let token = format!(
-        "{}:{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos()
-    );
     loop {
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(mut file) => {
-                if let Err(error) = file.write_all(token.as_bytes()) {
-                    let _ = fs::remove_file(&path);
-                    return Err(format!(
-                        "Failed to write runtime-host startup lock: {error}"
-                    ));
-                }
-                if let Err(error) = set_private_file_permissions(&path) {
-                    let _ = fs::remove_file(&path);
-                    return Err(format!(
-                        "Failed to secure runtime-host startup lock: {error}"
-                    ));
-                }
-                return Ok(Some(DaemonStartupLock { path, token }));
+        match file.try_lock() {
+            Ok(()) => {
+                qualify_legacy_startup_marker(
+                    &socket_dir.join(format!("{endpoint}.startup.lock")),
+                )?;
+                return Ok(Some(DaemonStartupLock { _file: file }));
             }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let stale = fs::metadata(&path)
-                    .and_then(|metadata| metadata.modified())
-                    .ok()
-                    .and_then(|modified| modified.elapsed().ok())
-                    .is_some_and(|elapsed| elapsed > Duration::from_secs(30));
-                if stale {
-                    let _ = fs::remove_file(&path);
-                    continue;
-                }
+            Err(std::fs::TryLockError::WouldBlock) => {
+                // This is an ordinary bounded OS wait, never ownership expiry.
                 if started.elapsed() >= DAEMON_START_TIMEOUT {
-                    return Err("Timed out waiting for runtime-host startup admission".to_string());
+                    return Err("runtime_host_startup_guard_busy:another current startup writer still holds kernel admission; inspect the original startup or selected-runtime preserve transaction; verified warm tasks remain independent".to_string());
                 }
                 thread::sleep(DAEMON_START_POLL_INTERVAL);
             }
-            Err(error) => {
+            Err(std::fs::TryLockError::Error(error)) => {
                 return Err(format!(
-                    "Failed to acquire runtime-host startup lock: {error}"
-                ));
+                    "runtime_host_startup_guard_unavailable:kernel locking failed: {error}"
+                ))
             }
         }
     }
@@ -1023,13 +1110,12 @@ fn existing_daemon_is_ready_with(
     reachable()
 }
 
-pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
-    cache_runtime_lane_config(session, opts);
-    wait_for_runtime_host_publication(session, Duration::from_secs(5));
-    let _startup_lock = acquire_runtime_host_startup_lock(session)?;
-    // Socket connectivity is the sole liveness check — no PID check — so
-    // callers in a different PID namespace (e.g. unshare) can still reuse
-    // an existing daemon they can reach over the socket.
+/// Reuse a reachable compatible owner without joining unrelated startup work.
+/// No compatibility or authentication decision is cached between commands.
+fn reuse_existing_daemon(
+    session: &str,
+    opts: &DaemonOptions,
+) -> Result<Option<DaemonResult>, String> {
     if existing_daemon_is_ready_with(
         crate::runtime_host::admission_enabled(),
         || daemon_ready(session),
@@ -1049,10 +1135,10 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         let version_matches = daemon_version_matches(session);
         let auth_token_available = daemon_auth_token_available(session);
         if unsafe_claim_any_allows_daemon_reuse(auth_token_available) {
-            return Ok(reachable_daemon_result(session));
+            return Ok(Some(reachable_daemon_result(session)));
         }
         if opts.allow_stale_daemon_handoff && auth_token_available {
-            return Ok(reachable_daemon_result(session));
+            return Ok(Some(reachable_daemon_result(session)));
         }
         if opts.allow_stale_daemon_handoff && !auth_token_available {
             return Err(format!(
@@ -1074,8 +1160,51 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                     "Cannot refresh stale daemon session '{session}' implicitly. Run `agent-browser --session {session} handoff prepare`. If prepared=true, attach its candidate session and finalize the old owner only after candidate commit. If prepared=false and browserPresent=false, no browser transfer candidate exists: {browserless_recovery}. Retain profile data and unresolved effect custody."
                 ));
         } else {
-            return Ok(reachable_daemon_result(session));
+            return Ok(Some(reachable_daemon_result(session)));
         }
+    }
+    Ok(None)
+}
+
+pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
+    ensure_daemon_with_latency(session, opts).0
+}
+
+/// Return optional phase evidence separately from the operation result, including
+/// failure paths. Consumers must retain its uncertainty and delivery semantics.
+pub(crate) fn ensure_daemon_with_latency(
+    session: &str,
+    opts: &DaemonOptions,
+) -> (Result<DaemonResult, String>, Vec<Value>) {
+    let readiness = latency::PhaseCapture::start("readiness");
+    let mut samples = Vec::new();
+    let result = ensure_daemon_inner(session, opts, &mut samples);
+    latency::finish(
+        readiness,
+        "ensure runtime owner transport readiness including cold startup when required",
+        &mut samples,
+    );
+    (result, samples)
+}
+
+fn ensure_daemon_inner(
+    session: &str,
+    opts: &DaemonOptions,
+    samples: &mut Vec<Value>,
+) -> Result<DaemonResult, String> {
+    cache_runtime_lane_config(session, opts);
+    wait_for_runtime_host_publication(session, Duration::from_secs(5));
+    if let Some(existing) = reuse_existing_daemon(session, opts)? {
+        return Ok(existing);
+    }
+    // Only new-host demand joins startup admission. Recheck after the lock:
+    // another caller may have published a compatible owner while we waited.
+    let admission = latency::PhaseCapture::start("startup_lock");
+    let lock = acquire_runtime_host_startup_lock(session);
+    latency::finish(admission, "runtime host startup lock acquisition", samples);
+    let _startup_lock = lock?;
+    if let Some(existing) = reuse_existing_daemon(session, opts)? {
+        return Ok(existing);
     }
 
     require_runtime_host_admission_for_launch()?;
@@ -1372,6 +1501,219 @@ fn send_command_once(cmd: &Value, session: &str) -> Result<Response, String> {
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn aged_startup_marker_cannot_reclaim_a_live_owner() {
+        use std::os::unix::fs::MetadataExt;
+
+        let root = std::env::temp_dir().join(format!("ab-live-startup-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let environment = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        environment.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        environment.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let path = root.join("runtime-host.startup.lock");
+        let token = format!("{}:1", std::process::id());
+        let mut owner = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        owner.write_all(token.as_bytes()).unwrap();
+        owner.try_lock().unwrap();
+        // This is deliberately old fixture metadata, not elapsed-time evidence.
+        owner
+            .set_modified(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap();
+        let original = owner.metadata().unwrap();
+
+        let result = acquire_runtime_host_startup_lock("live-owner");
+        let refused = result.is_err();
+        let retained = fs::read_to_string(&path).ok().as_deref() == Some(token.as_str());
+        let same_entry = fs::metadata(&path)
+            .map(|current| (current.dev(), current.ino()) == (original.dev(), original.ino()))
+            .unwrap_or(false);
+        drop(result);
+        drop(owner);
+        fs::remove_dir_all(&root).unwrap();
+
+        assert!(
+            refused && retained && same_entry,
+            "old marker metadata must not authorize reclaiming live startup ownership"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn startup_kernel_admission_releases_without_replacing_its_inode() {
+        use std::os::unix::fs::MetadataExt;
+
+        let root = std::env::temp_dir().join(format!("ab-kernel-startup-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let environment = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        environment.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        environment.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let owner = acquire_runtime_host_startup_lock("first").unwrap().unwrap();
+        let path = root.join("runtime-host.startup.v2.lock");
+        let probe = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .unwrap();
+        let original = probe.metadata().unwrap();
+        for modified in [
+            std::time::SystemTime::UNIX_EPOCH,
+            std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(4_102_444_800),
+        ] {
+            probe.set_modified(modified).unwrap();
+            assert!(matches!(
+                probe.try_lock(),
+                Err(std::fs::TryLockError::WouldBlock)
+            ));
+        }
+        let (finished, completion) = std::sync::mpsc::channel();
+        let contender = thread::spawn(move || {
+            assert!(finished
+                .send(acquire_runtime_host_startup_lock("second"))
+                .is_ok());
+        });
+        // Coordination bounds detect a leaked lease, not elapsed performance.
+        let before_release = completion.recv_timeout(Duration::from_millis(200));
+        let blocked = matches!(
+            &before_release,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        );
+        drop(owner);
+        let after_release = match before_release {
+            Ok(result) => Ok(result),
+            Err(_) => completion.recv_timeout(Duration::from_secs(5)),
+        };
+        let admitted = matches!(&after_release, Ok(Ok(Some(_))));
+        let current = fs::metadata(&path).unwrap();
+        let same_entry = (original.dev(), original.ino()) == (current.dev(), current.ino());
+        drop(after_release);
+        drop(probe);
+        contender.join().unwrap();
+        fs::remove_dir_all(root).unwrap();
+        assert!(
+            blocked && admitted && same_entry,
+            "kernel ownership must outlive metadata changes and release on the same inode"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn absent_legacy_owner_retains_bytes_and_failed_inspection_releases_guard() {
+        let root = std::env::temp_dir().join(format!("ab-legacy-startup-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let environment = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        environment.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        environment.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let path = root.join("runtime-host.startup.lock");
+        let mut legacy = Command::new("/bin/sh")
+            .args([
+                "-c",
+                "printf '%s:1' \"$$\" > \"$1\"",
+                "legacy-startup-owner",
+            ])
+            .arg(&path)
+            .spawn()
+            .unwrap();
+        assert!(legacy.wait().unwrap().success());
+        assert!(matches!(
+            crate::process_identity::observe_process(legacy.id()),
+            crate::process_identity::ProcessObservation::Missing
+        ));
+        let original = fs::read(&path).unwrap();
+        let admission = acquire_runtime_host_startup_lock("after-death")
+            .unwrap()
+            .unwrap();
+        assert_eq!(fs::read(&path).unwrap(), original);
+        drop(admission);
+
+        fs::write(&path, b"unqualified-owner").unwrap();
+        let failed = acquire_runtime_host_startup_lock("unknown-owner");
+        let refused = failed.is_err();
+        drop(failed);
+        let probe = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join("runtime-host.startup.v2.lock"))
+            .unwrap();
+        let released = probe.try_lock().is_ok();
+        let retained = fs::read(&path).unwrap() == b"unqualified-owner";
+        drop(probe);
+        fs::remove_dir_all(root).unwrap();
+        assert!(
+            refused && released && retained,
+            "unqualified legacy evidence must retain its bytes without leaking v2 ownership"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn warm_shared_runtime_reuse_does_not_wait_for_another_lanes_startup_lock() {
+        let root = std::env::temp_dir().join(format!("ab-warm-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+            crate::native::service_lease_mode::PROFILE_LEASE_MODE_ENV,
+        ]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        guard.remove(crate::native::service_lease_mode::PROFILE_LEASE_MODE_ENV);
+        let session = "warm-reuse";
+        let _listener = std::os::unix::net::UnixListener::bind(get_socket_path(session)).unwrap();
+        fs::write(get_version_path(session), env!("CARGO_PKG_VERSION")).unwrap();
+        fs::write(get_pid_path(session), std::process::id().to_string()).unwrap();
+        write_daemon_auth_token(session, "fixture-token").unwrap();
+        fs::write(root.join(format!("{session}.stream")), "{}").unwrap();
+        let startup_lock = root.join("runtime-host.startup.v2.lock");
+        let owner = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&startup_lock)
+            .unwrap();
+        owner.try_lock().unwrap();
+        let (finished, completion) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            let flags = crate::flags::parse_flags(&[]);
+            let result = ensure_daemon(session, &DaemonOptions::from_flags(&flags));
+            finished
+                .send(result.map(|reply| reply.already_running))
+                .unwrap();
+        });
+        // This is a bounded deadlock check, not a performance measurement.
+        let before_release = completion.recv_timeout(Duration::from_secs(1));
+        assert!(matches!(
+            fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&startup_lock)
+                .unwrap()
+                .try_lock(),
+            Err(std::fs::TryLockError::WouldBlock)
+        ));
+        drop(owner);
+        worker.join().unwrap();
+        fs::remove_dir_all(root).unwrap();
+        assert!(
+            matches!(before_release, Ok(Ok(true))),
+            "ready owner reuse waited on unrelated startup admission: {before_release:?}"
+        );
+    }
 
     #[test]
     fn shared_runtime_reuse_does_not_wait_for_legacy_shutdown_grace() {

@@ -1,4 +1,7 @@
 "use client";
+import {dashboardResponseFailureError,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai/react";
@@ -1408,7 +1411,7 @@ export function WorkspaceNavigator() {
         fetchSharedBrowserCapabilityRegistry().catch(() => null),
       ]);
       const json = (await statusResp.json()) as ApiResponse<ServiceStatusData>;
-      if (!json.success) throw new Error(json.error || "Service status failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_workspace_owner_failure",{source:"packages/dashboard/src/components/workspace-navigator.tsx",owningFunction:"WorkspaceNavigator",...{}});
       const contractsJson = contractsResp?.ok
         ? ((await contractsResp.json()) as ApiResponse<ServiceContractsData>)
         : null;
@@ -1423,7 +1426,7 @@ export function WorkspaceNavigator() {
         setServiceError("");
       });
       return json.data ?? null;
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-navigator.tsx");
       setServiceError(err instanceof Error ? err.message : "Service status unavailable");
       return null;
     } finally {
@@ -1472,8 +1475,8 @@ export function WorkspaceNavigator() {
     void fetchWithTimeout(`${serviceBase(activePort)}/profiles/lookup?${params.toString()}`)
       .then(async (response) => {
         const json = (await response.json()) as ApiResponse<ProfileDiscoveryResponse>;
-        if (!json.success || !json.data) {
-          throw new Error(json.error || "Profile discovery failed");
+        if ((!json.success || !json.data) || responseFailureMetadata(json)) {
+          throw dashboardResponseFailureError(json,"dashboard_workspace_owner_failure",{source:"packages/dashboard/src/components/workspace-navigator.tsx",owningFunction:"WorkspaceNavigator",...{}});
         }
         if (!cancelled) setProfileDiscovery(json.data);
       })
@@ -1596,7 +1599,7 @@ export function WorkspaceNavigator() {
       }
       const resp = await fetchWithTimeout(`${serviceBase(activePort)}/access-plan?${params.toString()}`);
       const json = (await resp.json()) as ApiResponse<LauncherAccessPlanPreview>;
-      if (!json.success) throw new Error(json.error || "Access plan failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_workspace_owner_failure",{source:"packages/dashboard/src/components/workspace-navigator.tsx",owningFunction:"WorkspaceNavigator",...{}});
       const plannedAccessPlan = {
         ...(json.data ?? {}),
         comboId: row.id,
@@ -1611,7 +1614,7 @@ export function WorkspaceNavigator() {
       if (posture?.url && (!launcherTargetUrl || launcherTargetUrl === DEFAULT_LAUNCH_TARGET_URL)) {
         setLauncherTargetUrl(posture.url);
       }
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-navigator.tsx");
       setLauncherPlanError(err instanceof Error ? err.message : "Access plan unavailable");
     } finally {
       setLauncherPlanLoadingId(null);
@@ -1670,8 +1673,8 @@ export function WorkspaceNavigator() {
         jobTimeoutMs: 60000,
       });
       const result = await execCommand(args);
-      if (!result.success) {
-        throw new Error(result.stderr || result.stdout || "Workspace launch process failed.");
+      if ((!result.success) || responseFailureMetadata(result)) {
+        throw dashboardResponseFailureError(result,"dashboard_workspace_owner_failure",{source:"packages/dashboard/src/components/workspace-navigator.tsx",owningFunction:"WorkspaceNavigator",...{}});
       }
       const launchedBrowserId = `session:${sessionName}`;
       const identity = extractServiceRequestWorkspaceIdentity({
@@ -1699,7 +1702,7 @@ export function WorkspaceNavigator() {
       } else {
         pushServiceJobsView(identity.jobId);
       }
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-navigator.tsx");
       setLauncherLaunchError(err instanceof Error ? err.message : "Service launch request failed");
     } finally {
       setLauncherLaunchLoadingId(null);
@@ -1811,7 +1814,7 @@ export function WorkspaceNavigator() {
           body: JSON.stringify(request),
         });
         const json = (await resp.json()) as ApiResponse<unknown>;
-        if (!json.success) throw new Error(json.error || "Service add-tab request failed");
+        if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_workspace_owner_failure",{source:"packages/dashboard/src/components/workspace-navigator.tsx",owningFunction:"WorkspaceNavigator",...{}});
         const identity = extractServiceRequestWorkspaceIdentity(json.data);
         const freshStatus = await fetchServiceStatus();
         const browser = identity.browserId
@@ -1836,7 +1839,7 @@ export function WorkspaceNavigator() {
         } else {
           selectNode(node);
         }
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"workspace-navigator.tsx");
         setServiceError(err instanceof Error ? err.message : "Service add-tab request failed");
       } finally {
         setWorkspaceActionLoadingId(null);
@@ -1878,7 +1881,7 @@ export function WorkspaceNavigator() {
         document.body.appendChild(link);
         link.click();
         link.remove();
-      } catch (err) {
+      } catch (err) {void reportDashboardComponentFailure(err,"workspace-navigator.tsx");
         setServiceError(err instanceof Error ? err.message : "Foreign CDP capture failed");
       } finally {
         setWorkspaceActionLoadingId(null);
@@ -1948,9 +1951,9 @@ export function WorkspaceNavigator() {
         }),
       });
       const json = (await resp.json()) as ApiResponse<unknown>;
-      if (!json.success) throw new Error(json.error || "Service browser close request failed");
+      if ((!json.success) || responseFailureMetadata(json)) throw dashboardResponseFailureError(json,"dashboard_workspace_owner_failure",{source:"packages/dashboard/src/components/workspace-navigator.tsx",owningFunction:"WorkspaceNavigator",...{}});
       await fetchServiceStatus();
-    } catch (err) {
+    } catch (err) {void reportDashboardComponentFailure(err,"workspace-navigator.tsx");
       setServiceError(err instanceof Error ? err.message : "Service browser close request failed");
     } finally {
       setWorkspaceActionLoadingId(null);

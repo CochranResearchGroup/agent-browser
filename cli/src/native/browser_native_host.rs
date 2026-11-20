@@ -74,7 +74,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         let native_origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
             .map_err(|_| "browser_native_owner_unconfigured")?;
         let mut http = super::super::remote_view_application_http::RemoteViewApplicationHttp::for_native_command(&native_origin, command)
-        .map_err(|_| "browser_native_owner_configuration_invalid")?;
+        ?;
         let control=http.native_control_status(&json!({"desktopId":assignment.viewing_desktop_id,"expectedGeneration":assignment.viewing_generation,"operation":"status"}))
             ?;
         if control["desktopId"] != observation.desktop_id
@@ -337,19 +337,55 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
     admission: Option<&'a mut NativeAttemptAdmission<'a>>,
     image_admission: Option<&'a mut NativeImageAttemptAdmission<'a>>,
 ) -> Result<Value, String> {
-    let origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
-        .map_err(|_| "browser_native_owner_unconfigured")?;
-    let mut http =
-        super::super::remote_view_application_http::RemoteViewApplicationHttp::for_native_command(
-            &origin, command,
-        )
-        .map_err(|_| "browser_native_owner_configuration_invalid")?;
-    let input_readiness = if command["action"] == "native_ready" {
-        Some(super::super::browser_native_readiness::qualify_readiness(
-            &mut http, assignment,
-        )?)
-    } else {
-        None
+    let initialized = (|| {
+        let origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
+            .map_err(|_| "browser_native_owner_unconfigured")?;
+        let mut http =
+            super::super::remote_view_application_http::RemoteViewApplicationHttp::for_native_command(
+                &origin, command,
+            )
+            ?;
+        let input_readiness = if command["action"] == "native_ready" {
+            Some(super::super::browser_native_readiness::qualify_readiness(
+                &mut http, assignment,
+            )?)
+        } else {
+            None
+        };
+        Ok::<_, String>((http, input_readiness))
+    })();
+    let (http, input_readiness) = match initialized {
+        Ok(initialized) => initialized,
+        Err(error) => {
+            // No Native input request exists yet: config/client construction
+            // cannot have emitted physical events. Route the refusal through
+            // the same opaque boundary instead of guessing from its error code.
+            struct BootstrapRefusal(String);
+            impl super::super::browser_native_control::NativeOwner for BootstrapRefusal {
+                fn image_observation_clock(
+                    &mut self,
+                ) -> Result<super::super::browser_native_image::NativeImageClockReading, String>
+                {
+                    Err(self.0.clone())
+                }
+                fn request(&mut self, _: &str, _: &Value) -> Result<Value, String> {
+                    Err(self.0.clone())
+                }
+                fn record_pre_input_refusal(
+                    &mut self,
+                    command: &Value,
+                    refusal: &super::super::browser_native_control::PreInputRefusal,
+                ) -> Result<(), String> {
+                    super::super::browser_task_operations::record_native_no_effect(command, refusal)
+                }
+            }
+            return super::super::browser_native_control::execute(
+                original,
+                assignment,
+                command,
+                &mut BootstrapRefusal(error),
+            );
+        }
     };
     struct Owner<'a, P> {
         command: &'a Value,
@@ -412,11 +448,28 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
             )
         }
 
+        fn record_pre_input_refusal(
+            &mut self,
+            command: &Value,
+            refusal: &super::super::browser_native_control::PreInputRefusal,
+        ) -> Result<(), String> {
+            super::super::browser_task_operations::record_native_no_effect(command, refusal)
+        }
         fn request(&mut self, operation: &str, body: &Value) -> Result<Value, String> {
             if self.persistence.load_session_state()? != *self.expected {
                 return Err("browser_native_target_changed:refresh task".into());
             }
-            if operation == "input" && self.command.get("imageAttempt").is_some() {
+            self.http.native_operation(operation, body)
+        }
+        fn dispatch_input(
+            &mut self,
+            body: &Value,
+            attempt: &mut super::super::browser_native_control::InputAttempt,
+        ) -> Result<Value, String> {
+            if self.persistence.load_session_state()? != *self.expected {
+                return Err("browser_native_target_changed:refresh task".into());
+            }
+            if self.command.get("imageAttempt").is_some() {
                 self.image_admission
                     .as_deref_mut()
                     .ok_or("browser_native_site_policy_origin_unverified")?(
@@ -426,31 +479,32 @@ fn run_native_owner<'a, P: BrowserSessionPersistence>(
                     return Err("browser_native_target_changed:refresh task".into());
                 }
             }
-            if operation == "input" && self.command.get("nativeAttempt").is_some() {
-                let check = self
-                    .admission
+            if self.command.get("nativeAttempt").is_some() {
+                self.admission
                     .as_deref_mut()
-                    .ok_or("browser_native_site_policy_origin_unverified")?;
-                check(self.command)?;
+                    .ok_or("browser_native_site_policy_origin_unverified")?(
+                    self.command
+                )?;
                 if self.persistence.load_session_state()? != *self.expected {
                     return Err("browser_native_target_changed:refresh task".into());
                 }
             }
-            if operation == "input" && self.command.get("loginTarget").is_some() {
+            if self.command.get("loginTarget").is_some() {
                 super::super::browser_task_operations::native_login_attempt_observation(
                     self.command,
                 )?;
             }
-            if operation == "input" {
-                super::super::browser_native_readiness::require_input_ready(
-                    &mut self.http,
-                    &self.target,
-                )?;
-                if self.persistence.load_session_state()? != *self.expected {
-                    return Err("browser_native_target_changed:refresh task".into());
-                }
+            super::super::browser_native_readiness::require_input_ready(
+                &mut self.http,
+                &self.target,
+            )?;
+            if self.persistence.load_session_state()? != *self.expected {
+                return Err("browser_native_target_changed:refresh task".into());
             }
-            self.http.native_operation(operation, body)
+            // Everything above is local/read-only qualification. Any loss after
+            // this exact point may have emitted physical input and stays uncertain.
+            attempt.mark_attempted();
+            self.http.native_operation("input", body)
         }
     }
     let mut owner = Owner {

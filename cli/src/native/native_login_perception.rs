@@ -1018,6 +1018,16 @@ pub(crate) struct SelectedLoginTarget {
 }
 /// Resolve only a unique opaque target in one owner-retained observation. The
 /// caller/journal still supplies exact task and immutable operation admission.
+pub(crate) fn qualified_time(
+    observation: &Value,
+    now: &crate::connection::stable_time::Stamp,
+) -> Result<u64, String> {
+    let stamp: crate::connection::stable_time::Stamp = serde_json::from_value(observation["binding"]["serviceTime"].clone())
+        .map_err(|_| "browser_native_time_recapture_required: obtain a fresh native_capture with qualified StableTime evidence")?;
+    stamp.fresh_at(now, 10_000)?;
+    Ok(now.latest_ms())
+}
+
 pub(crate) fn select_target(
     observation: &Value,
     target_ref: &str,
@@ -1025,7 +1035,15 @@ pub(crate) fn select_target(
 ) -> Result<SelectedLoginTarget, String> {
     let binding = &observation["binding"];
     let controls = &observation["controls"];
-    let at = binding["observedAtMs"].as_u64().ok_or(INVALID)?;
+    let at = if binding["serviceTime"].is_null() {
+        binding["observedAtMs"].as_u64().ok_or(INVALID)?
+    } else {
+        serde_json::from_value::<crate::connection::stable_time::Stamp>(
+            binding["serviceTime"].clone(),
+        )
+        .map_err(|_| INVALID)?
+        .earliest_ms()
+    };
     if now_ms < at || now_ms - at > 10_000 {
         return Err("browser_native_login_observation_expired".into());
     }
@@ -1254,7 +1272,13 @@ pub(crate) fn curate_observation(value: &Value) -> Result<Value, String> {
         }
         controls.push(clean);
     }
-    let binding = json!({"desktopId":id,"generation":n("generation")?,"windowId":n("windowId")?,"window":window,"region":region,"displayWidth":width,"displayHeight":height,"nativeControlEpoch":n("nativeControlEpoch")?,"observedAtMs":n("observedAtMs")?});
+    let mut binding = json!({"desktopId":id,"generation":n("generation")?,"windowId":n("windowId")?,"window":window,"region":region,"displayWidth":width,"displayHeight":height,"nativeControlEpoch":n("nativeControlEpoch")?,"observedAtMs":n("observedAtMs")?});
+    if !b["serviceTime"].is_null() {
+        let stamp: crate::connection::stable_time::Stamp =
+            serde_json::from_value(b["serviceTime"].clone()).map_err(|_| INVALID)?;
+        stamp.validate()?;
+        binding["serviceTime"] = serde_json::to_value(stamp).map_err(|_| INVALID)?;
+    }
     Ok(
         json!({"binding":binding,"controls":{"schemaVersion":"agent-browser.native-login-controls.v1","profile":PROFILE,"status":c["status"],"controls":controls,"frameSha256":sha,"coordinateSpace":"desktop_physical_pixels","detector":{"id":"native-login-pixel-ocr","version":"1","minimumOcrConfidence":80,"rgbTolerance":12,"maskMinimumInkPercent":70,"maximumPixels":1000000,"ocrEngine":"tesseract","ocrEngineVersion":"5.3.4","ocrLanguage":"eng","ocrModelSha256":"7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"},"inputAuthorized":false,"authenticated":false}}),
     )
@@ -1267,7 +1291,12 @@ pub(crate) fn curate_response(value: &Value) -> Result<Value, String> {
         return Err("browser_native_login_producer_contract_unavailable".into());
     }
     let observation = curate_observation(&value["nativeLoginObservation"])?;
-    Ok(
-        json!({"source":"remote_view_native","binding":observation["binding"],"loginControls":observation["controls"],"nativeLoginObservation":observation,"taskCompleted":false}),
-    )
+    let mut response = json!({"source":"remote_view_native","binding":observation["binding"],"loginControls":observation["controls"],"nativeLoginObservation":observation,"taskCompleted":false});
+    if let Some(error) = value["timeQualificationFailure"]
+        .as_str()
+        .filter(|error| error.starts_with("browser_native_time_") && error.len() <= 512)
+    {
+        response["timeQualificationFailure"] = json!(error);
+    }
+    Ok(response)
 }

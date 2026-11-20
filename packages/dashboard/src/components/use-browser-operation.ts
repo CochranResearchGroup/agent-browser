@@ -1,4 +1,8 @@
 "use client";
+import {inspectDashboardBrowserOperation} from "@/lib/browser-operation-readback";
+import {dashboardConfirmationFailure,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type BrowserOperation = {
@@ -32,19 +36,19 @@ export function useBrowserOperation(open: boolean, scope: Scope, onRefresh: () =
   const inspect = useCallback(async () => {
     const current = ++version.current; setLoading(true); setReadable(false); setHistoryTruncated(false); setError(null);
     try {
-      const response = await fetch("/api/command", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ ...JSON.parse(key), choice: "inspect" }) });
+      const response = await inspectDashboardBrowserOperation(JSON.parse(key));
       const reply = await response.json();
-      if (!response.ok || reply.success !== true || reply.data?.schemaVersion !== "agent-browser.browser-operations.v1" || reply.data.kind !== scope.kind || !Array.isArray(reply.data.operations)) throw new Error();
-      if (scope.sessionId && reply.data.taskId !== scope.sessionId) throw new Error();
-      if (scope.sourceProfileId && reply.data.profileId !== scope.sourceProfileId) throw new Error();
-      if (scope.browserId && reply.data.browserId !== scope.browserId) throw new Error();
+      if ((!response.ok || reply.success !== true || reply.data?.schemaVersion !== "agent-browser.browser-operations.v1" || reply.data.kind !== scope.kind || !Array.isArray(reply.data.operations)) || responseFailureMetadata(reply)) throw dashboardConfirmationFailure(reply,"dashboard_browser_operation_unconfirmed",{source:"packages/dashboard/src/components/use-browser-operation.ts",owningFunction:"useBrowserOperation",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}});
+      if ((scope.sessionId && reply.data.taskId !== scope.sessionId) || responseFailureMetadata(reply)) throw dashboardConfirmationFailure(reply,"dashboard_browser_operation_unconfirmed",{source:"packages/dashboard/src/components/use-browser-operation.ts",owningFunction:"useBrowserOperation",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}});
+      if ((scope.sourceProfileId && reply.data.profileId !== scope.sourceProfileId) || responseFailureMetadata(reply)) throw dashboardConfirmationFailure(reply,"dashboard_browser_operation_unconfirmed",{source:"packages/dashboard/src/components/use-browser-operation.ts",owningFunction:"useBrowserOperation",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}});
+      if ((scope.browserId && reply.data.browserId !== scope.browserId) || responseFailureMetadata(reply)) throw dashboardConfirmationFailure(reply,"dashboard_browser_operation_unconfirmed",{source:"packages/dashboard/src/components/use-browser-operation.ts",owningFunction:"useBrowserOperation",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}});
       const found = reply.data.operations as BrowserOperation[];
-      if (found.some(next => next.schemaVersion !== scope.schemaVersion || !next.operationId)) throw new Error();
+      if ((found.some(next => next.schemaVersion !== scope.schemaVersion || !next.operationId)) || responseFailureMetadata(reply)) throw dashboardConfirmationFailure(reply,"dashboard_browser_operation_unconfirmed",{source:"packages/dashboard/src/components/use-browser-operation.ts",owningFunction:"useBrowserOperation",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}});
       if (current !== version.current) return;
       setReadable(true); setHistoryTruncated(reply.data.historyTruncated === true);
       if (found.length === 1) accept(found[0]);
       else { setCandidates(found); setOperation(null); setUnknown(false); if (!found.length) setOperationId(crypto.randomUUID()); }
-    } catch { if (current === version.current) setError("Existing operations could not be read. Retry inspection before starting another browser operation."); }
+    } catch (error) {void reportDashboardComponentFailure(error,"use-browser-operation.ts"); if (current === version.current) setError("Existing operations could not be read. Retry inspection before starting another browser operation."); }
     finally { if (current === version.current) setLoading(false); }
   }, [accept, key, scope.kind, scope.schemaVersion, scope.sessionId, scope.sourceProfileId, scope.browserId]);
   useEffect(() => { if (open) void inspect(); return () => { version.current += 1; }; }, [open, inspect]);
@@ -58,18 +62,18 @@ export function useBrowserOperation(open: boolean, scope: Scope, onRefresh: () =
       if (reply.success === false && ["mode_operation_affected_tasks_changed", "mode_operation_task_binding_changed", "mode_operation_id_conflict", "mode_operation_profile_busy", "mode_operation_browser_busy", "profile_duplicate_operation_id_conflict", "profile_duplicate_task_profile_conflict", "profile_duplicate_owner_confirmation_required", "profile_duplicate_source_operation_busy", "browser_operation_task_binding_changed", "browser_operation_target_binding_changed"].includes(refusal)) {
         setError(reply.error); return;
       }
-      if (!response.ok) throw new Error();
+      if ((!response.ok) || responseFailureMetadata(reply)) throw dashboardConfirmationFailure(reply,"dashboard_browser_operation_unconfirmed",{source:"packages/dashboard/src/components/use-browser-operation.ts",owningFunction:"run",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}});
       if (reply.data?.schemaVersion === "agent-browser.browser-operations.v1" && reply.data.state === "busy") {
         const active = reply.data.activeOperation as BrowserOperation | undefined;
         if (active?.kind === scope.kind && active.schemaVersion === scope.schemaVersion) accept(active);
         else { setOperation(null); setCandidates([]); setError(`Continue ${active?.kind ?? "the active operation"} ${active?.operationId ?? ""} from its browser menu.`); }
         return;
       }
-      if (reply.success !== true || reply.data?.operationId !== operationId || reply.data?.schemaVersion !== scope.schemaVersion) throw new Error();
+      if ((reply.success !== true || reply.data?.operationId !== operationId || reply.data?.schemaVersion !== scope.schemaVersion) || responseFailureMetadata(reply)) throw dashboardConfirmationFailure(reply,"dashboard_browser_operation_unconfirmed",{source:"packages/dashboard/src/components/use-browser-operation.ts",owningFunction:"run",...{operationId,taskId:scope.sessionId,profileId:scope.sourceProfileId,browserId:scope.browserId}});
       accept(reply.data);
       if (reply.data.phase === "completed" || reply.data.profilePublished === true) await onRefresh().catch(() => setError("The operation is published, but inventory could not refresh. Refresh browsers."));
       return reply.data as BrowserOperation;
-    } catch { setUnknown(true); setError("The result could not be confirmed. Reconcile this operation before selecting another browser action."); }
+    } catch (error) {void reportDashboardComponentFailure(error,"use-browser-operation.ts"); setUnknown(true); setError("The result could not be confirmed. Reconcile this operation before selecting another browser action."); }
     finally { pending.current = false; setBusy(false); }
   };
   return { operation, candidates, operationId, confirmed, setConfirmed, busy, loading, readable, historyTruncated, unknown, error, inspect, run, select: accept, startAnother: () => { setOperationId(crypto.randomUUID()); setOperation(null); setConfirmed(false); setUnknown(false); setError(null); } };

@@ -26,3 +26,5 @@ for (const invalid of [
 assert.equal(nativeBrowserWindows({ ...snapshot, desktops: [{ ...desktop, generation: 8 }] }).windows[0].key,
   `${desktop.desktopId}:8:31`, 'a new desktop generation must not reuse the previous selection');
 console.log('Native window inventory identity, empty-desktop and invalid snapshot checks passed');
+
+assert.throws(()=>nativeBrowserWindows({...snapshot,desktops:[desktop,desktop]}),(error:any)=>error.code==='native_inventory_duplicate'&&error.clientRecovery.coverage==='registered'&&error.clientRecovery.recipe==='dashboardNativeInventoryObservation'&&error.clientRecovery.automaticExecutionAllowed===false);

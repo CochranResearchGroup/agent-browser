@@ -12,12 +12,12 @@ const writeFile=(path,data,options={})=>writeFileOwned(path,data,{...options,mod
 const root=await mkdtemp(join(tmpdir(),'auth-client-installation-'));
 const previous=process.env.CODEX_THREAD_ID;process.env.CODEX_THREAD_ID='synthetic-caller';
 try{
- for(const scenario of ['verified','wrong-producer','unsafe','unsafe-verifier','missing-export']){
+ for(const scenario of ['verified','owner-refusal','wrong-producer','unsafe','unsafe-verifier','missing-export']){
   const candidate=join(root,scenario),marker=join(candidate,'imported');
   await mkdir(join(candidate,'scripts'),{recursive:true});await mkdir(join(candidate,'src'));
   const metadata={product:scenario==='wrong-producer'?'codex-bots':'auth-receipts',contractVersion:1,identity:'synthetic-identity',sourceRevision:'synthetic-source'};
   await writeFile(join(candidate,'scripts/verify-installation-candidate.mjs'),scenario==='unsafe'?`export async function verifyCandidate(){throw Object.assign(Error('invalid'),{code:'auth_sdk_invalid'});}`:`export async function verifyCandidate(){return ${JSON.stringify(metadata)};}`);
-  await writeFile(join(candidate,'src/auth-client.mjs'),`import {writeFile} from 'node:fs/promises';await writeFile(${JSON.stringify(marker)},'imported');${scenario==='missing-export'?'':`export function createHostedAuthClient({threadId}){return {async call(operation,args){if(operation.startsWith('inspect_credential_'))return {...args,state:'owner_review'};if(operation==='denied')throw Object.assign(Error('denied'),{code:'auth_not_authorized'});return {operation,caller:threadId()};}};}`}`);
+  await writeFile(join(candidate,'src/auth-client.mjs'),`import {writeFile} from 'node:fs/promises';await writeFile(${JSON.stringify(marker)},'imported');${scenario==='missing-export'?'':`export function createHostedAuthClient({threadId}){${scenario==='owner-refusal'?`throw Object.assign(Error('Owner context denied'),{code:'auth_not_authorized',failure:{code:'auth_not_authorized',occurrenceId:'auth-owner-refusal-760',recommendedAction:'Inspect existing owner enrollment'}});`:''}return {async call(operation,args){if(operation.startsWith('inspect_credential_'))return {...args,state:'owner_review'};if(operation==='denied')throw Object.assign(Error('denied'),{code:'auth_not_authorized'});return {operation,caller:threadId()};}};}`}`);
   if(scenario==='unsafe-verifier')await chmod(join(candidate,'scripts/verify-installation-candidate.mjs'),0o666);
   if(scenario==='verified'){
    const client=await connectHostedAuthHelper({installationRoot:candidate});assert.equal(client.installation.product,'auth-receipts');
@@ -28,6 +28,8 @@ try{
    assert.equal(progress.category,'credential_selection_required');
    assert.equal(progress.waitingForUser,false);
    assert.equal(progress.nextAction.operation,'inspect_credential_login');
+  }else if(scenario==='owner-refusal'){
+   await assert.rejects(connectHostedAuthHelper({installationRoot:candidate}),error=>error.code==='auth_not_authorized'&&error.failure?.occurrenceId==='auth-owner-refusal-760');
   }else{
    await assert.rejects(connectHostedAuthHelper({installationRoot:candidate}),{code:['unsafe','unsafe-verifier'].includes(scenario)?'auth_sdk_invalid':'auth_sdk_incompatible'});
    if(scenario!=='missing-export')await assert.rejects(access(marker),{code:'ENOENT'},'Refused producer cannot execute SDK');

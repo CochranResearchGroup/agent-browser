@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {readFile,mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {writeTeachingDraftCandidate} from '../packages/client/src/teaching-draft.js';
+import {writeTeachingDraftCandidate,createTeachingAgentSubmissionOwner} from '../packages/client/src/teaching-draft.js';
 import {createPlaybookClient} from '../packages/client/src/playbooks.js';
 const fixture=new URL('./fixtures/teaching-report/',import.meta.url);
 const guide=JSON.parse(await readFile(new URL('draft.json',fixture),'utf8'));
@@ -37,5 +37,15 @@ try {
  assert.match(inspected.teaching.routines[3].outcomes[0].verification,/2026-05-01\/125.00\/5/);
  assert.match(inspected.teaching.routines[3].recovery[0].next,/no blind duplicate export/);
  assert.deepEqual(calls,[{name:'browser_command',args:{taskId:'task',action:'playbook',params:{operation:'inspect_guide',guideId:'daily-sales-draft-v1'}}}]);
+
+ const submissionOwner=createTeachingAgentSubmissionOwner({candidateDirectory:directory,teachingCapacity:{maximumRetainedContexts:2}});
+ const context={taskId:'task',profileId:'profile',profileKind:'named',sitePolicyId:'site',account:'',organization:'',allowedOrigins:['https://fixture.invalid']};
+ const scopes=['a','b','c'].map(suffix=>({taskId:'task',rootGuideId:'capacity-'+suffix,operationId:'capacity-'+suffix,inputSha256:'a'.repeat(64),context}));
+ for(const scope of scopes)assert.equal((await submissionOwner.begin(scope)).status,'created');
+ await assert.rejects(submissionOwner.retainedContexts(),/teaching_agent_history_limit/);
+ assert.throws(()=>submissionOwner.capacity({constructor:1}),/teaching_capacity_policy_invalid/);assert.equal(submissionOwner.capacity().policy.maximumRetainedContexts,2);
+ submissionOwner.capacity({maximumRetainedContexts:3});assert.equal((await submissionOwner.retainedContexts()).length,3);
+ assert.equal((await submissionOwner.read(scopes[0])).status,'pending');assert.equal((await submissionOwner.begin(scopes[0])).status,'pending','extension never re-admits an unresolved original');
+ await assert.rejects(submissionOwner.begin({...scopes[0],inputSha256:'b'.repeat(64)}),/teaching_agent_intent_changed/);
  console.log('Teaching draft public client: exact media lineage, substantive draft, attribution, no overwrite or execution pass');
 } finally {await rm(directory,{recursive:true,force:true});}

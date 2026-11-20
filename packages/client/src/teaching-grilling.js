@@ -1,8 +1,10 @@
+import {withClientResultRecovery} from './client-recovery.js';
+import {withClientErrorRecovery} from './client-recovery.js';
 import {createHash} from 'node:crypto';
 const clone=value=>structuredClone(value);
 const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().filter(key=>value[key]!==undefined&&value[key]!==null).map(key=>[key,canonical(value[key])])):value;
 const digest=value=>createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
-const fail=message=>{throw Error(message);};
+const fail=message=>{throw withClientErrorRecovery(Error(message),{source:"packages/client/src/teaching-grilling.js",owningFunction:"module"},message);};
 const categories=['ambiguity','contradiction','missing_intent','variable_input','outcome','exception','recovery'];
  const answerFields=['answerRef','questionId','questionSha256','answer','actorRef','sourceRef','provenance','taskId','rootGuideId','answeredGuideId','answeredSha256','contentSha256'];
  const checkedAnswer=(value,request)=>{
@@ -16,15 +18,15 @@ const categories=['ambiguity','contradiction','missing_intent','variable_input',
 export async function verifyTeachingClarificationAnswers({view,readOperatorAnswer,readCandidate}){
   return Promise.all((view.guide.teaching.clarification?.answers??[]).map(async saved=>{
    try{
-    if(typeof readOperatorAnswer!=='function')throw Error('unconfigured');
+    if(typeof readOperatorAnswer!=='function')throw withClientErrorRecovery(Error('unconfigured'),{source:"packages/client/src/teaching-grilling.js",owningFunction:"verifyTeachingClarificationAnswers"},'unconfigured');
     const question=view.guide.teaching.clarification.questions.find(question=>question.id===saved.questionId);
     const original=await readCandidate({taskId:saved.taskId,guideId:saved.answeredGuideId});
     const originalQuestion=original.guide.teaching.clarification?.questions.find(question=>question.id===saved.questionId);
-    if(!question||!originalQuestion||digest(originalQuestion)!==saved.questionSha256||digest(question)!==saved.questionSha256||saved.taskId!==view.guide.teaching.sourceTaskId||saved.rootGuideId!==view.rootGuideId||original.rootGuideId!==view.rootGuideId||original.sha256!==saved.answeredSha256||original.contentSha256!==saved.contentSha256)throw Error('answer_binding_changed');
+    if(!question||!originalQuestion||digest(originalQuestion)!==saved.questionSha256||digest(question)!==saved.questionSha256||saved.taskId!==view.guide.teaching.sourceTaskId||saved.rootGuideId!==view.rootGuideId||original.rootGuideId!==view.rootGuideId||original.sha256!==saved.answeredSha256||original.contentSha256!==saved.contentSha256)throw withClientErrorRecovery(Error('answer_binding_changed'),{source:"packages/client/src/teaching-grilling.js",owningFunction:"verifyTeachingClarificationAnswers"},'answer_binding_changed');
     const {answerRef,questionId,questionSha256,taskId,rootGuideId,answeredGuideId,answeredSha256,contentSha256}=saved;
     const request={answerRef,questionId,questionSha256,taskId,rootGuideId,answeredGuideId,answeredSha256,contentSha256};
     const observed=checkedAnswer(await readOperatorAnswer(request),saved);
-    if(digest(observed)!==digest(saved))throw Error('changed');
+    if(digest(observed)!==digest(saved))throw withClientErrorRecovery(Error('changed'),{source:"packages/client/src/teaching-grilling.js",owningFunction:"verifyTeachingClarificationAnswers"},'changed');
     return {...clone(saved),verification:'verified'};
    }catch{return {...clone(saved),verification:'unverified'};}
   }));
@@ -77,7 +79,7 @@ export function createTeachingGrillingClient({review,readOperatorAnswer}){
   },
   async answer(input){
    const view=await base(input);
-   if(view.sha256!==input.expectedSha256)return {status:'conflict',reason:'stale_revision',ordinaryReuseAllowed:false};
+   if(view.sha256!==input.expectedSha256)return withClientResultRecovery({status:'conflict',reason:'stale_revision',ordinaryReuseAllowed:false},{source:"packages/client/src/teaching-grilling.js",owningFunction:"createTeachingGrillingClient.answer"});
    if(typeof readOperatorAnswer!=='function')fail('teaching_operator_answer_authority_unconfigured');
    if((await verifyAnswers(view)).some(answer=>answer.verification!=='verified'))fail('teaching_prior_answers_unverified');
    const question=ready(view).find(question=>question.id===input.questionId);

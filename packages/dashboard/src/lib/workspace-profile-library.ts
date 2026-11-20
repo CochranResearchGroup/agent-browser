@@ -1,3 +1,5 @@
+import { dashboardResponseFailureError, responseFailureMetadata } from "./response-failure.ts";
+
 /** Intended site labels are metadata, never authenticated identity evidence. */
 export type ProfileSiteAssociation = {
     sitePolicyId: string;
@@ -70,8 +72,8 @@ export type ProfileSelection = {
 async function request<T>(body?: unknown): Promise<T> {
     const response = await fetch('/api/dashboard/profile-library', body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const payload = await response.json();
-    if (!response.ok || !payload.success || !payload.data)
-        throw new Error(payload.error || 'Profile library request could not be confirmed.');
+    if (!response.ok || !payload.success || !payload.data || responseFailureMetadata(payload))
+        throw dashboardResponseFailureError(payload, 'profile_library_request_unconfirmed');
     return payload.data as T;
 }
 export function loadProfileLibrary(): Promise<ProfileLibraryData> { return request(); }

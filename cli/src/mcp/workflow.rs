@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::{optional_string_argument, required_string_argument, JsonRpcError};
-use crate::connection::{ensure_daemon, send_command, DaemonOptions};
+use crate::connection::{ensure_daemon_with_latency, send_command, DaemonOptions};
 use crate::native::browser_session_store::BrowserSessionSqliteStore;
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::load_default_service_state_snapshot;
@@ -98,7 +98,7 @@ fn cli(args: &[&str]) -> Result<Value, JsonRpcError> {
     Ok(value)
 }
 
-fn ensure_transport(session: &str) -> Result<(), JsonRpcError> {
+fn ensure_transport(session: &str, samples: &mut Vec<Value>) -> Result<(), JsonRpcError> {
     let flags = crate::flags::parse_flags(&["--session".to_string(), session.to_string()]);
     let proxy = flags.proxy.as_deref().map(crate::parse_proxy);
     let keychain_password = std::env::var("AGENT_BROWSER_KEYCHAIN_PASSWORD").ok();
@@ -116,8 +116,9 @@ fn ensure_transport(session: &str) -> Result<(), JsonRpcError> {
         use_real_keychain,
         ..DaemonOptions::from_flags(&flags)
     };
-    ensure_daemon(session, &options)
-        .map_err(|error| issue(format!("workflow_transport_start_failed:{error}")))?;
+    let (result, readiness) = ensure_daemon_with_latency(session, &options);
+    samples.extend(readiness);
+    result.map_err(|error| issue(format!("workflow_transport_start_failed:{error}")))?;
     Ok(())
 }
 
@@ -129,19 +130,59 @@ pub(super) fn execute(command: Value, session: &str) -> Result<Value, JsonRpcErr
         .and_then(Value::as_str)
         .unwrap_or(session)
         .to_string();
-    let response = super::task_operations::transport(command, |command| {
-        ensure_transport(&session).map_err(|_| "workflow_transport_start_failed".to_string())?;
-        send_command(command, &session)
-    })
-    .map_err(|error| issue(format!("workflow_transport_failed:{error}")))?;
+    let mut readiness = Vec::new();
+    let (result, mut samples) =
+        super::task_operations::transport_with_latency(command, |command| {
+            ensure_transport(&session, &mut readiness).map_err(|error| {
+                let cause = error
+                    .data
+                    .as_ref()
+                    .and_then(|data| data["message"].as_str())
+                    .unwrap_or(error.message);
+                format!("workflow_transport_start_failed:{cause}")
+            })?;
+            send_command(command, &session)
+        });
+    samples.extend(readiness);
+    let mut response = result.map_err(|error| {
+        let mut error = issue(format!("workflow_transport_failed:{error}"));
+        crate::connection::latency::append_response(&mut error.data, samples.clone());
+        error
+    })?;
+    crate::connection::latency::append_response(&mut response.data, samples);
     if !response.success {
-        return Err(issue(
-            response
-                .error
-                .unwrap_or_else(|| "workflow_operation_failed".into()),
-        ));
+        return Err(super::JsonRpcError {
+            code: -32603,
+            message: "Browser operation failed",
+            data: Some(
+                json!({"message":response.error.unwrap_or_else(|| "workflow_operation_failed".into()),
+                "requestId":response.id,"failure":response.failure,
+                "terminalOutcome":response.terminal_outcome,"operation":response.data}),
+            ),
+        });
     }
     Ok(response.data.unwrap_or(Value::Null))
+}
+
+/// Workflow projections retain already sampled response diagnostics without
+/// adding readiness checks or changing the browser operation itself.
+fn retain_phase_diagnostics(mut output: Value, sources: &[(&str, &Value)]) -> Value {
+    let phases: Vec<Value> = sources
+        .iter()
+        .filter_map(|(stage, source)| {
+            source["latencyPhases"]
+                .as_array()
+                .map(|samples| (stage, samples))
+        })
+        .flat_map(|(stage, samples)| {
+            samples.iter().cloned().map(move |mut sample| {
+                sample["workflowStage"] = json!(stage);
+                sample
+            })
+        })
+        .collect();
+    crate::connection::latency::append(&mut output, phases);
+    output
 }
 
 /// Read the existing owner store and OS only; do not create a transport or attach CDP.
@@ -241,10 +282,7 @@ pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {
         uncertain.extend(
             operations
                 .values()
-                .filter(|operation| {
-                    operation.state
-                        != agent_browser_service_model::BrowserTaskOperationState::OwnerAcknowledged
-                })
+                .filter(|operation| !operation.state.is_terminal())
                 .map(|operation| {
                     json!({"source":"task_operation","operationId":operation.request_id,
                 "state":operation.state,"retryAllowed":false})
@@ -294,10 +332,9 @@ pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {
             "humanUse":"unverified"})
         })
         .unwrap_or(json!({"status":"none_recorded"}));
-    let after = store.load_session_state()?;
-    if after != state {
-        return Err("browser_task_briefing_changed_retry_read".into());
-    }
+    // This is a retained snapshot, not an input-admission decision. Peer or
+    // activity publications after the read cannot invalidate its historical
+    // context. Physical actions independently revalidate their exact binding.
     Ok(
         json!({"schemaVersion":"agent-browser.task-briefing.v1","taskId":task_id,
         "profileId":task.profile_id,"browserId":task.browser_id,
@@ -352,9 +389,37 @@ pub(super) fn procedure_metadata_session(task_id: &str) -> Result<String, JsonRp
 
 /// Join opaque task identity to its transport lane without name-based selection.
 pub(super) fn address_task_command(command: &mut Value, task_id: &str) -> Result<String, String> {
-    let path = BrowserSessionSqliteStore::default_sqlite_path()?;
-    let store = BrowserSessionSqliteStore::open_read_only(&path)?;
-    let state = store.load_session_state()?;
+    address_task_command_impl(command, task_id, None)
+}
+
+pub(super) fn address_task_command_with_latency(
+    command: &mut Value,
+    task_id: &str,
+    samples: &mut Vec<Value>,
+) -> Result<String, String> {
+    address_task_command_impl(command, task_id, Some(samples))
+}
+
+fn address_task_command_impl(
+    command: &mut Value,
+    task_id: &str,
+    samples: Option<&mut Vec<Value>>,
+) -> Result<String, String> {
+    let capture = samples
+        .as_ref()
+        .map(|_| crate::connection::latency::PhaseCapture::start("state_read"));
+    let state = (|| {
+        let path = BrowserSessionSqliteStore::default_sqlite_path()?;
+        BrowserSessionSqliteStore::open_read_only(&path)?.load_session_state()
+    })();
+    if let (Some(capture), Some(samples)) = (capture, samples) {
+        crate::connection::latency::finish(
+            capture,
+            "addressed task session snapshot read",
+            samples,
+        );
+    }
+    let state = state?;
     let task = state
         .sessions
         .get(task_id)
@@ -565,13 +630,17 @@ pub(super) fn open(
         let current_url = observed["url"]
             .as_str()
             .ok_or_else(|| issue("browser_task_current_url_missing"))?;
-        json!({"sessionId":session_id,"profileId":current.profile_id,
-            "browserId":current.browser_id,"tabId":tab_id,"url":current_url})
+        retain_phase_diagnostics(
+            json!({"sessionId":session_id,"profileId":current.profile_id,
+            "browserId":current.browser_id,"tabId":tab_id,"url":current_url}),
+            &[("open_current_url", &observed)],
+        )
     } else {
         command["action"] = json!("browser_session_navigate");
         command["sessionId"] = json!(session_id);
         execute(command, transport_session)?
     };
+    data = retain_phase_diagnostics(data, &[("browser_session_open", &opened)]);
     if hosted.is_some() {
         // The read-only projection separates recorded inventory from Native readiness.
         // Initial navigation may have created the first tab since the open read.
@@ -668,8 +737,14 @@ fn open_attachment(arguments: &Value, transport_session: &str) -> Result<Value, 
         "browser_open",
         transport_session,
         json!({}),
-        json!({"taskId":task_id,
+        retain_phase_diagnostics(
+            json!({"taskId":task_id,
         "profileId":profile,"browserId":host["browserId"],"tabId":host["tabId"],"url":observed["url"],"host":host}),
+            &[
+                ("open_attachment", &opened),
+                ("attachment_current_url", &observed),
+            ],
+        ),
         false,
     ))
 }
@@ -752,7 +827,11 @@ pub(super) fn continue_task(
             json!({}),
             json!({"taskId":task_id,"status":"intervention_required","reason":reason,
             "transientPageState":"unavailable_not_reconstructed","briefing":briefing,
-            "nextAction":"inspect_original_operations_and_choose_explicit_recovery_without_replay"}),
+            "nextAction":"inspect_original_operations_and_choose_explicit_recovery_without_replay",
+            "modeEvidence":mode,
+            "recovery":{"tool":"browser_reconnect","arguments":{"taskId":task_id,"operation":"status"},
+                "freshFacadeCommand":{"executable":"agent-browser","args":["--json","mcp","host-reconnect",task_id,"status"]},
+                "resumeCondition":"fresh original process/target proof; original uncertain operations remain non-replayable"}}),
             false,
         )
     };
@@ -769,7 +848,20 @@ pub(super) fn continue_task(
         transport_session,
     ) {
         Ok(observed) => observed,
-        Err(_) => return Ok(intervention("current_target_observation_failed")),
+        Err(mut error) => {
+            // Keep the original failure, operation references and optional phase
+            // timings. A successful wrapper must not hide lost acknowledgement.
+            let data = error.data.get_or_insert_with(|| json!({}));
+            if let Some(data) = data.as_object_mut() {
+                data.insert("taskId".into(), json!(task_id));
+                data.insert("retainedContext".into(), context.clone());
+                data.insert("recovery".into(), json!({"tool":"browser_reconnect",
+                    "arguments":{"taskId":task_id,"operation":"status"},
+                    "freshFacadeCommand":{"executable":"agent-browser","args":["--json","mcp","host-reconnect",task_id,"status"]},
+                    "resume":"reconnect exact task only after inspecting original operations; do not replay uncertain effects"}));
+            }
+            return Err(error);
+        }
     };
     if crate::native::browser_task_operations::retained_context(task_id).map_err(issue)? != context
     {
@@ -784,12 +876,15 @@ pub(super) fn continue_task(
         "browser_continue",
         transport_session,
         json!({}),
-        json!({"taskId":task_id,"profileId":context["profileId"],"browserId":context["browserId"],
+        retain_phase_diagnostics(
+            json!({"taskId":task_id,"profileId":context["profileId"],"browserId":context["browserId"],
             "tabId":context["tabId"],"targetId":context["targetId"],"url":current_url,"urlObserved":url_observed,
             "mode":observed.get("mode").cloned().unwrap_or(json!("automation")),
             "status":if url_observed==true {"observed"}else{"retained_context"},
             "transientPageState":if url_observed==true {"existing_target_observed_not_reconstructed"}else{"unverified"},
             "briefing":current_briefing}),
+            &[("continue_current_url", &observed)],
+        ),
         false,
     ))
 }
@@ -1045,6 +1140,28 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
 #[cfg(test)]
 mod context_tests {
     use super::*;
+
+    #[test]
+    fn workflow_projection_retains_actual_phase_sources_without_creating_samples() {
+        let identity = json!({"taskId":"same-task","url":"about:blank"});
+        assert_eq!(
+            retain_phase_diagnostics(identity.clone(), &[("empty", &json!({}))]),
+            identity
+        );
+        let opened = json!({"latencyPhases":[{"phase":"readiness","scope":"cold-open","status":"measured"}]});
+        let observed = json!({"latencyPhases":[{"phase":"readiness","scope":"retained-url","status":"unavailable"}]});
+        let result =
+            retain_phase_diagnostics(identity, &[("open", &opened), ("observe", &observed)]);
+        assert_eq!(result["taskId"], "same-task");
+        assert_eq!(result["latencyPhases"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            result["latencyPhases"][0]["scope"],
+            opened["latencyPhases"][0]["scope"]
+        );
+        assert_eq!(result["latencyPhases"][1]["status"], "unavailable");
+        assert_eq!(result["latencyPhases"][0]["workflowStage"], "open");
+        assert_eq!(result["latencyPhases"][1]["workflowStage"], "observe");
+    }
 
     #[test]
     fn handoff_interaction_is_explicit_and_defaults_to_human_assistance() {

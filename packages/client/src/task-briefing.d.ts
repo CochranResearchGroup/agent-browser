@@ -34,7 +34,7 @@ export interface TaskOperation {
   processPid: number;
   controlEpoch: number;
   action: string;
-  state: 'pending' | 'owner_acknowledged' | 'uncertain';
+  state: 'pending' | 'owner_acknowledged' | 'uncertain' | 'owner_refused_no_effect';
   createdAtMs: number;
   completedAtMs: number | null;
   evidenceReferences: Record<string, string>;

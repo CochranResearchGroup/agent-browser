@@ -5,6 +5,8 @@ const SYNTHETIC_ROUTE_PREFIXES = ["daemon:", "foreign-cdp:", "service-cdp-snapsh
 
 type WorkspaceRecoveryFailure = {
   code?: string | null;
+  failure?: {code?: string; occurrenceId?: string} | null;
+  data?: unknown;
   error?: string | null;
 };
 
@@ -31,7 +33,9 @@ export function workspaceRecoveryFailureMessage(
   response: WorkspaceRecoveryFailure,
   action: string,
 ): string {
-  const code = response.code?.trim() || "";
+  const nested = response.data && typeof response.data === "object"
+    ? (response.data as {failure?: {code?: string}}).failure : null;
+  const code = (response.failure?.code ?? nested?.code ?? response.code)?.trim() || "";
   const error = response.error?.trim() || "";
   if (!code) return error || `${action} was not accepted`;
   if (!error || error === code || error.startsWith(`${code}:`) || error.includes(`[${code}]`)) {

@@ -1,3 +1,4 @@
+import {withClientErrorRecovery} from './client-recovery.js';
 // Source-free installed composition host. All imports are packaged support assets.
 import {readFile,lstat} from 'node:fs/promises';
 import {join,isAbsolute} from 'node:path';
@@ -8,7 +9,7 @@ import {createWorkspaceSiteGuides} from './workspace-siteguides.js';
 import {createPlaybookClient} from './playbooks.js';
 import {createTeachingEvidenceClient} from './teaching-evidence.js';
 import {createTeachingRecordingReader,createTeachingSpeechAdapter} from './teaching-evidence-http.js';
-const fail=reason=>{throw Error(reason);};
+const fail=reason=>{throw withClientErrorRecovery(Error(reason),{source:"packages/client/src/workspace-siteguides-host.js",owningFunction:"module"},reason);};
 const shutdown=new AbortController();
 // The Rust owner signals the whole owned process group. Keep Node alive long
 // enough for ffmpeg's close/finally cleanup; abort outstanding owner HTTP reads.
@@ -47,7 +48,8 @@ export async function readTeachingReceipt({ledgerDirectory,actor},request,purpos
  return {...saved,...(purpose==='teaching_review'?{decisionId:ref}:{answerRef:ref}),actorRef:'dashboard:'+actor,sourceRef:ref,provenance:'authenticated_operator'};
 }
 /** Existing scoped recording reads plus immutable original agent provenance.
- * Accepted knowledge and auth freshness remain independent from replayability. */
+ * Accepted knowledge and auth freshness remain independent from replayability.
+ * @returns {NonNullable<import('./teaching-review.js').TeachingReviewOptions['sourceStatus']>} */
 export function createTeachingSourceStatus({evidence,readOperation,resolveSelection}) {
  return async request=>{
   const scope={recordingId:request.recordingId,videoSha256:request.videoSha256,sourceTaskId:request.sourceTaskId};
@@ -61,7 +63,7 @@ export function createTeachingSourceStatus({evidence,readOperation,resolveSelect
    await evidence.readVideoSlice(current,{offset:0,length:1});
    const proofs=original.response.guide.teaching.evidence;
    return {...scope,state:'available',gaps:current.gaps,evidence:request.evidence.map(reference=>({id:reference.id,artifact:reference.artifact,sha256:reference.sha256,state:proofs.some(proof=>['id','kind','artifact','startMs','endMs','sha256'].every(key=>proof[key]===reference[key]))?'available':'unchecked',reason:'scoped_read'}))};
-  }catch{return {...scope,state:'unavailable',reason:'source_unavailable'};}
+  }catch(error){return error?.code==='teaching_source_expiry_unqualified'?{...scope,state:'unchecked',reason:error.code,...(error.clientRecovery?{clientRecovery:error.clientRecovery}:{})}:{...scope,state:'unavailable',reason:'source_unavailable',...(error?.failure?{failure:error.failure}:{})};}
  };
 }
 
@@ -93,14 +95,15 @@ export async function runInstalledSiteGuides({configPath,browserExecutable,actor
    if(!activeSource||input.recordingId!==activeSource.selection.recordingId)fail('teaching_source_context_mismatch');
    const reader=createTeachingRecordingReader({url:activeSource.url,accessToken:await secret(activeSource.tokenFile),fetch:ownerFetch});return reader(input);
   },
-  speech:new Proxy({}, {get:(_,method)=>async(...args)=>{
+  speech:/** @type {import('./teaching-evidence.js').TeachingSpeechAdapter} */(new Proxy({}, {get:(_,method)=>async(...args)=>{
    if(!config.speech)fail('teaching_speech_configuration_unavailable');
    const adapter=createTeachingSpeechAdapter({...config.speech,token:await secret(config.speech.tokenFile),fetch:ownerFetch});return adapter[method](...args);
-  }})
+  }}))
  });
  const receipt={ledgerDirectory,actor};
  let originalContext;
  if(request.rootGuideId&&request.taskId){const original=await createTeachingAgentSubmissionOwner({candidateDirectory:config.candidateDirectory}).read({taskId:request.taskId,rootGuideId:request.rootGuideId,operationId:request.rootGuideId});originalContext=original.context;}
+ /** @type {{taskId:string,profileId:string,sitePolicyId:string,allowedOrigins:string[],profileKind?:string,account?:string,organization?:string}|undefined} */
  let context;
  if(['begin_agent','prepare_agent_media','stage_agent_result','stage_draft'].includes(request.operation)) {
   const task=allowedTasks[request.taskId];
@@ -117,7 +120,7 @@ export async function runInstalledSiteGuides({configPath,browserExecutable,actor
  const catalogTaskId=Object.keys(allowedTasks).find(taskId=>allowedTasks[taskId]?.read);
  const submissions=createTeachingAgentSubmissionOwner({candidateDirectory:config.candidateDirectory});
  const sourceStatus=createTeachingSourceStatus({evidence,readOperation:input=>submissions.read(input),resolveSelection:async input=>{activeSource=await source(input);return activeSource.selection;}});
- const owner=createWorkspaceSiteGuides({sourceStatus,isCurrentTask:async taskId=>allowedTasks[taskId]?.currentBrowser===true,catalogTaskId,context,candidateDirectory:config.candidateDirectory,browser:createPlaybookClient(callTool),evidence,
+ const owner=createWorkspaceSiteGuides({sourceStatus,isCurrentTask:async taskId=>allowedTasks[taskId]?.currentBrowser===true,catalogTaskId,context,candidateDirectory:config.candidateDirectory,teachingCapacity:config.teachingCapacity,browser:createPlaybookClient(callTool),evidence,
   listSources:async taskId=>Object.entries(sources).filter(([,value])=>value.selection?.expected?.taskId===taskId).map(([sourceKey,value])=>({sourceKey,recordingId:value.selection.recordingId,narrationSourceId:value.selection.narrationSourceId,state:'not_checked'})),
   authorizeTask:async(taskId,mode)=>allowedTasks[taskId]?.[mode]===true,
   resolveSelection:async input=>{activeSource=await source(input);return activeSource.selection;},

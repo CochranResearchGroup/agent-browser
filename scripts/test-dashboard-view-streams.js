@@ -331,3 +331,20 @@ assert.doesNotMatch(viewport, /aria-label="Refresh workspace viewport"/);
 assert.doesNotMatch(viewport, /aria-label="Reconnect viewer lease"/);
 
 console.log('dashboard view-stream tests passed');
+
+const refusedOwner760 = {code:'browser_task_operation_outcome_uncertain',occurrenceId:'failure-cdp-760',effectState:'effect_uncertain',retryDisposition:'inspect_before_retry'};
+await assert.rejects(fetchForeignCdpScreenshot({port:9222,fetcher:async()=>new Response(JSON.stringify({success:true,data:{ok:false,failure:refusedOwner760}}))}),error=>error.code===refusedOwner760.code&&error.failure.effectState==='effect_uncertain'&&error.occurrenceId===refusedOwner760.occurrenceId);
+
+// Public dashboard adapters preserve refusal identity without browser effects.
+const {requestSiteGuides,confirmTeachingReceipt}=await import('../packages/dashboard/src/lib/workspace-siteguides.ts');
+const {loadManualBrowserCatalog,inspectManualBrowserLaunch}=await import('../packages/dashboard/src/lib/manual-browser-launch.ts');
+const priorFetch760=globalThis.fetch;
+let adapterCalls760=0;
+try {
+  globalThis.fetch=async()=>{adapterCalls760++;return Response.json({success:true,data:{ok:false,failure:refusedOwner760}});};
+  for(const call of [()=>requestSiteGuides({operation:'list'}),()=>confirmTeachingReceipt('original-confirmation',{}),()=>loadManualBrowserCatalog(),()=>inspectManualBrowserLaunch('original-launch')]) {
+    await assert.rejects(call,error=>error.failure===undefined?false:error.failure.occurrenceId===refusedOwner760.occurrenceId&&error.occurrenceId===refusedOwner760.occurrenceId);
+  }
+  assert.equal(adapterCalls760,4,'refused adapters perform one request each, never retry');
+} finally {globalThis.fetch=priorFetch760;}
+assert.equal(workspaceRecoveryFailureMessage({data:{failure:{code:'browser_task_operation_outcome_uncertain'}}},'Continue'),'browser_task_operation_outcome_uncertain');

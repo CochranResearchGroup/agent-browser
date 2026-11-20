@@ -944,3 +944,49 @@ async fn run_retained_handle_recovery_fixture(target_present: bool) {
     drop(state);
     std::fs::remove_dir_all(home).unwrap();
 }
+
+#[test]
+fn failed_evaluate_phase_diagnostics_preserve_error_and_inactive_envelope() {
+    let original = error_response("eval-request", "Evaluation error: synthetic failure");
+    let mut inactive = original.clone();
+    attach_action_latency(&mut inactive, Vec::new());
+    assert_eq!(inactive, original);
+
+    let sample = serde_json::json!({"phase":"cdp","scope":"Runtime.evaluate CDP command round trip","status":"unavailable","reason":"stable_time_client_configuration_missing","guestClockSubstituted":false});
+    let mut sampled = original.clone();
+    attach_action_latency(&mut sampled, vec![sample.clone()]);
+    assert_eq!(sampled["success"], false);
+    assert_eq!(sampled["id"], original["id"]);
+    assert_eq!(sampled["error"], original["error"]);
+    assert_eq!(
+        sampled["data"]["latencyPhases"],
+        serde_json::json!([sample])
+    );
+    sampled["data"]
+        .as_object_mut()
+        .unwrap()
+        .remove("latencyPhases");
+    if original.get("data").is_none() {
+        sampled.as_object_mut().unwrap().remove("data");
+    }
+    assert_eq!(sampled, original);
+}
+
+#[tokio::test]
+async fn managed_target_admission_failures_keep_verified_no_effect_recourse() {
+    for command in [
+        json!({"id":"selector-refusal","action":"evaluate","sessionId":"task","targetId":"other"}),
+        json!({"id":"missing-target-refusal","action":"evaluate","sessionId":"task"}),
+    ] {
+        let mut state = DaemonState::new();
+        let response =
+            execute_managed_target_command(&command, &mut state, "retained-target").await;
+        assert_eq!(response["success"], false);
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert_eq!(
+            response["failure"]["recoveryRegistry"]["coverage"],
+            "registered"
+        );
+        assert!(response["failure"]["occurrenceId"].is_string());
+    }
+}

@@ -289,6 +289,7 @@ pub(crate) mod action_commands {
         cmd: &Value,
         state: &mut DaemonState,
         explicit_service_handle: bool,
+        latency_samples: &mut Vec<Value>,
     ) -> Result<Value, String> {
         if explicit_service_handle {
             return handle_bounded_service_evaluate(cmd, state).await;
@@ -309,13 +310,12 @@ pub(crate) mod action_commands {
             .get("script")
             .and_then(Value::as_str)
             .ok_or("Missing 'script' parameter")?;
-        let result = if let Some(timeout_ms) = command_evaluation_timeout_ms(cmd) {
-            manager.evaluate_with_timeout(script, timeout_ms).await?
-        } else {
-            manager.evaluate(script, None).await?
-        };
+        let timeout_ms = command_evaluation_timeout_ms(cmd).unwrap_or(manager.default_timeout_ms());
+        let result = manager
+            .evaluate_with_latency(script, timeout_ms, latency_samples)
+            .await;
         let url = manager.active_page_url().unwrap_or_default().to_string();
-        Ok(json!({ "result": result, "origin": url }))
+        result.map(|result| json!({ "result": result, "origin": url }))
     }
 }
 pub(crate) use action_commands::*;

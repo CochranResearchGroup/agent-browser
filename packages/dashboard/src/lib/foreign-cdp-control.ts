@@ -1,3 +1,5 @@
+import { dashboardResponseFailureError, dashboardLocalFailure, responseFailureMetadata } from "./response-failure.ts";
+
 export type ForeignCdpScreenshotFormat = "jpeg" | "png";
 
 export type ForeignCdpScreenshot = {
@@ -85,13 +87,13 @@ export async function fetchForeignCdpScreenshot({
     url?: string | null;
     error?: string | null;
   };
-  if (!response.ok || payload.success === false) {
-    throw new Error(payload.error || `Foreign CDP capture returned HTTP ${response.status}.`);
+  if (!response.ok || responseFailureMetadata(payload)) {
+    throw foreignCdpFailure(payload, `Foreign CDP capture returned HTTP ${response.status}.`);
   }
   const resolvedFormat: ForeignCdpScreenshotFormat = payload.format === "jpeg" ? "jpeg" : format;
   const dataUrl = payload.dataUrl
     || (payload.data ? `data:image/${resolvedFormat};base64,${payload.data}` : null);
-  if (!dataUrl) throw new Error("Foreign CDP capture did not include image data.");
+  if (!dataUrl) throw dashboardLocalFailure(new Error("Foreign CDP capture did not include image data."),"foreign_cdp_capture_invalid","packages/dashboard/src/lib/foreign-cdp-control.ts","fetchForeignCdpScreenshot");
   return {
     dataUrl,
     format: resolvedFormat,
@@ -115,8 +117,8 @@ async function foreignCdpJsonRequest(
       : init.headers,
   });
   const payload = await response.json() as Record<string, unknown>;
-  if (!response.ok || payload.success === false) {
-    throw new Error(
+  if (!response.ok || responseFailureMetadata(payload)) {
+    throw foreignCdpFailure(payload,
       typeof payload.error === "string"
         ? payload.error
         : `Foreign CDP control returned HTTP ${response.status}.`,
@@ -217,4 +219,11 @@ export async function dispatchForeignCdpInput({
     { method: "POST", body: JSON.stringify({ port, targetId, grantId, input }) },
     fetcher,
   );
+}
+
+/** Preserve owner recourse on errors exposed by dashboard control adapters. */
+function foreignCdpFailure(payload: unknown, fallback: string): Error {
+  const error = dashboardResponseFailureError(payload, "foreign_cdp_request_failed");
+  if (!responseFailureMetadata(payload)) error.message = fallback;
+  return error;
 }

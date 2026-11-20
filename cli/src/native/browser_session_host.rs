@@ -577,6 +577,22 @@ fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
 }
 
 pub(crate) trait BrowserSessionPersistence {
+    fn reconnect_request_limit(&self, _task: &str) -> Result<usize, String> {
+        Ok(
+            super::browser_session_store::task_operation_archive::CapacityPolicy::default()
+                .maximum_reconnect_requests,
+        )
+    }
+
+    /// Non-SQL test adapters retain explicit model defaults; the production SQL
+    /// owner reads live policy on each retention/popup admission only.
+    fn session_admission_limits(
+        &self,
+        _task: &str,
+    ) -> Result<(usize, usize, &'static str), String> {
+        Ok((4096, 64, "backend_default"))
+    }
+
     fn runtime_database_path(&self) -> Result<PathBuf, String> {
         Err("browser_runtime_database_path_unavailable".into())
     }
@@ -650,6 +666,14 @@ pub(crate) trait BrowserSessionPersistence {
 }
 
 impl BrowserSessionPersistence for BrowserSessionSqliteStore {
+    fn reconnect_request_limit(&self, task: &str) -> Result<usize, String> {
+        BrowserSessionSqliteStore::reconnect_request_limit(self, task)
+    }
+
+    fn session_admission_limits(&self, task: &str) -> Result<(usize, usize, &'static str), String> {
+        BrowserSessionSqliteStore::session_admission_limits(self, task)
+    }
+
     fn runtime_database_path(&self) -> Result<PathBuf, String> {
         self.database_path()
     }
@@ -697,7 +721,8 @@ impl BrowserSessionPersistence for BrowserSessionSqliteStore {
                         agent_browser_service_model::BrowserIdleRetirementStoreError::ActivityActive => {
                             "browser_session_idle_publication_activity_active"
                         }
-                        agent_browser_service_model::BrowserIdleRetirementStoreError::Conflict => {
+                        agent_browser_service_model::BrowserIdleRetirementStoreError::Conflict
+                        | agent_browser_service_model::BrowserIdleRetirementStoreError::ActivityAdmission(_) => {
                             "browser_session_idle_publication_conflict"
                         }
                     }
@@ -886,7 +911,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         {
             // Reuse only the owner reaper's established idle/expiry eligibility.
             // Existing task/profile continuation is never reclaimed here.
-            self.reap(request.activity_at_ms)?;
+            self.defer_unqualified_expiry();
         }
         let result = match self.manager()?.open(request.clone()) {
             Err(error)
@@ -1144,7 +1169,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     fn native_handoff_target(
         &self,
         id: &str,
-        now_ms: u64,
+        _now_ms: u64,
     ) -> Result<
         (
             agent_browser_service_model::RemoteViewTabHandoffTarget,
@@ -1155,8 +1180,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         self.state
             .remote_view_tab_handoffs
             .get(id)
-            .ok_or("remote_view_tab_handoff_missing")?
-            .check_link_at(now_ms)?;
+            .ok_or("remote_view_tab_handoff_missing")
+            .map_err(str::to_owned)
+            .and_then(super::browser_session_remote_view::check_handoff_time)?;
         let target = agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, id)?;
         let digest = agent_browser_service_model::remote_view_native_target_digest(id, &target)?;
         Ok((target, digest))
@@ -1327,11 +1353,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .first_human_use_at_ms
             .get_or_insert(used_at_ms);
         let metadata = self.state.tab_metadata.get(&target.tab.id).cloned();
-        let resume = agent_browser_service_model::remote_view_handoff_resume_intent(
-            &self.state,
-            id,
-            now_ms,
-        )?;
+        let resume =
+            super::browser_session_remote_view::handoff_resume_intent(&self.state, id, false)?;
         for link in self
             .state
             .remote_view_tab_handoffs
@@ -1402,6 +1425,24 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }
     }
 
+    // Persisted idle, tab and retention timestamps were minted from the guest
+    // clock. A current qualified UTC observation cannot qualify those starts.
+    // Keep scoped inspection and explicit close available, but never destroy
+    // browser/profile custody solely because that legacy clock jumped forward.
+    fn defer_unqualified_expiry(&self) -> ReapBrowserSessionsResult {
+        ReapBrowserSessionsResult {
+            deferred_browser_errors: self.state.browsers.keys().map(|id| (
+                id.clone(),
+                "browser_session_expiry_start_unqualified: automatic expiry deferred; inspect the scoped session and use explicit close only under current authority".to_string(),
+            )).collect(),
+            ..ReapBrowserSessionsResult::default()
+        }
+    }
+
+    // Explicit injected time remains available to deterministic owner tests;
+    // production entrypoints use defer_unqualified_expiry until starts carry
+    // supported time evidence. This function is not a public clock override.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
         // Borrowed targets have no Native operation journal to recover. Publish
         // their qualified outcomes before unrelated Native/viewer/profile work.
@@ -1425,7 +1466,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .remote_view_tab_handoffs
             .values()
             .filter(|link| {
-                link.check_link_at(now_ms).is_ok()
+                super::browser_session_remote_view::check_handoff_time(link).is_ok()
                     && (self.state.pending_human_tabs.contains_key(&link.tab_id)
                         || link
                             .native_observation
@@ -1611,7 +1652,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
 
     pub(crate) fn reap_current(&mut self) -> Result<ReapBrowserSessionsResult, String> {
         self.refresh_before_ordinary_command()?;
-        self.reap(current_unix_ms())
+        Ok(self.defer_unqualified_expiry())
     }
 
     pub(crate) fn handle_command(&mut self, command: &serde_json::Value) -> serde_json::Value
@@ -1636,7 +1677,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         };
         let admission = match admission {
             Ok(value) => value,
-            Err(error) => return serde_json::json!({"id":id,"success":false,"error":error}),
+            Err(error) => {
+                let mut response = serde_json::json!({"id":id,"success":false,"error":error});
+                super::service_failure::attach_public_failure(
+                    &mut response,
+                    command,
+                    "managed_owner_admission",
+                );
+                return response;
+            }
         };
         let mut result = self.handle_command_result(command);
         if let Some(admission) = admission {
@@ -1644,10 +1693,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 result = Err(error);
             }
         }
-        match result {
+        let mut response = match result {
             Ok(data) => serde_json::json!({ "id": id, "success": true, "data": data }),
             Err(error) => serde_json::json!({ "id": id, "success": false, "error": error }),
-        }
+        };
+        super::service_failure::attach_public_failure(&mut response, command, "managed_owner");
+        response
     }
 
     fn handle_command_result(
@@ -1716,6 +1767,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             return Ok(result);
         }
         if action == "browser_session_reconnect" {
+            let task = command["sessionId"]
+                .as_str()
+                .ok_or("browser_reconnect_session_id_required")?;
+            // Metadata-only inspection must remain available if capacity policy
+            // cannot currently be read or validated. Status never admits a request.
+            let request_limit = if command["operation"] == "status" {
+                0
+            } else {
+                self.persistence.reconnect_request_limit(task)?
+            };
             let persistence = &mut self.persistence;
             let persisted = &mut self.persisted_state;
             let result = super::browser_host_reconnect::execute(
@@ -1723,6 +1784,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 &self.catalog,
                 &mut self.effects,
                 command,
+                request_limit,
                 &mut |expected, next, effects| {
                     let intent = effects.pending_launch_intent();
                     let retirement = effects.pending_idle_retirement_ids();
@@ -1776,6 +1838,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     .get(handoff_id)
                     .ok_or("remote_view_tab_handoff_missing")?;
                 if command["handoffOperation"] == "inspect" {
+                    let validity = super::browser_session_remote_view::handoff_time(link);
+                    let expired = validity
+                        .as_ref()
+                        .err()
+                        .is_some_and(|error| error == "remote_view_handoff_expired");
+                    let validity_error = validity.as_ref().err().cloned();
+                    let time_recovery = validity_error.as_ref().map(|error| {
+                        super::browser_session_remote_view::handoff_time_recovery(error, handoff_id)
+                    });
                     let tab_lifetime = self.state.tab_lifetimes.get(&link.tab_id).or_else(|| {
                         link.resume
                             .as_ref()
@@ -1794,10 +1865,31 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             "awaitingUse":true,"requestedAtMs":hold.requested_at_ms,"expiresAtMs":hold.expires_at_ms,
                             "retained":hold.expires_at_ms.is_none_or(|deadline| now_ms < deadline),
                         })),
-                        "expired":link.check_link_at(now_ms).is_err(),
-                        "status":if link.check_link_at(now_ms).is_err() {"expired"} else {"active"}}));
+                        "expired":if validity_error.is_none() || expired {serde_json::json!(expired)} else {serde_json::Value::Null},
+                        "retentionTime":link.retention_time,"timeError":validity_error,"timeRecovery":time_recovery,
+                        "status":if expired {"expired"} else if validity.is_err() {"time_unqualified"} else {"active"}}));
                 }
-                link.check_link_at(now_ms)?;
+                if command["handoffOperation"] == "set_link_lifetime" {
+                    let ttl = command["ttlMs"]
+                        .as_u64()
+                        .ok_or("remote_view_handoff_ttl_invalid")?;
+                    let origin = if ttl == 0 {
+                        None
+                    } else {
+                        Some(crate::connection::stable_time::authority_now()?.service_origin()?)
+                    };
+                    let link = self
+                        .state
+                        .remote_view_tab_handoffs
+                        .get_mut(handoff_id)
+                        .ok_or("remote_view_tab_handoff_missing")?;
+                    link.renew_link_lifetime(origin, ttl)?;
+                    let response = serde_json::json!({"handoffId":handoff_id,"handoffUrl":format!("/remote-view/{handoff_id}"),
+                        "status":"link_lifetime_updated","createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,"retentionTime":link.retention_time});
+                    self.commit_state()?;
+                    return Ok(response);
+                }
+                let retention_now = super::browser_session_remote_view::handoff_time(link)?;
                 if command["handoffOperation"] == "prepare_human" {
                     let ttl = command["pendingHumanRetentionMs"]
                         .as_u64()
@@ -1896,12 +1988,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         inactivity_ms: (ttl != 0).then_some(ttl),
                         pressure_inactivity_ms,
                     };
-                    let mut intent =
-                        agent_browser_service_model::remote_view_handoff_resume_intent(
-                            &self.state,
-                            handoff_id,
-                            now_ms,
-                        )?;
+                    let mut intent = super::browser_session_remote_view::handoff_resume_intent(
+                        &self.state,
+                        handoff_id,
+                        false,
+                    )?;
                     intent.tab_lifetime = Some(lifetime.clone());
                     self.state
                         .tab_lifetimes
@@ -1919,11 +2010,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         "tabId":target.tab.id,"status":"tab_lifetime_updated",
                         "tabLifetime":lifetime}));
                 }
-                if command["handoffOperation"] == "extend"
-                    || command["handoffOperation"] == "set_link_lifetime"
-                {
-                    // Link lifetime management does not require a live target
-                    // and must not recreate one as a side effect.
+                if command["handoffOperation"] == "extend" {
+                    // Extension requires current validity. Explicit renewal above
+                    // is the separate same-link repair for legacy/expired timing.
                     let ttl = command["ttlMs"]
                         .as_u64()
                         .ok_or("remote_view_handoff_ttl_invalid")?;
@@ -1932,13 +2021,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         .remote_view_tab_handoffs
                         .get_mut(handoff_id)
                         .ok_or("remote_view_tab_handoff_missing")?;
-                    let status = if command["handoffOperation"] == "extend" {
-                        link.extend_link_retention(now_ms, ttl)?;
-                        "link_extended"
-                    } else {
-                        link.set_link_lifetime(now_ms, ttl)?;
-                        "link_lifetime_updated"
-                    };
+                    if link.expires_at_ms.is_some() || link.created_at_ms.is_none() {
+                        let origin = match retention_now {
+                            Some(origin) => origin,
+                            None => {
+                                crate::connection::stable_time::authority_now()?.service_origin()?
+                            }
+                        };
+                        link.extend_qualified_retention(origin, ttl)?;
+                    }
+                    let status = "link_extended";
                     let response = serde_json::json!({"handoffId":handoff_id,
                         "handoffUrl":format!("/remote-view/{handoff_id}"),
                         "status":status,"createdAtMs":link.created_at_ms,
@@ -2134,7 +2226,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 >(value)
                 .map_err(|_| "browser_retention_request_invalid")?;
                 // Retention uses owner time, never caller-supplied activity timestamps.
-                let receipt = self.manager()?.retain_session(request, current_unix_ms())?;
+                let (retention, popups, source) = self
+                    .persistence
+                    .session_admission_limits(&request.session_id)?;
+                let receipt = self
+                    .manager()?
+                    .with_admission_limits(retention, popups, source)?
+                    .retain_session(request, current_unix_ms())?;
                 self.commit_state()?;
                 serde_json::to_value(receipt)
                     .map_err(|_| "browser_retention_receipt_invalid".into())
@@ -2273,7 +2371,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 }))
             }
             "browser_session_reap" => {
-                let reaped = self.reap(now_ms)?;
+                let reaped = self.defer_unqualified_expiry();
                 Ok(serde_json::json!({
                     "expiredSessionIds": reaped.expired_session_ids,
                     "expiredTabIds": reaped.expired_tab_ids,
@@ -2281,6 +2379,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "closedBrowserIds": reaped.closed_browser_ids,
                     "deletedDisposableProfileIds": reaped.deleted_disposable_profile_ids,
                     "deferredBrowserErrors": reaped.deferred_browser_errors,
+                    "maintenanceEvidence": {
+                        "state": "unqualified_legacy_start",
+                        "automaticExpiry": "deferred",
+                        "automaticProfileDeletion": "deferred",
+                        "inspectionAvailable": true,
+                        "explicitCloseRequiresCurrentAuthority": true
+                    },
                 }))
             }
             "browser_session_status" => {
@@ -2955,16 +3060,16 @@ where
             .is_some_and(|(saved, pending)| saved.request_id == pending.request_id);
         let explicit = choice.is_some() || pending_reopen;
         let intent = if explicit {
-            agent_browser_service_model::remote_view_handoff_reopen_intent(
+            super::browser_session_remote_view::handoff_resume_intent(
                 &self.state,
                 handoff_id,
-                now_ms,
+                true,
             )?
         } else {
-            agent_browser_service_model::remote_view_handoff_resume_intent(
+            super::browser_session_remote_view::handoff_resume_intent(
                 &self.state,
                 handoff_id,
-                now_ms,
+                false,
             )?
         };
         if let Some(requested) = choice {
@@ -3082,11 +3187,8 @@ where
             &self.persisted_state,
             id,
         )?;
-        let intent = agent_browser_service_model::remote_view_handoff_resume_intent(
-            &self.state,
-            id,
-            now_ms,
-        )?;
+        let intent =
+            super::browser_session_remote_view::handoff_resume_intent(&self.state, id, false)?;
         if intent.url.is_none() {
             return Err("browser_handoff_reconstruction_destination_unavailable".into());
         }
@@ -3185,11 +3287,7 @@ where
             .state
             .remote_view_tab_handoffs
             .values()
-            .find(|link| {
-                link.session_id == session.id
-                    && link.tab_id == tab.id
-                    && link.check_link_at(now_ms).is_ok()
-            })
+            .find(|link| link.session_id == session.id && link.tab_id == tab.id)
             .map(|link| link.id.clone())
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         let mut link = agent_browser_service_model::retain_remote_view_tab_handoff_at(
@@ -3203,7 +3301,10 @@ where
             .get("handoffTtlMs")
             .and_then(serde_json::Value::as_u64)
         {
-            link.extend_link_retention(now_ms, ttl)?;
+            if link.expires_at_ms.is_some() || link.created_at_ms.is_none() {
+                let origin = crate::connection::stable_time::authority_now()?.service_origin()?;
+                link.extend_qualified_retention(origin, ttl)?;
+            }
             self.state
                 .remote_view_tab_handoffs
                 .insert(id.clone(), link.clone());
@@ -3502,11 +3603,7 @@ where
                 .state
                 .remote_view_tab_handoffs
                 .values()
-                .find(|record| {
-                    record.session_id == session.id
-                        && record.tab_id == tab.id
-                        && record.check_link_at(now_ms).is_ok()
-                })
+                .find(|record| record.session_id == session.id && record.tab_id == tab.id)
                 .map(|record| record.id.clone())
                 .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
             let mut record = agent_browser_service_model::retain_remote_view_tab_handoff_at(
@@ -3532,7 +3629,15 @@ where
                 }
                 None => self.state.retention_policy.durable_handoff_ttl_ms,
             };
-            record.initialize_profile_retention(now_ms, ttl)?;
+            if record.created_at_ms.is_none() {
+                if let Some(ttl) = ttl {
+                    let origin =
+                        crate::connection::stable_time::authority_now()?.service_origin()?;
+                    record.renew_link_lifetime(Some(origin), ttl)?;
+                } else {
+                    record.initialize_profile_retention(now_ms, None)?;
+                }
+            }
             record.resume = Some(
                 agent_browser_service_model::RemoteViewTabHandoffResumeIntent {
                     tab_lifetime: self.state.tab_lifetimes.get(&tab.id).cloned(),
@@ -3586,8 +3691,25 @@ where
                     ))
                 })
                 .collect::<Result<Vec<_>, String>>()?;
-            self.manager()?
-                .observe_child_tabs(&session.id, &children, now_ms)?;
+            let (retention, limit, source) =
+                self.persistence.session_admission_limits(&session.id)?;
+            let (admitted, deferred) = {
+                let mut manager = self
+                    .manager()?
+                    .with_admission_limits(retention, limit, source)?;
+                let admitted = manager
+                    .observe_child_tabs(&session.id, &children, now_ms)?
+                    .len();
+                (admitted, manager.deferred_child_tab_count())
+            };
+            let admission = serde_json::json!({"admittedCount":admitted,"deferredEligibleTargetCount":deferred,
+                "limit":limit,"policySource":source,"state":if deferred == 0 {"complete"}else{"deferred"},
+                "continuation":"Observe the same task again or increase maximumPopupAdmissions through task_operation capacity; no original input replay"});
+            if response["data"].is_object() {
+                response["data"]["popupAdmission"] = admission;
+            } else {
+                response["popupAdmission"] = admission;
+            }
             if self.state != self.persisted_state {
                 self.commit_state()?;
             }
@@ -3710,13 +3832,9 @@ where
                 self.state
                     .remote_view_tab_handoffs
                     .get(handoff)
-                    .ok_or("remote_view_tab_handoff_missing")?
-                    .check_link_at(
-                        command
-                            .get("activityAtMs")
-                            .and_then(serde_json::Value::as_u64)
-                            .unwrap_or_else(current_unix_ms),
-                    )?;
+                    .ok_or("remote_view_tab_handoff_missing")
+                    .map_err(str::to_owned)
+                    .and_then(super::browser_session_remote_view::check_handoff_time)?;
                 agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff)
                     .map_err(|_| "browser_session_tab_request_target_closed")?;
             } else {
@@ -3906,7 +4024,7 @@ where
                 {
                     return Err("remote_view_handoff_recreation_conflict".into());
                 }
-                link.check_link_at(now_ms)?;
+                super::browser_session_remote_view::check_handoff_time(&link)?;
                 link.session_id = response["browserSession"]["sessionId"]
                     .as_str()
                     .ok_or("remote_view_handoff_recreation_identity_missing")?
@@ -5361,7 +5479,7 @@ mod tests {
     }
 
     #[test]
-    fn startup_reaper_loads_retained_sessions_without_a_client_request() {
+    fn startup_reaper_retains_unqualified_legacy_sessions_without_a_client_request() {
         let directory = TempDirectory::new();
         let legacy_path = directory.0.join("state.json");
         fs::write(&legacy_path, serde_json::json!({"profiles":{"work":{"id":"work","name":"Work","userDataDir":directory.0.join("work"),"profileClass":"durable_named"}}}).to_string()).unwrap();
@@ -5409,10 +5527,16 @@ mod tests {
         let host = restarted
             .as_ref()
             .expect("restart reaping must load retained ownership without a client request");
-        assert!(host
+        assert!(!host
             .state
             .idle_closed_browsers
             .contains_key(&opened.browser_id));
+        assert!(host.state.sessions.contains_key(&opened.session_id));
+        let deferred = host.defer_unqualified_expiry();
+        assert!(deferred.closed_browser_ids.is_empty());
+        assert!(deferred.deleted_disposable_profile_ids.is_empty());
+        assert!(deferred.deferred_browser_errors[&opened.browser_id]
+            .starts_with("browser_session_expiry_start_unqualified:"));
         assert!(
             agent_browser_service_model::resolve_remote_view_tab_handoff(
                 &host.state,

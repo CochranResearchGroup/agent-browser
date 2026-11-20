@@ -1,4 +1,8 @@
 "use client";
+import {inspectDashboardBrowserOperation} from "@/lib/browser-operation-readback";
+import {dashboardResponseFailureError,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type BrowserBuildChoice = { buildId: string; expectedSha256: string; executablePath?: string };
@@ -31,12 +35,12 @@ export function BrowserBuildPicker({ profileId, onChoose, onInspect }: {
     setBusy(true); setError(null); setInspection(null); setSelected("");
     callbacks.current.onChoose(null); callbacks.current.onInspect?.(null);
     try {
-      const response = await fetch("/api/command", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ action: "browser_session_build_select", choice: "inspect", profileId, ...(executablePath ? { executablePath } : {}) }) });
+      const response = await inspectDashboardBrowserOperation({action:"browser_session_build_select",profileId,...(executablePath?{executablePath}:{})});
       const reply = await response.json();
-      if (!response.ok || reply.success !== true || reply.data?.schemaVersion !== "agent-browser.build-selection.v1" || reply.data.profileId !== profileId || !Array.isArray(reply.data.availableBuilds) || !Array.isArray(reply.data.activeTasks)) throw new Error(typeof reply.error === "string" ? reply.error : "Build evidence could not be read.");
+      if ((!response.ok || reply.success !== true || reply.data?.schemaVersion !== "agent-browser.build-selection.v1" || reply.data.profileId !== profileId || !Array.isArray(reply.data.availableBuilds) || !Array.isArray(reply.data.activeTasks)) || responseFailureMetadata(reply)) throw dashboardResponseFailureError(reply,"dashboard_build_evidence_unavailable",{source:"packages/dashboard/src/components/browser-build-picker.tsx",owningFunction:"BrowserBuildPicker",...{profileId}});
       if (current !== version.current) return;
       setInspection(reply.data); setReviewedPath(executablePath); callbacks.current.onInspect?.(reply.data);
-    } catch (error) { if (current === version.current) setError(error instanceof Error ? error.message : "Build evidence could not be read."); }
+    } catch (error) {void reportDashboardComponentFailure(error,"browser-build-picker.tsx"); if (current === version.current) setError(error instanceof Error ? error.message : "Build evidence could not be read."); }
     finally { if (current === version.current) setBusy(false); }
   }, [profileId]);
   useEffect(() => { void inspect(); return () => { version.current += 1; }; }, [inspect]);

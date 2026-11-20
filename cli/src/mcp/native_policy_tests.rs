@@ -243,6 +243,27 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
                 command["_agentBrowserAuthToken"],
                 "synthetic-transport-token"
             );
+            if command["action"] == "browser_session_policy" {
+                // Keep the real owner-policy adapter and persistence boundary;
+                // only its process/provider transport is substituted here.
+                let owner = BrowserSessionSqliteStore::default_sqlite().unwrap();
+                let mut current = owner.load_session_state().unwrap();
+                let response = match browser_host_policy::apply(&mut current, &command) {
+                    Ok(data) => {
+                        if !matches!(
+                            command["operation"].as_str(),
+                            Some("status" | "override_lookup")
+                        ) {
+                            owner.save_session_state(&current).unwrap();
+                        }
+                        state = current;
+                        json!({"id":command["id"],"success":true,"data":data})
+                    }
+                    Err(error) => json!({"id":command["id"],"success":false,"error":error}),
+                };
+                writeln!(reader.get_mut(), "{response}").unwrap();
+                continue;
+            }
             let admitted = browser_host_policy::check_state(&state, "unused", &command);
             let response = match admitted {
                 Err(error) => json!({"id":command["id"],"success":false,"error":error}),
@@ -437,9 +458,147 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
         2,
         "unrelated grants remain intact"
     );
+    // New capacity/lookup operations cross the public MCP schema, workflow
+    // routing, authenticated owner socket and real SQLite store above.
+    let policy = |task: &str, mut arguments: Value| {
+        arguments["taskId"] = json!(task);
+        let rpc = handle_jsonrpc_line(
+            &json!({"jsonrpc":"2.0","id":"policy","method":"tools/call","params":{"name":"browser_policy","arguments":arguments}}).to_string(),
+            "unused",
+        ).unwrap();
+        assert!(rpc.get("error").is_none(), "{rpc}");
+        let payload: Value =
+            serde_json::from_str(rpc["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(payload["success"], true, "{payload}");
+        payload["data"].clone()
+    };
+    let original = policy("task", json!({"operation":"status"}));
+    let permission = original["policy"].clone();
+    let app = policy(
+        "task",
+        json!({"operation":"override_capacity","scope":"app","expectedRevision":original["revision"],"actor":"fixture-operator","reason":"Configure app working set","capacity":{"activeLimit":1}}),
+    );
+    assert_eq!(app["overrideCapacity"]["source"], "app_default");
+    assert_eq!(app["overrideCapacity"]["policy"]["activeLimit"], 1);
+    assert_eq!(app["policy"], permission);
+    let task = policy(
+        "task",
+        json!({"operation":"override_capacity","scope":"task","expectedRevision":app["revision"],"actor":"fixture-operator","reason":"Configure task working set","capacity":{"activeLimit":2}}),
+    );
+    assert_eq!(task["overrideCapacity"]["source"], "task_override");
+    assert_eq!(task["policy"], permission);
+    let mut latest = policy(
+        "task",
+        json!({"operation":"override_capacity","scope":"app","expectedRevision":task["revision"],"actor":"fixture-operator","reason":"Extend app working set","capacity":{"activeLimit":3}}),
+    );
+    assert_eq!(latest["overrideCapacity"]["policy"]["activeLimit"], 2);
+    let peer = policy("peer", json!({"operation":"status"}));
+    assert_eq!(peer["overrideCapacity"]["source"], "app_default");
+    assert_eq!(peer["overrideCapacity"]["policy"]["activeLimit"], 3);
+    assert_eq!(latest["overrideCapacity"]["requiresRestart"], false);
+    assert_eq!(latest["policy"], permission);
+    let mut grants = Vec::new();
+    for index in 0..3 {
+        latest = policy(
+            "task",
+            json!({"operation":"override","expectedRevision":latest["revision"],"actor":"fixture-operator","reason":"One exact retained capture","overrideAction":"native_capture","requestId":format!("capacity-capture-{index}")}),
+        );
+        grants.push(latest["overrideId"].as_str().unwrap().to_owned());
+    }
+    assert!(
+        latest["overrideCapacity"]["archivedCount"]
+            .as_u64()
+            .unwrap()
+            >= 2
+    );
+    assert_eq!(
+        latest["overrideCapacity"]["archivalPreservesAuthorization"],
+        true
+    );
+    assert_eq!(latest["policy"], permission);
+    for id in [
+        "grant-native_input",
+        "grant-native_capture",
+        grants[0].as_str(),
+        grants[1].as_str(),
+    ] {
+        let lookup = policy(
+            "task",
+            json!({"operation":"override_lookup","overrideId":id}),
+        );
+        assert_eq!(lookup["originalOverride"]["overrideId"], id);
+        assert_eq!(lookup["originalOverride"]["state"], "archived");
+    }
+    drop(store);
+    // open accepts the Service store directory, not the SQLite file path.
+    let reopened = BrowserSessionSqliteStore::open(path.parent().unwrap()).unwrap();
+    assert!(reopened
+        .load_session_state()
+        .unwrap()
+        .host_policies
+        .archived_operator_overrides
+        .contains_key(&grants[0]));
+    drop(reopened);
+    // Every policy read reopens the store in the endpoint, so this lookup does
+    // not depend on a client or owner in-memory grant cache.
+    let reopened_lookup = policy(
+        "task",
+        json!({"operation":"override_lookup","overrideId":grants[0]}),
+    );
+    assert_eq!(
+        reopened_lookup["originalOverride"]["requestId"],
+        "capacity-capture-0"
+    );
+    assert_eq!(reopened_lookup["originalOverride"]["state"], "archived");
+    let before = effects.lock().unwrap().len();
+    let retained = call(
+        "task",
+        "native_capture",
+        Some("capacity-capture-0"),
+        Some(&grants[0]),
+    );
+    assert!(retained.get("error").is_none(), "{retained}");
+    assert_eq!(effects.lock().unwrap().len(), before + 1);
+    let wrong_task = call(
+        "peer",
+        "native_capture",
+        Some("capacity-capture-0"),
+        Some(&grants[0]),
+    );
+    assert!(wrong_task.get("error").is_some(), "{wrong_task}");
+    assert_eq!(effects.lock().unwrap().len(), before + 1);
+    let tightened = policy(
+        "task",
+        json!({"operation":"set_task","expectedRevision":latest["revision"],"actor":"fixture-operator","reason":"Tighten the effective permission policy","policy":{"version":1,"deniedActions":["native_capture","native_input","click"]}}),
+    );
+    let restored = policy(
+        "task",
+        json!({"operation":"set_task","expectedRevision":tightened["revision"],"actor":"fixture-operator","reason":"Restore original permission policy without reviving grants","policy":permission}),
+    );
+    let extended = policy(
+        "task",
+        json!({"operation":"override_capacity","scope":"task","expectedRevision":restored["revision"],"actor":"fixture-operator","reason":"Extend working set without changing permissions","capacity":{"activeLimit":4}}),
+    );
+    assert_eq!(extended["policy"], original["policy"]);
+    let revoked = policy(
+        "task",
+        json!({"operation":"override_lookup","overrideId":grants[1]}),
+    );
+    assert_eq!(revoked["originalOverride"]["state"], "revoked");
+    let denied = call(
+        "task",
+        "native_capture",
+        Some("capacity-capture-1"),
+        Some(&grants[1]),
+    );
+    assert!(denied.get("error").is_some(), "{denied}");
+    assert_eq!(
+        effects.lock().unwrap().len(),
+        before + 1,
+        "capacity changes and equal policy restoration cannot revive revoked authority"
+    );
     drop(http);
     drop(endpoint);
-    drop(store);
     fn remove_fixture(path: &std::path::Path) {
         use std::os::unix::fs::PermissionsExt;
         if std::fs::symlink_metadata(path).unwrap().is_dir() {

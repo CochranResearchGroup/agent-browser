@@ -10,9 +10,8 @@ use super::service_terminal_outcome::{
 };
 
 pub const MAX_SERVICE_JOBS: usize = 200;
-/// Every persisted running job needs a bounded recovery horizon. Callers may
-/// choose a larger explicit timeout for long work; legacy records without one
-/// use this conservative fallback during reconciliation.
+/// Default active-worker wait budget. A legacy persisted UTC start does not
+/// qualify elapsed time for terminalizing a job during later readback.
 pub const DEFAULT_SERVICE_JOB_TIMEOUT_MS: u64 = 15 * 60 * 1_000;
 
 pub fn mutate_persisted_service_jobs(mutator: impl FnMut(&mut ServiceState)) {
@@ -32,69 +31,13 @@ pub fn mutate_service_jobs_in_repository(
     })
 }
 
-/// Convert a running record whose persisted deadline has elapsed into a
-/// terminal, effect-uncertain timeout. This repairs state left behind when a
-/// worker exits or loses its terminal persistence race. It does not retry or
-/// compensate the original operation.
-pub fn reconcile_stale_running_service_jobs(state: &mut ServiceState, now: &str) -> Vec<String> {
-    let Ok(parsed_now) = chrono::DateTime::parse_from_rfc3339(now) else {
-        return Vec::new();
-    };
-    let mut reconciled = Vec::new();
-    let mut terminal_events = Vec::new();
-    for job in state
-        .jobs
-        .values_mut()
-        .filter(|job| job.state == JobState::Running)
-    {
-        let Some(started_at) = job.started_at.as_deref().or(job.submitted_at.as_deref()) else {
-            continue;
-        };
-        let Ok(started_at) = chrono::DateTime::parse_from_rfc3339(started_at) else {
-            continue;
-        };
-        let timeout_ms = job
-            .timeout_ms
-            .filter(|timeout_ms| *timeout_ms > 0)
-            .unwrap_or(DEFAULT_SERVICE_JOB_TIMEOUT_MS);
-        let elapsed_ms = parsed_now
-            .signed_duration_since(started_at)
-            .num_milliseconds();
-        if elapsed_ms < 0 || i128::from(elapsed_ms) < i128::from(timeout_ms) {
-            continue;
-        }
-        let error = format!(
-            "Service job exceeded its persisted {}ms deadline and was reconciled",
-            timeout_ms
-        );
-        let outcome = terminal_outcome_for_job(
-            job,
-            &error,
-            ServiceTerminalState::TimedOut,
-            ServiceTerminalPhase::Finalize,
-            now,
-        );
-        job.state = JobState::TimedOut;
-        job.completed_at = Some(now.to_string());
-        job.error = Some(error.clone());
-        job.result = Some(json!({
-            "success": false,
-            "timedOut": true,
-            "reconciled": true,
-            "effectUncertain": true,
-            "timeoutMs": timeout_ms,
-        }));
-        job.failure = outcome.failure.clone();
-        job.terminal_outcome = Some(outcome.clone());
-        terminal_events.push(terminal_event_for_job(job, outcome, &error));
-        reconciled.push(job.id.clone());
-    }
-    state.events.extend(terminal_events);
-    if state.events.len() > 100 {
-        let excess = state.events.len() - 100;
-        state.events.drain(0..excess);
-    }
-    reconciled
+/// Legacy persisted starts are guest UTC observations, without a StableTime
+/// epoch/measurement binding. They cannot prove elapsed time, including after
+/// a WSL clock jump. Keep original jobs and effects unchanged; active-worker
+/// cancellation and positively observed process exit remain separate proofs.
+/// Qualified persisted-deadline reconciliation is not implemented by this API.
+pub fn reconcile_stale_running_service_jobs(_state: &mut ServiceState, _now: &str) -> Vec<String> {
+    Vec::new()
 }
 
 pub fn cancel_persisted_service_job(
@@ -295,7 +238,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reconciliation_terminalizes_only_overdue_running_jobs() {
+    fn legacy_guest_clock_jumps_do_not_terminalize_running_or_completed_jobs() {
         let mut state = ServiceState {
             jobs: BTreeMap::from([
                 (
@@ -324,36 +267,24 @@ mod tests {
             ..ServiceState::default()
         };
 
-        let reconciled = reconcile_stale_running_service_jobs(&mut state, "2026-08-30T12:00:02Z");
-
-        assert_eq!(reconciled, vec!["overdue"]);
-        assert_eq!(state.jobs["overdue"].state, JobState::TimedOut);
-        assert_eq!(
-            state.jobs["overdue"].result.as_ref().unwrap()["effectUncertain"],
-            true
+        state.jobs.insert(
+            "completed".into(),
+            ServiceJob {
+                id: "completed".into(),
+                state: JobState::Succeeded,
+                completed_at: Some("2026-08-30T11:59:00Z".into()),
+                ..ServiceJob::default()
+            },
         );
-        let outcome = state.jobs["overdue"].terminal_outcome.as_ref().unwrap();
-        assert_eq!(outcome.state, ServiceTerminalState::TimedOut);
-        assert_eq!(outcome.phase, ServiceTerminalPhase::Finalize);
-        assert_eq!(
-            outcome.failure.as_ref().unwrap().code,
-            "service_job_timed_out"
-        );
-        let event = state
-            .events
-            .iter()
-            .find(|event| event.kind == ServiceEventKind::JobTerminal)
-            .unwrap();
-        assert_eq!(event.terminal_outcome.as_ref(), Some(outcome));
-        assert_eq!(
-            event.provenance.as_ref(),
-            Some(&state.jobs["overdue"].provenance)
-        );
-        assert_eq!(state.jobs["active"].state, JobState::Running);
+        let original = serde_json::to_value(&state).unwrap();
+        for jumped_now in ["2099-08-30T12:00:02Z", "1990-08-30T12:00:02Z"] {
+            assert!(reconcile_stale_running_service_jobs(&mut state, jumped_now).is_empty());
+            assert_eq!(serde_json::to_value(&state).unwrap(), original);
+        }
     }
 
     #[test]
-    fn reconciliation_bounds_legacy_running_jobs_without_timeout_metadata() {
+    fn reconciliation_retains_legacy_running_jobs_without_qualified_deadline() {
         let mut state = ServiceState {
             jobs: BTreeMap::from([(
                 "legacy".to_string(),
@@ -369,8 +300,10 @@ mod tests {
 
         let reconciled = reconcile_stale_running_service_jobs(&mut state, "2026-08-30T12:15:00Z");
 
-        assert_eq!(reconciled, vec!["legacy"]);
-        assert_eq!(state.jobs["legacy"].state, JobState::TimedOut);
+        assert!(reconciled.is_empty());
+        assert_eq!(state.jobs["legacy"].state, JobState::Running);
+        assert!(state.jobs["legacy"].failure.is_none());
+        assert!(state.jobs["legacy"].terminal_outcome.is_none());
     }
 }
 #[allow(dead_code, unused_imports)]

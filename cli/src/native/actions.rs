@@ -534,6 +534,16 @@ pub(crate) async fn execute_managed_target_command(
     state: &mut DaemonState,
     target_id: &str,
 ) -> Value {
+    let admission_error = |code: &str| {
+        let mut response = error_response(cmd["id"].as_str().unwrap_or(""), code);
+        response["failure"] = json!({"code":code,"axis":"lifecycle_owner","phase":"child_admission","effectState":"no_effect"});
+        super::service_failure::attach_public_failure(
+            &mut response,
+            cmd,
+            "managed_target_admission",
+        );
+        response
+    };
     if cmd
         .get("targetId")
         .filter(|value| !value.is_null())
@@ -546,10 +556,7 @@ pub(crate) async fn execute_managed_target_command(
                     && value.as_str() != Some(format!("target:{target_id}").as_str())
             })
     {
-        return error_response(
-            cmd["id"].as_str().unwrap_or(""),
-            "browser_session_target_selector_conflict",
-        );
+        return admission_error("browser_session_target_selector_conflict");
     }
     if state
         .browser
@@ -557,15 +564,22 @@ pub(crate) async fn execute_managed_target_command(
         .and_then(|browser| browser.active_target_id().ok())
         != Some(target_id)
     {
-        return error_response(
-            cmd["id"].as_str().unwrap_or(""),
-            "browser_session_target_unproven",
-        );
+        return admission_error("browser_session_target_unproven");
     }
     execute_command_with_target_custody(cmd, state, true).await
 }
 
 async fn execute_command_with_target_custody(
+    cmd: &Value,
+    state: &mut DaemonState,
+    managed_target: bool,
+) -> Value {
+    let mut response = execute_command_with_target_custody_inner(cmd, state, managed_target).await;
+    super::service_failure::attach_public_failure(&mut response, cmd, "browser_dispatch");
+    response
+}
+
+async fn execute_command_with_target_custody_inner(
     cmd: &Value,
     state: &mut DaemonState,
     managed_target: bool,
@@ -1024,6 +1038,7 @@ async fn execute_command_after_navigation_admission(
         .map(|browser| browser.client.subscribe());
     let command_preparation_ms = u64::try_from(cmd_start.elapsed().as_millis()).unwrap_or(u64::MAX);
     let action_started = std::time::Instant::now();
+    let mut action_latency_samples = Vec::new();
     let action_race = race_renderer_crash!(
         match action {
             "launch" => handle_launch(cmd, state).await,
@@ -1052,7 +1067,14 @@ async fn execute_command_after_navigation_admission(
             "inspect" => handle_inspect(state).await,
             "title" => handle_title(state).await,
             "content" => handle_content(state).await,
-            "evaluate" => handle_evaluate(cmd, state, explicit_service_handle).await,
+            "evaluate" =>
+                handle_evaluate(
+                    cmd,
+                    state,
+                    explicit_service_handle,
+                    &mut action_latency_samples
+                )
+                .await,
             "runtime_handoff_prepare" => handle_runtime_handoff_prepare(state).await,
             "runtime_handoff_abort" => handle_runtime_handoff_abort(state),
             "runtime_handoff_resume" => handle_runtime_handoff_resume(cmd, state).await,
@@ -1434,6 +1456,7 @@ async fn execute_command_after_navigation_admission(
             Err(e) => error_response(&id, &super::browser::to_ai_friendly_error(&e)),
         }
     };
+    attach_action_latency(&mut resp, action_latency_samples);
     let action_execution_ms =
         u64::try_from(action_started.elapsed().as_millis()).unwrap_or(u64::MAX);
     if action != "dialog" {
@@ -1504,6 +1527,14 @@ async fn execute_command_after_navigation_admission(
 
 pub(crate) fn success_response(id: &str, data: Value) -> Value {
     json!({ "id" : id, "success" : true, "data" : data, })
+}
+
+/// Diagnostics enrich the response after its existing success/error adapter.
+/// Inactive sampling preserves the original envelope byte-for-byte as a Value.
+fn attach_action_latency(response: &mut Value, samples: Vec<Value>) {
+    if !samples.is_empty() {
+        crate::connection::latency::append(&mut response["data"], samples);
+    }
 }
 
 pub(crate) fn error_response(id: &str, error: &str) -> Value {

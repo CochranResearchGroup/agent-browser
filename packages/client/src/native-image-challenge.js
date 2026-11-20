@@ -1,3 +1,7 @@
+import { clientFailureError, withClientResultRecovery } from './client-recovery.js';
+import { clientWaitBudget } from './client-wait-budget.js';
+import { clientArgumentError } from './client-argument-error.js';
+import { isResponseFailure, responseFailureError } from './response-failure.js';
 import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {createChallengeAssistanceClient} from './challenge-assistance.js';
@@ -9,7 +13,7 @@ const fields=['taskId','profileId','browserId','tabId','targetId'];
  * @returns {import('./native-image-challenge.d.ts').NativeImageClient}
  */
 export function createNativeImageChallengeClient(options) { return createImageClient(options, false); }
-/** Two whole-grid static rounds share one original attempt and deadline.
+/** Two whole-grid static rounds share one attempt and caller wait allowance.
  * @param {import('./native-image-challenge.d.ts').NativeImageOptions} options
  * @returns {import('./native-image-challenge.d.ts').NativeImageClient}
  */
@@ -17,29 +21,22 @@ export function createNativeImageRoundsChallengeClient(options) { return createI
 /** @param {import('./native-image-challenge.d.ts').NativeImageOptions} options
  * @param {boolean} rounds
  * @returns {import('./native-image-challenge.d.ts').NativeImageClient} */
-function createImageClient({callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess,captureRegion,now=Date.now,steadyNow=()=>performance.now()}, rounds) {
+function createImageClient({callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess,captureRegion,now=Date.now,timeoutMs=60000}, rounds) {
   const PROFILE=rounds?'hcaptcha-image-grid-3x3-two-round-v1':'hcaptcha-image-grid-3x3-v1',CONFIG=rounds?'agent-browser:remote-view-native-image-static-3x3-two-round:v1':'agent-browser:remote-view-native-image-static-3x3:v1';
-  if([callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess].some(port=>typeof port!=='function'))throw TypeError('native_image_ports_required');
-  if(captureRegion && (!['x','y','width','height'].every(key=>Number.isSafeInteger(captureRegion[key])) || captureRegion.width<=0 || captureRegion.height<=0 || captureRegion.x<0 || captureRegion.y<0))throw TypeError('native_image_capture_region_invalid');
+  if([callTool,selectCandidates,resolvePolicy,verifyClearance,verifyAccess].some(port=>typeof port!=='function')||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>2147483647)throw clientArgumentError('native_image_ports_required', "packages/client/src/native-image-challenge.js", "createImageClient", ["callTool", "selectCandidates", "resolvePolicy", "verifyClearance", "verifyAccess", "timeoutMs"]);
+  if(captureRegion && (!['x','y','width','height'].every(key=>Number.isSafeInteger(captureRegion[key])) || captureRegion.width<=0 || captureRegion.height<=0 || captureRegion.x<0 || captureRegion.y<0))throw clientArgumentError('native_image_capture_region_invalid', "packages/client/src/native-image-challenge.js", "createImageClient", ["captureRegion"]);
   const regionRequest=captureRegion?structuredClone(captureRegion):null;
   const human=createChallengeAssistanceClient({callTool,resolvePolicy,verifyClearance,verifyAccess,now});
-  const fail=code=>{throw Error(code)};
-  const clockIdentity=value=>{
-    if(value?.clock===undefined)return null;
-    const clock=value.clock;
-    if(!clock||Object.keys(clock).sort().join(',')!=='bootId,kind,observedAtMs'||clock.kind!=='linux-boottime-v1'||typeof clock.bootId!=='string'||!(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/).test(clock.bootId)||!Number.isSafeInteger(clock.observedAtMs)||clock.observedAtMs<0)fail('native_image_clock_unverified');
-    return clock.kind+':'+clock.bootId;
-  };
-  const observedTime=value=>value.clock?.observedAtMs??value.observedAtMs;
+  const fail=(code,extra={})=>{throw clientFailureError(code,{...extra,source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient'})};
 
   const identity=value=>({taskId:value.taskId,profileId:value.profileId,browserId:value.browserId,tabId:value.tabId,targetId:value.targetId});
   const same=(a,b)=>fields.every(key=>typeof a?.[key]==='string'&&a[key]===b?.[key]);
   async function call(name,args) {
     const reply=/** @type {any} */(await callTool(name,args));
     const text=reply?.content?.find(block=>block.type==='text')?.text;
-    if(reply?.isError||typeof text!=='string'||text.length>8*1024*1024)fail('native_image_workflow_response_invalid');
+    if(typeof text!=='string'||text.length>8*1024*1024)fail('native_image_workflow_response_invalid');
     let envelope;try{envelope=JSON.parse(text)}catch{fail('native_image_workflow_response_invalid')}
-    if(envelope.success!==true)fail('native_image_workflow_refused');
+    if(reply?.isError||envelope.success!==true||isResponseFailure(envelope))throw responseFailureError(envelope,'native_image_workflow_refused');
     return {data:envelope.data,images:reply.content.filter(block=>block.type==='image')};
   }
   async function briefing(taskId) {const {data}=await call('browser_command',{taskId,action:'task_briefing'});if(!same(data,data)||data.taskId!==taskId||data.control?.owner!=='agent'||!Number.isSafeInteger(data.control.epoch))fail('native_image_task_control_unverified');return data;}
@@ -49,9 +46,9 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
     try{
       const reply=/** @type {any} */(await callTool('browser_command',{taskId,action:'task_operation',params:{requestId}}));
       const text=reply?.content?.find(block=>block.type==='text')?.text;
-      if(typeof text!=='string'||text.length>8*1024*1024)fail('native_image_original_unverified');
-      let envelope;try{envelope=JSON.parse(text)}catch{fail('native_image_original_unverified')}
-      if(reply?.isError||envelope.success!==true){if(missing(envelope.error))return null;fail('native_image_original_unverified')}
+      if(typeof text!=='string'||text.length>8*1024*1024)fail('native_image_original_unverified',{taskId,requestId});
+      let envelope;try{envelope=JSON.parse(text)}catch{fail('native_image_original_unverified',{taskId,requestId})}
+      if(reply?.isError||envelope.success!==true||isResponseFailure(envelope)){if(missing(envelope.error)||missing(envelope.failure)||missing(envelope.data?.failure))return null;throw responseFailureError(envelope,'native_image_original_unverified')}
       response={data:envelope.data};
     }catch(error){
       if(missing(error))return null;
@@ -59,7 +56,7 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
       throw error;
     }
     const operation=response.data?.operation;
-    if(operation?.taskId!==taskId||operation.requestId!==requestId||operation.action!=='native_input')fail('native_image_original_unverified');return operation;
+    if(operation?.taskId!==taskId||operation.requestId!==requestId||operation.action!=='native_input')fail('native_image_original_unverified',{taskId,requestId});return operation;
   }
   function physical(frame){const c=frame.capture;return {desktopId:c?.desktopId,generation:c?.generation,windowId:c?.windowId,processIdentity:c?.processIdentity};}
   function image(frame,images) {
@@ -80,63 +77,59 @@ function createImageClient({callTool,selectCandidates,resolvePolicy,verifyCleara
   return {
     async resolve({taskId,requestId}) {
       if(typeof requestId!=='string'||requestId.length>112||!/^[-A-Za-z0-9_.:]+$/.test(requestId))fail('native_image_stable_request_id_required');
+      const budget=clientWaitBudget(timeoutMs,'native_image_invocation_budget_exhausted');
       let retained=null, attemptedRequestId=requestId;
       /** @type {Array<Record<string,unknown>>} */
       const roundOperations=[];
       /** @type {(reason:string)=>Promise<import("./native-image-challenge.d.ts").NativeImageResult>} */
-      const assist=async reason=>{try{const {verification:_previousVerification,...capsule}=await human.prepare({taskId});return {...capsule,status:capsule.status==='awaiting_operator'?'awaiting_operator':'intervention',reason,originalOperation:retained,...(rounds?{roundOperations}:{}),retryAllowed:false}}catch{return {taskId,status:'intervention',reason,originalOperation:retained,...(rounds?{roundOperations}:{}),retryAllowed:false}}};
+      const assist=async reason=>{try{const {verification:_previousVerification,...capsule}=await budget.run(()=>human.prepare({taskId}));return withClientResultRecovery({...capsule,status:capsule.status==='awaiting_operator'?'awaiting_operator':'intervention',reason,originalOperation:retained,...(rounds?{roundOperations}:{}),retryAllowed:false},{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'})}catch{return withClientResultRecovery({taskId,status:'intervention',reason,originalOperation:retained,...(rounds?{roundOperations}:{}),retryAllowed:false},{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'})}};
       try {
-        retained=await original(taskId,requestId);if(retained){if(rounds){roundOperations.push(retained);const second=await original(taskId,requestId+':round2');if(second)roundOperations.push(second)}return assist('native_image_original_exists_do_not_replay');}
-        let originalDeadline=0, previous=null, nextCapture=null, originalBinding=null,budgetNow=now;
+        retained=await budget.run(()=>original(taskId,requestId));if(retained?.state==='owner_refused_no_effect'){if(!fields.every(key=>typeof retained[key]==='string'&&retained[key]))fail('native_image_original_unverified');return withClientResultRecovery({taskId,status:'failed_no_effect',reason:'native_image_original_refused_no_effect',originalOperation:retained,retryAllowed:false,recovery:{inspect:{interface:'@agent-browser/client/task-briefing#getTaskOperation',arguments:{taskId,requestId}},newIntent:{method:'resolve',requiredArguments:['newRequestId'],instruction:'After fresh owner task/capture observation, explicitly choose a new request ID within the same original profile and permission scope. The failed original remains non-replayable.'},resumeCondition:'Owner original readback remains failed-no-effect and the fresh owner context permits the newly explicit intent.'}},{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});}if(retained){if(rounds){roundOperations.push(retained);const second=await budget.run(()=>original(taskId,requestId+':round2'));if(second)roundOperations.push(second)}return withClientResultRecovery(await assist('native_image_original_exists_do_not_replay'),{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});}
+        let previous=null, nextCapture=null, originalBinding=null;
         for(let roundIndex=1;roundIndex<=(rounds?2:1);roundIndex++) {
         const roundRequestId=roundIndex===1?requestId:requestId+':round2';
-        const before=await briefing(taskId),observationRequestId=requestId+(roundIndex===1?':observation':':observation2');
+        const before=await budget.run(()=>briefing(taskId)),observationRequestId=requestId+(roundIndex===1?':observation':':observation2');
         if(originalBinding&&!same(originalBinding,before))fail('native_image_context_changed');
-        const captureStartedAt=steadyNow();
-        const captured=nextCapture??await call('browser_command',{taskId,action:'native_capture',requestId:observationRequestId,params:{classifyChallenges:true,registeredActionId:PROFILE,...(regionRequest?{imageCaptureScope:"complete_puzzle_region",region:regionRequest}:{})}});
+        const captured=nextCapture??await budget.run(()=>call('browser_command',{taskId,action:'native_capture',requestId:observationRequestId,params:{classifyChallenges:true,registeredActionId:PROFILE,...(regionRequest?{imageCaptureScope:"complete_puzzle_region",region:regionRequest}:{})}}));
         const frame=captured.data,sha=image(frame,captured.images),observation=frame.nativeImageObservation;
-        const after=await briefing(taskId);
-        const clockBasis=clockIdentity(observation),evidenceAge=clockBasis===null?now()-observation?.observedAtMs:frame.evidenceAgeMs;
-        if(!same(before,after)||before.control.epoch!==after.control.epoch||frame.challenge?.kind!=='image_puzzle'||frame.challenge.family!=='hcaptcha'||(regionRequest?observation?.captureScope!=='complete_puzzle_region':frame.challenge.completeWindow!==true)||frame.challenge.frameSha256!==sha||frame.challenge.automatedAttemptAuthorized!==false||observation?.registeredActionId!==PROFILE||observation.frameSha256!==sha||!/^([a-f0-9]{64})$/.test(observation.puzzleSha256??'')||observation.desktopId!==physical(frame).desktopId||observation.generation!==physical(frame).generation||observation.windowId!==physical(frame).windowId||!Number.isSafeInteger(observation.nativeControlEpoch)||!Number.isSafeInteger(observation.observedAtMs)||observation.observedAtMs<0||!Number.isSafeInteger(evidenceAge)||evidenceAge<0||evidenceAge>=60000||!Array.isArray(observation.candidates)||observation.candidates.length!==9||observation.candidates.some(candidate=>typeof candidate.candidateId!=='string'||candidate.candidateId.length>128)||new Set(observation.candidates.map(candidate=>candidate.candidateId)).size!==9||!isDeepStrictEqual(observation.window,frame.windowBounds)||!isDeepStrictEqual(observation.region,regionRequest??frame.windowBounds)||(!regionRequest&&(observation.captureScope??'complete_window')!=='complete_window'))fail('native_image_observation_unqualified');
+        const after=await budget.run(()=>briefing(taskId));
+        if(!same(before,after)||before.control.epoch!==after.control.epoch||frame.challenge?.kind!=='image_puzzle'||frame.challenge.family!=='hcaptcha'||(regionRequest?observation?.captureScope!=='complete_puzzle_region':frame.challenge.completeWindow!==true)||frame.challenge.frameSha256!==sha||frame.challenge.automatedAttemptAuthorized!==false||observation?.registeredActionId!==PROFILE||observation.frameSha256!==sha||!/^([a-f0-9]{64})$/.test(observation.puzzleSha256??'')||observation.desktopId!==physical(frame).desktopId||observation.generation!==physical(frame).generation||observation.windowId!==physical(frame).windowId||!Number.isSafeInteger(observation.nativeControlEpoch)||!Array.isArray(observation.candidates)||observation.candidates.length!==9||observation.candidates.some(candidate=>typeof candidate.candidateId!=='string'||candidate.candidateId.length>128)||new Set(observation.candidates.map(candidate=>candidate.candidateId)).size!==9||!isDeepStrictEqual(observation.window,frame.windowBounds)||!isDeepStrictEqual(observation.region,regionRequest??frame.windowBounds)||(!regionRequest&&(observation.captureScope??'complete_window')!=='complete_window'))fail('native_image_observation_unqualified');
         if(rounds && (!Array.isArray(observation.tileImageSha256s)||observation.tileImageSha256s.length!==9||observation.tileImageSha256s.some(hash=>!/^([a-f0-9]{64})$/.test(hash))))fail('native_image_observation_unqualified');
-        if(previous && (previous.frameSha256===sha || previous.puzzleSha256===observation.puzzleSha256 || clockIdentity(previous)!==clockBasis||observedTime(previous)>=observedTime(observation) || !isDeepStrictEqual(previous.window,observation.window) || !isDeepStrictEqual(previous.region,observation.region) || previous.nativeControlEpoch!==observation.nativeControlEpoch || previous.processDigest!==observation.processDigest || previous.tileImageSha256s.some((hash,index)=>hash===observation.tileImageSha256s[index])))fail('native_image_round_changed');
-        if(!originalDeadline){
-          budgetNow=clockBasis===null?now:steadyNow;
-          originalDeadline=clockBasis===null?observation.observedAtMs+60000:captureStartedAt+60000-evidenceAge;
-        }
+        if(previous && (previous.frameSha256===sha || previous.puzzleSha256===observation.puzzleSha256 || !isDeepStrictEqual(previous.window,observation.window) || !isDeepStrictEqual(previous.region,observation.region) || previous.nativeControlEpoch!==observation.nativeControlEpoch || previous.processDigest!==observation.processDigest || previous.tileImageSha256s.some((hash,index)=>hash===observation.tileImageSha256s[index])))fail('native_image_round_changed');
         originalBinding??=after;
-        await sourcePolicy(taskId,after,frame);
-        const selectionBudget=Math.min(45000,originalDeadline-budgetNow());
-        if(selectionBudget<=0)fail('native_image_selection_expired');
+        await budget.run(()=>sourcePolicy(taskId,after,frame));
+        const selectionBudget=Math.min(45000,timeoutMs);
+        budget.check();
         const controller=new AbortController();let timer;
+        const abortSelection=()=>controller.abort();budget.signal.addEventListener('abort',abortSelection,{once:true});
         let proposal;
-        try{proposal=await Promise.race([
+        try{proposal=await budget.run(()=>Promise.race([
           Promise.resolve().then(()=>selectCandidates({taskId,binding:identity(after),requestId,observationRequestId,observation:structuredClone(observation),images:captured.images,deadlineAtMs:now()+selectionBudget,timeoutMs:selectionBudget,roundIndex,signal:controller.signal})),
           new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('native_image_selection_timeout'))},selectionBudget)}),
-        ])}finally{clearTimeout(timer)}
+        ]))}finally{clearTimeout(timer);budget.signal.removeEventListener('abort',abortSelection)}
         const selected=proposal?.selectedCandidateIds;
-        if(proposal?.taskId!==taskId||proposal.observationRequestId!==observationRequestId||proposal.frameSha256!==sha||proposal.puzzleSha256!==observation.puzzleSha256||!Array.isArray(selected)||selected.length<1||selected.length>4||new Set(selected).size!==selected.length||selected.some(id=>!observation.candidates.some(candidate=>candidate.candidateId===id))||budgetNow()>=originalDeadline)fail('native_image_selection_unqualified');
-        const current=await briefing(taskId);if(!same(after,current)||after.control.epoch!==current.control.epoch)fail('native_image_context_changed');
+        if(proposal?.taskId!==taskId||proposal.observationRequestId!==observationRequestId||proposal.frameSha256!==sha||proposal.puzzleSha256!==observation.puzzleSha256||!Array.isArray(selected)||selected.length<1||selected.length>4||new Set(selected).size!==selected.length||selected.some(id=>!observation.candidates.some(candidate=>candidate.candidateId===id)))fail('native_image_selection_unqualified');
+        const current=await budget.run(()=>briefing(taskId));if(!same(after,current)||after.control.epoch!==current.control.epoch)fail('native_image_context_changed');
         attemptedRequestId=roundRequestId;
-        const input=await call('browser_command',{taskId,action:'native_input',requestId:roundRequestId,params:{imageAttempt:{observationRequestId,selectedCandidateIds:selected,...(rounds?{originalRequestId:requestId}:{})}}});
-        retained=await original(taskId,requestId);
-        const delivered=await original(taskId,roundRequestId);if(delivered)roundOperations.push(delivered);
-        if(input.data?.source!=='remote_view_native'||input.data.delivery!=='dispatched'||delivered?.state!=='owner_acknowledged')return assist('native_image_input_uncertain_or_refused');
-        const observed=await call('browser_command',{taskId,action:'native_capture',...(rounds&&roundIndex===1?{requestId:requestId+':observation2'}:{}),params:{classifyChallenges:true,...(rounds&&roundIndex===1?{registeredActionId:PROFILE,...(regionRequest?{imageCaptureScope:'complete_puzzle_region'}:{})}:{}),...(regionRequest?{region:regionRequest}:{})}}),fresh=observed.data,freshSha=image(fresh,observed.images);
+        const input=await budget.run(()=>call('browser_command',{taskId,action:'native_input',requestId:roundRequestId,params:{imageAttempt:{observationRequestId,selectedCandidateIds:selected,...(rounds?{originalRequestId:requestId}:{})}}}));
+        retained=await budget.run(()=>original(taskId,requestId));
+        const delivered=await budget.run(()=>original(taskId,roundRequestId));if(delivered)roundOperations.push(delivered);
+        if(input.data?.source!=='remote_view_native'||input.data.delivery!=='dispatched'||delivered?.state!=='owner_acknowledged')return withClientResultRecovery(await assist('native_image_input_uncertain_or_refused'),{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});
+        const observed=await budget.run(()=>call('browser_command',{taskId,action:'native_capture',...(rounds&&roundIndex===1?{requestId:requestId+':observation2'}:{}),params:{classifyChallenges:true,...(rounds&&roundIndex===1?{registeredActionId:PROFILE,...(regionRequest?{imageCaptureScope:'complete_puzzle_region'}:{})}:{}),...(regionRequest?{region:regionRequest}:{})}})),fresh=observed.data,freshSha=image(fresh,observed.images);
         if(rounds && roundIndex===1 && fresh.challenge?.kind==='image_puzzle') {
-          if(!isDeepStrictEqual(physical(frame),physical(fresh))||!isDeepStrictEqual(frame.windowBounds,fresh.windowBounds)||fresh.nativeControlEpoch!==observation.nativeControlEpoch||budgetNow()>=originalDeadline)fail('native_image_round_changed');
+          if(!isDeepStrictEqual(physical(frame),physical(fresh))||!isDeepStrictEqual(frame.windowBounds,fresh.windowBounds)||fresh.nativeControlEpoch!==observation.nativeControlEpoch)fail('native_image_round_changed');
           previous=observation;nextCapture=observed;continue;
         }
         if(!isDeepStrictEqual(physical(frame),physical(fresh))||!isDeepStrictEqual(frame.windowBounds,fresh.windowBounds)||fresh.nativeControlEpoch!==observation.nativeControlEpoch||fresh.challenge?.kind!=='unknown'||(!regionRequest&&fresh.challenge.completeWindow!==true)||fresh.challenge.frameSha256!==freshSha||fresh.challenge.automatedAttemptAuthorized!==false)fail('native_image_after_state_unverified');
         const context={taskId,binding:identity(after),frameSha256:freshSha,classification:fresh.challenge};
-        const clearance=await verifyClearance(context);if(!verified(clearance,context))fail('native_image_clearance_unverified');
-        const access=await verifyAccess(context);if(!verified(access,context)||access.evidenceRef===clearance.evidenceRef)fail('native_image_site_access_unverified');
-        const latest=await briefing(taskId);if(!same(after,latest)||latest.control.epoch!==after.control.epoch)fail('native_image_context_changed');
-        const continued=(await call('browser_continue',{taskId})).data;if(!same(after,continued))fail('native_image_continuation_changed');
-        return {taskId,status:'verified_access_after_native_image',binding:identity(after),originalOperation:retained,...(rounds?{roundOperations}:{}),verification:{clearance:clearance.evidenceRef,access:access.evidenceRef,frameSha256:freshSha},continuation:continued,retryAllowed:false};
+        const clearance=await budget.run(()=>verifyClearance(context));if(!verified(clearance,context))fail('native_image_clearance_unverified');
+        const access=await budget.run(()=>verifyAccess(context));if(!verified(access,context)||access.evidenceRef===clearance.evidenceRef)fail('native_image_site_access_unverified');
+        const latest=await budget.run(()=>briefing(taskId));if(!same(after,latest)||latest.control.epoch!==after.control.epoch)fail('native_image_context_changed');
+        const continued=(await budget.run(()=>call('browser_continue',{taskId}))).data;if(!same(after,continued))fail('native_image_continuation_changed');
+        return withClientResultRecovery({taskId,status:'verified_access_after_native_image',binding:identity(after),originalOperation:retained,...(rounds?{roundOperations}:{}),verification:{clearance:clearance.evidenceRef,access:access.evidenceRef,frameSha256:freshSha},continuation:continued,retryAllowed:false},{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});
         }
-        return assist('native_image_round_budget_exhausted');
-      }catch(error){try{retained=await original(taskId,requestId);const uncertain=await original(taskId,attemptedRequestId);if(uncertain&&!roundOperations.some(operation=>operation.requestId===attemptedRequestId))roundOperations.push(uncertain)}catch{}const message=String(error?.message??'');return assist(/^native_image_[a-z_]+$/.test(message)?message:'native_image_workflow_unavailable_observe_original');}
+        return withClientResultRecovery(await assist('native_image_round_budget_exhausted'),{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});
+      }catch(error){try{retained=await budget.run(()=>original(taskId,requestId));const uncertain=await budget.run(()=>original(taskId,attemptedRequestId));if(uncertain&&!roundOperations.some(operation=>operation.requestId===attemptedRequestId))roundOperations.push(uncertain)}catch{}const message=String(error?.message??'');return withClientResultRecovery({...await assist(/^native_image_[a-z_]+$/.test(message)?message:'native_image_workflow_unavailable_observe_original'),...(error?.failure?{failure:error.failure,occurrenceId:error.occurrenceId}:{}),...(error?.clientRecovery?{clientRecovery:error.clientRecovery}:{}),recovery:{inspect:{interface:'@agent-browser/client/task-briefing#getTaskOperation',arguments:{taskId,requestId:attemptedRequestId}},resumeCondition:'Inspect the exact original operation before another attempt; unknown input never replays. Caller wait expiry is not owner evidence expiry.'}},{source:'packages/client/src/native-image-challenge.js',owningFunction:'createImageClient.resolve'});}finally{budget.close()}
     },
   };
 }

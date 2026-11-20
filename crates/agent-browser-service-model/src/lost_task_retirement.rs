@@ -190,10 +190,10 @@ pub fn retire_lost_task(
         || state.host_bindings.contains_key(&task.id)
         || state.hosted_continuity.contains_key(&task.id)
         || state.profile_operation_ids.contains_key(&task.profile_id)
-        || state.task_operations.get(&task.id).is_some_and(|rows| {
-            rows.values()
-                .any(|op| op.state != BrowserTaskOperationState::OwnerAcknowledged)
-        })
+        || state
+            .task_operations
+            .get(&task.id)
+            .is_some_and(|rows| rows.values().any(|op| !op.state.is_terminal()))
         || state
             .tabs
             .values()

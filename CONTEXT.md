@@ -4,6 +4,22 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Task operation capacity**: Runtime-configured active history capacity, distinct from lifetime operation count. Acknowledged completed records move to durable original-operation custody before extension; pending and uncertain records remain active. Archived originals retain lookup, duplicate protection and Native attempt/episode evidence.
+
+**Retention and popup admission**: Live operational policy bounds unreleased retained claims and new eligible popup admissions. Released original claims remain discoverable without consuming admission. Popup overflow defers targets while the original task continues; increasing policy does not replay input or expand access.
+
+**Deferred legacy expiry**: Automatic maintenance cannot close tasks or delete disposable profiles using unqualified guest timestamps. Deferred maintenance evidence does not establish qualified lifetime or cleanup; explicit scoped close retains its existing authority.
+
+**Reconnect and runtime lane capacity**: Live reconnect admission preserves all original request receipts. Runtime lane admission uses system defaults before construction; task overrides never enlarge the host budget. Lowering policy does not evict retained lanes, discard constructed owners or rewrite a completed original. Manifest capacity is a startup snapshot.
+
+**Teaching capacity**: Live admission limits for append-only lineage revisions and retained working contexts/catalog entries. Existing owners inspect/update policy without truncating original history, duplicate detection or task permissions.
+
+**Recovery attempt**: One occurrence-bound inspection, supported remedy and verification cycle with a stable attempt ID. Live policy limits attempts and checks without progress; extension preserves originals. Interrupted attempts reconcile verification without remedy replay. A verified owner acknowledgement can support a caller-attributed resume report, separately from website success or task completion.
+
+**Owner-refused no-effect original**: A terminal failed operation whose immutable owner seal proves input was not dispatched. Historical settlement remains valid across later browser epochs; a new input intent still requires current observation and authority. Unknown effects cannot enter this state.
+
+**Refusal occurrence**: One sanitized public failure linked to private journal custody. Its occurrence ID survives workflow adapters; logging delivery, operation effect certainty and successful recovery are separate observations. Supported task-scoped failure-log reads do not dispatch browser input.
+
 **Workspace launch acknowledgement**: The original operator-bound launch intent
 and owner response for one immutable operation. Stable ingress must allow the
 bounded launch response to arrive; an ingress timeout never proves a launch was
@@ -169,9 +185,11 @@ Explicit sharing admits exact app participants to distinct logical tasks without
 changing the process owner.
 
 **Cooperative human control**: Durable browser-scoped ownership and epoch shared
-by supported dispatch routes. Viewing alone changes nothing. Explicit takeover
-blocks new mutations, optionally reads/capture; return freshly observes the same
-page. Dispatched uncertainty is retained without replay. Unmanaged controllers
+by supported dispatch routes. Interactive capability and viewing alone prove no
+human activity. Actual Native viewer input pauses until service-time-qualified
+quiet; explicit per-viewer takeover holds until that viewer returns to view-only.
+Other viewers retain their own claims. Agent input does not renew human activity.
+Return requires a successful current-epoch observation of the retained page. Dispatched uncertainty is retained without replay. Unmanaged controllers
 must cooperate; attribution is separate from operator authority.
 
 **Routine interlock output**: Bounded status/error projection for scheduled
@@ -680,3 +698,20 @@ separate guards.
 
 
 **Login progress**: A bounded read-only public projection of Auth-owned request evidence. Selection, submission, confirmed actionable delivery, control metadata and unknown input are distinct. The projection provides a supported next observation, never credential authority or proof of application access.
+
+**Login episode continuation**: An observed supported input sequence under one scoped episode. Acknowledged prefixes never replay; runtime step budgets can extend, settled episodes can renew, and unresolved input anywhere in the task requires original reconciliation before another episode.
+
+**Scoped override working set**: Configurable active grant count with archived original grants resolved under identical task/action/request/effective-policy checks. Archival and capacity updates do not expand permission. Effective permission changes revoke active and archived originals permanently. The archive remains in the policy document and does not promise smaller serialized state.
+
+**Artifact reference admission budget**: Live configurable bound for new retained artifact references. The pre-effect adapter checks the current limit; post-effect custody always retains completed metadata even if another caller lowered that limit. Originals remain available and destination permissions are unchanged.
+
+**Qualified Native freshness**: Owner-minted service-time bounds and epoch/counter continuity carried with Native capture evidence. Freshness-dependent input uses the supported StableTime observation instant and uncertainty, never WSL wall/boot extrapolation. Legacy captures require fresh qualification; timing failures preserve independent inspection and original uncertain-input custody.
+
+**Legacy job deadline evidence**: Existing wall-clock submitted/started metadata is historical attribution, not reliable elapsed-time proof. Unqualified legacy starts cannot automatically terminalize running jobs. Current-owner cancellation and positive process-exit evidence remain separate authorities.
+
+
+**Qualified retention origin**: Immutable service UTC bounds and reviewed relative lifetime retained with Auth/challenge deadlines and finite handoffs. New effects require trustworthy bounds; unknown legacy origins are not invented. Exact authenticated return, read-only inspection and completed original replay remain independent where their owner contract allows it. Qualified finite handoff publication atomically guards runtime schema8, including against later schema7 settlement downgrade.
+
+**Sealed profile deadline admission**: Public recovery/reset commands use the supported service bounds against an existing sealed absolute expiry without changing the plan identity. A straddling interval is uncertain, not expired. Authenticated completed originals replay before fresh time or route checks; time qualification is acquired outside the global state writer.
+
+**Startup admission ownership**: Kernel-owned persistent descriptor for current cold starts, with positive process absence required for legacy admission. File age is incidental metadata and cannot reclaim a live owner. Exact warm reuse precedes cold admission.

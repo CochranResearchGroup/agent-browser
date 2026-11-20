@@ -16,7 +16,38 @@ use sha2::{Digest, Sha256};
 
 use super::browser_session_store::BrowserSessionSqliteStore;
 
-const MAXIMUM_TASK_OPERATIONS: usize = 256;
+/// Native budgets include archived originals, while ordinary task reads keep a
+/// bounded active working set. Archival never renews an attempt or login budget.
+fn operation_history(
+    state: &BrowserSessionState,
+    task: &str,
+) -> Result<BTreeMap<String, BrowserTaskOperation>, String> {
+    let store = BrowserSessionSqliteStore::open_read_only(
+        &BrowserSessionSqliteStore::default_sqlite_path()?,
+    )?;
+    let mut rows = store.archived_task_operation_history(task)?;
+    rows.extend(
+        state
+            .task_operations
+            .get(task)
+            .into_iter()
+            .flat_map(|rows| rows.iter())
+            .map(|(id, row)| (id.clone(), row.clone())),
+    );
+    if rows
+        .values()
+        .any(|row| row.state == BrowserTaskOperationState::OwnerRefusedNoEffect)
+    {
+        let secret = key(true)?;
+        for row in rows
+            .values()
+            .filter(|row| row.state == BrowserTaskOperationState::OwnerRefusedNoEffect)
+        {
+            verified_no_effect(row, &secret)?;
+        }
+    }
+    Ok(rows)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -338,6 +369,183 @@ fn same_request(
     })
 }
 
+pub(crate) fn native_caller_fingerprint(task: &str, command: &Value) -> Result<String, String> {
+    Ok(hex::encode(mac(&key(true)?, &json!({"schemaVersion":"agent-browser.native-caller.v1","taskId":task,"command":command}))?.finalize().into_bytes()))
+}
+pub(crate) fn exact_original(
+    task: &str,
+    request: &str,
+) -> Result<Option<BrowserTaskOperation>, String> {
+    let store = BrowserSessionSqliteStore::open_read_only(
+        &BrowserSessionSqliteStore::default_sqlite_path()?,
+    )?;
+    let state = store.load_session_state()?;
+    Ok(state
+        .task_operations
+        .get(task)
+        .and_then(|rows| rows.get(request))
+        .cloned()
+        .or(store.archived_task_operation(task, request)?))
+}
+
+fn dispatch_scope(original: &BrowserTaskOperation) -> Value {
+    json!({"schemaVersion":"agent-browser.native-dispatch.v1","requestId":original.request_id,
+        "taskId":original.task_id,"fingerprint":original.fingerprint,"context":RetainedContext::from_operation(original)})
+}
+
+const NO_EFFECT_PROOF: &str = "nativeOwnerNoEffectProof";
+const NO_EFFECT_SIGNATURE: &str = "nativeOwnerNoEffectSignature";
+
+/// The unconstructible permit comes only from the actual Native effect boundary.
+/// It is not a public command argument or an interpretation of an error prefix.
+pub(crate) fn record_native_no_effect(
+    command: &Value,
+    refusal: &super::browser_native_control::PreInputRefusal,
+) -> Result<(), String> {
+    let secret = key(true)?;
+    let task = command["sessionId"]
+        .as_str()
+        .ok_or("browser_native_no_effect_scope_invalid")?;
+    let request = command["id"]
+        .as_str()
+        .ok_or("browser_native_no_effect_scope_invalid")?;
+    BrowserSessionSqliteStore::default_sqlite()?.mutate_session_state(|state| {
+        let original = state.task_operations.get_mut(task).and_then(|rows| rows.get_mut(request))
+            .filter(|row| row.action == "native_input" && matches!(row.state, BrowserTaskOperationState::Pending | BrowserTaskOperationState::Uncertain))
+            .ok_or("browser_native_no_effect_original_missing")?;
+        let scope = RetainedContext::from_operation(original);
+        let expected_scope: RetainedContext = serde_json::from_value(command["taskOperationExpected"]["context"].clone()).map_err(|_| "browser_native_no_effect_scope_invalid")?;
+        let seal = command["taskOperationExpected"]["dispatchSeal"].as_str().and_then(|seal| hex::decode(seal).ok()).ok_or("browser_native_no_effect_scope_invalid")?;
+        mac(&secret, &dispatch_scope(original))?.verify_slice(&seal).map_err(|_| "browser_native_no_effect_scope_invalid")?;
+        if scope != expected_scope || command["taskOperationExpected"]["requestId"] != request || command["action"] != original.action
+            || original.process_identity.as_ref() != Some(refusal.process()) { return Err("browser_native_no_effect_scope_invalid".into()); }
+        let proof = json!({"schemaVersion":"agent-browser.native-no-effect.v1","taskId":task,"requestId":request,
+            "fingerprint":original.fingerprint,"callerFingerprint":original.evidence_references.get("callerCommandFingerprint"),"context":scope,"nativeTarget":refusal.target(),"effectStatus":"no_effect",
+            "originalResponse":{"success":false,"code":refusal.code(),"error":refusal.response_error()}});
+        let encoded = serde_json::to_string(&proof).map_err(|_| "browser_native_no_effect_proof_invalid")?;
+        if let Some(prior) = original.evidence_references.get(NO_EFFECT_PROOF) {
+            return if prior == &encoded { Ok(()) } else { Err("browser_native_no_effect_proof_conflict".into()) };
+        }
+        let signature = hex::encode(mac(&secret, &proof)?.finalize().into_bytes());
+        original.evidence_references.insert(NO_EFFECT_PROOF.into(), encoded);
+        original.evidence_references.insert(NO_EFFECT_SIGNATURE.into(), signature);
+        Ok(())
+    })
+}
+
+fn verified_no_effect(original: &BrowserTaskOperation, secret: &[u8; 32]) -> Result<Value, String> {
+    let proof: Value = serde_json::from_str(original.evidence_references.get(NO_EFFECT_PROOF)
+        .ok_or("browser_native_no_effect_proof_missing: inspect the original operation; uncertain input cannot be declared no-effect by the caller")?)
+        .map_err(|_| "browser_native_no_effect_proof_invalid")?;
+    let signature = hex::decode(
+        original
+            .evidence_references
+            .get(NO_EFFECT_SIGNATURE)
+            .ok_or("browser_native_no_effect_proof_invalid")?,
+    )
+    .map_err(|_| "browser_native_no_effect_proof_invalid")?;
+    mac(secret, &proof)?
+        .verify_slice(&signature)
+        .map_err(|_| "browser_native_no_effect_proof_invalid")?;
+    if proof["schemaVersion"] != "agent-browser.native-no-effect.v1"
+        || proof["taskId"] != original.task_id
+        || proof["requestId"] != original.request_id
+        || proof["fingerprint"] != original.fingerprint
+        || proof["callerFingerprint"]
+            != serde_json::to_value(original.evidence_references.get("callerCommandFingerprint"))
+                .map_err(|_| "browser_native_no_effect_scope_invalid")?
+        || proof["context"]
+            != serde_json::to_value(RetainedContext::from_operation(original))
+                .map_err(|_| "browser_native_no_effect_scope_invalid")?
+        || proof["effectStatus"] != "no_effect"
+        || proof["originalResponse"]["success"] != false
+    {
+        return Err("browser_native_no_effect_scope_invalid".into());
+    }
+    Ok(proof)
+}
+
+/// Explicit read-first settlement. Only durable owner proof can resolve this
+/// original; no input is dispatched and changed current scope stays refused.
+pub(crate) fn reconcile_native_no_effect(
+    task: &str,
+    request: &str,
+) -> Result<BrowserTaskOperation, String> {
+    let secret = key(true)?;
+    let mut store = BrowserSessionSqliteStore::default_sqlite()?;
+    if let Some(row) = store.archived_task_operation(task, request)? {
+        if row.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+            verified_no_effect(&row, &secret)?;
+            return Ok(row);
+        }
+        return Err("browser_native_no_effect_original_not_eligible".into());
+    }
+    store.mutate_session_state_with_connection(|state, connection| {
+        let original = state
+            .task_operations
+            .get(task)
+            .and_then(|rows| rows.get(request))
+            .cloned()
+            .ok_or("browser_task_operation_not_found")?;
+        verified_no_effect(&original, &secret)?;
+        if original.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+            return Ok(original);
+        }
+        if original.action != "native_input"
+            || !matches!(
+                original.state,
+                BrowserTaskOperationState::Pending | BrowserTaskOperationState::Uncertain
+            )
+        {
+            return Err("browser_native_no_effect_original_not_eligible".into());
+        }
+        // Current identity/epoch may have advanced since this historical refusal.
+        // Its immutable signed original remains valid; only a NEW intent needs
+        // current context/freshness. No rollback/adoption is authorized here.
+        let row = state
+            .task_operations
+            .get_mut(task)
+            .unwrap()
+            .get_mut(request)
+            .unwrap();
+        row.state = BrowserTaskOperationState::OwnerRefusedNoEffect;
+        if row.completed_at_ms.is_none() {
+            row.completed_at_ms = Some(now_ms()?);
+        }
+        let schema: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .map_err(|_| "browser_native_no_effect_publication_failed")?;
+        if schema < 7 {
+            connection
+                .pragma_update(None, "user_version", 7)
+                .map_err(|_| "browser_native_no_effect_publication_failed")?;
+        }
+        Ok(row.clone())
+    })
+}
+
+pub(crate) fn validate_no_effect_outcome(original: &BrowserTaskOperation) -> Result<(), String> {
+    if original.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+        verified_no_effect(original, &key(true)?)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn original_no_effect_failure(original: &BrowserTaskOperation) -> Option<String> {
+    (original.state == BrowserTaskOperationState::OwnerRefusedNoEffect).then(|| {
+        original
+            .evidence_references
+            .get(NO_EFFECT_PROOF)
+            .and_then(|encoded| serde_json::from_str::<Value>(encoded).ok())
+            .and_then(|proof| {
+                proof["originalResponse"]["error"]
+                    .as_str()
+                    .map(str::to_owned)
+            })
+            .unwrap_or_else(|| "browser_native_input_refused".into())
+    })
+}
+
 /// Admit once against exact current logical/physical scope before daemon ensure.
 pub(crate) fn begin(task_id: &str, command: &mut Value) -> Result<Admission, String> {
     begin_inner(task_id, command, false)
@@ -357,28 +565,60 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
     let path = BrowserSessionSqliteStore::default_sqlite_path()?;
     let reader = BrowserSessionSqliteStore::open_read_only(&path)?;
     let state = reader.load_session_state()?;
-    let has_history = state.task_operations.values().any(|rows| !rows.is_empty());
+    let has_history = state.task_operations.values().any(|rows| !rows.is_empty())
+        || reader.has_archived_task_operations()?;
     if let Some(original) = state
         .task_operations
         .get(task_id)
         .and_then(|rows| rows.get(&request_id))
+        .cloned()
+        .or(reader.archived_task_operation(task_id, &request_id)?)
     {
         if original.task_id != task_id || original.request_id != request_id {
             return Err("browser_task_operation_identity_conflict".into());
         }
-        same_request(&key(true)?, command, original)?;
+        let secret = key(true)?;
+        same_request(&secret, command, &original)?;
+        if original.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+            verified_no_effect(&original, &secret)?;
+        }
         return Ok(Admission::Existing(original.clone()));
     }
+    // Observe once before acquiring any writer lock. This is admission evidence,
+    // never a substitute for the Native owner's later physical-input check.
+    let native_time = if native && action == "native_input" {
+        Some(crate::connection::stable_time::native_now()?)
+    } else {
+        None
+    };
     // Resolve an original capture before transport or process recovery. Missing
     // evidence is never replaced by a caller timestamp or guessed coordinates.
     let observation = if native && action == "native_input" {
         if command.get("loginTarget").is_some() {
             original_login_observation(&state, task_id, command)?;
-            login_episode_step(&state, task_id, command, None)?;
+            login_episode_step(&state, task_id, command, None, native_time.as_ref())?;
         } else if command.get("imageAttempt").is_some() {
-            original_native_image_observation(&state, task_id, command)?;
+            let observed = original_native_image_observation(&state, task_id, command)?;
+            let current = native_time
+                .as_ref()
+                .ok_or("browser_native_time_evidence_invalid")?;
+            observed.validate_at(&super::browser_native_image::NativeImageClockReading {
+                wall_time_ms: current.earliest_ms(),
+                elapsed: None,
+                service_time: Some(current.clone()),
+            })?;
         } else {
-            original_native_observation(&state, task_id, command)?;
+            let observed = original_native_observation(&state, task_id, command)?;
+            observed
+                .service_time
+                .as_ref()
+                .ok_or("browser_native_time_recapture_required: obtain a fresh native_capture")?
+                .fresh_at(
+                    native_time
+                        .as_ref()
+                        .ok_or("browser_native_time_evidence_invalid")?,
+                    10_000,
+                )?;
         }
         Some(())
     } else {
@@ -390,11 +630,22 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
     let expected = context(&state, task_id)?;
     let mode = reader.inspect_task_mode(task_id)?;
     if mode["mode"] == "unverified" {
-        return Err("browser_task_operation_process_unverified: inspect current task; do not relaunch to discover an outcome".into());
+        let reason = match mode["reason"].as_str() {
+            Some("original_identity_unavailable") => "original_identity_unavailable",
+            Some("process_unavailable") => "process_unavailable",
+            Some("process_identity_changed") => "process_identity_changed",
+            Some("command_line_unavailable") => "command_line_unavailable",
+            Some("not_browser_root") => "not_browser_root",
+            Some("process_changed_during_observation") => "process_changed_during_observation",
+            Some("owner_changed_during_observation") => "owner_changed_during_observation",
+            Some("retained_debugger_endpoint") => "retained_debugger_endpoint",
+            _ => "observation_unavailable",
+        };
+        return Err(format!("browser_task_operation_process_unverified: reason={reason}; no new effect dispatched; inspect browser_command action=mode for this task, then inspect task_briefing and original operations; missing original proof requires supported explicit mode_convert prepare/confirm recovery, never implicit adoption or replay"));
     }
     let key = key(has_history)?;
     let fingerprint = hex::encode(mac(&key, command)?.finalize().into_bytes());
-    let original = BrowserTaskOperation {
+    let mut original = BrowserTaskOperation {
         request_id: request_id.clone(),
         task_id: task_id.into(),
         profile_id: expected.profile_id.clone(),
@@ -410,12 +661,19 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         created_at_ms: now_ms()?,
         completed_at_ms: None,
         evidence_references: if command.get("loginTarget").is_some() {
+            let login_observation = original_login_observation(&state, task_id, command)?;
+            let qualified_now = super::native_login_perception::qualified_time(
+                &login_observation,
+                native_time
+                    .as_ref()
+                    .ok_or("browser_native_time_evidence_invalid")?,
+            )?;
             let selected = super::native_login_perception::select_target(
-                &original_login_observation(&state, task_id, command)?,
+                &login_observation,
                 command["loginTarget"]["targetRef"]
                     .as_str()
                     .ok_or("browser_native_login_target_invalid")?,
-                now_ms()?,
+                qualified_now,
             )?;
             BTreeMap::from([
                 (
@@ -461,14 +719,30 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
             BTreeMap::new()
         },
     };
+    if let Some(tag) = command["_taskOperationCallerFingerprint"].as_str() {
+        original
+            .evidence_references
+            .insert("callerCommandFingerprint".into(), tag.into());
+    }
     let mut writer = BrowserSessionSqliteStore::default_sqlite()?;
-    let admitted = writer.mutate_session_state(|state| {
+    let admitted = writer.mutate_session_state_with_connection(|state, connection| {
         if let Some(prior) = state
             .task_operations
             .get(task_id)
             .and_then(|rows| rows.get(&request_id))
+            .cloned()
+            .or(
+                super::browser_session_store::task_operation_archive::archived(
+                    connection,
+                    task_id,
+                    &request_id,
+                )?,
+            )
         {
-            same_request(&key, command, prior)?;
+            same_request(&key, command, &prior)?;
+            if prior.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+                verified_no_effect(&prior, &key)?;
+            }
             return Ok(Admission::Existing(prior.clone()));
         }
         if context(state, task_id)? != expected {
@@ -487,7 +761,7 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         if observation.is_some() {
             if command.get("loginTarget").is_some() {
                 original_login_observation(state, task_id, command)?;
-                let step = login_episode_step(state, task_id, command, None)?;
+                let step = login_episode_step(state, task_id, command, None, native_time.as_ref())?;
                 admitted
                     .evidence_references
                     .insert("nativeLoginStep".into(), step.to_string());
@@ -501,20 +775,34 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
                 image_attempt_budget(state, task_id, command)?;
             }
         }
+        super::browser_session_store::task_operation_archive::make_room(
+            connection, state, task_id,
+        )?;
         let rows = state.task_operations.entry(task_id.into()).or_default();
-        if rows.len() >= MAXIMUM_TASK_OPERATIONS {
-            return Err(
-                "browser_task_operation_capacity_reached: original history retained".into(),
-            );
-        }
         rows.insert(request_id.clone(), admitted.clone());
         Ok(Admission::Dispatch(admitted))
     })?;
     if let Admission::Dispatch(ref original) = admitted {
-        command["taskOperationExpected"] =
-            json!({"requestId":original.request_id,"context":expected});
+        let dispatch_seal = hex::encode(
+            mac(&key, &dispatch_scope(original))?
+                .finalize()
+                .into_bytes(),
+        );
+        command["taskOperationExpected"] = json!({"requestId":original.request_id,"context":expected,"dispatchSeal":dispatch_seal});
         command["retainedTaskOnly"] = json!(true);
         command["noTransportReplay"] = json!(true);
+        if native && command["action"] == "native_input" && command.get("ownerTimeoutMs").is_some()
+        {
+            // The original MAC and durable admission above exclude this private
+            // observation. Reuse this boundary's qualified observation; the
+            // physical owner still samples fresh time immediately before input.
+            command["_nativeOwnerAdmittedServiceTime"] = serde_json::to_value(
+                native_time
+                    .as_ref()
+                    .ok_or("browser_native_time_evidence_invalid")?,
+            )
+            .map_err(|_| "browser_native_time_evidence_invalid")?;
+        }
     }
     Ok(admitted)
 }
@@ -529,6 +817,7 @@ fn native_kernel_admit(
     command: &Value,
     observation: &super::browser_native_control::NativeChallengeObservation,
     binding: &Value,
+    current_time: &crate::connection::stable_time::Stamp,
 ) -> Result<agent_browser_challenge_control::ChallengePolicy, String> {
     use agent_browser_challenge_control::{
         decide, ChallengeDecision, ChallengeEvent, ChallengePolicy, ChallengeSnapshot,
@@ -539,15 +828,19 @@ fn native_kernel_admit(
         .as_str()
         .ok_or("browser_native_site_policy_provider_missing")?
         .to_owned();
-    let prior = state.task_operations.get(task_id).is_some_and(|rows| {
-        rows.values().any(|row| {
-            row.request_id != command["id"]
-                && row.action == "native_input"
-                && row
-                    .evidence_references
-                    .contains_key("nativeObservationRequestId")
-        })
+    let prior = operation_history(state, task_id)?.values().any(|row| {
+        row.request_id != command["id"]
+            && row.state != BrowserTaskOperationState::OwnerRefusedNoEffect
+            && row.action == "native_input"
+            && row
+                .evidence_references
+                .contains_key("nativeObservationRequestId")
     });
+    let capture_time = observation
+        .service_time
+        .as_ref()
+        .ok_or("browser_native_time_recapture_required: obtain a fresh native_capture")?;
+    capture_time.fresh_at(current_time, 10_000)?;
     let policy = ChallengePolicy {
         policy_digest: binding["digest"]
             .as_str()
@@ -559,7 +852,7 @@ fn native_kernel_admit(
         max_pointer_events: 3,
         max_key_events: 0,
         cooldown_ms: 0,
-        deadline_at_ms: observation.observed_at_ms.saturating_add(10_000),
+        deadline_at_ms: capture_time.earliest_ms().saturating_add(10_000),
     };
     let snapshot = ChallengeSnapshot {
         attempts_started: u8::from(prior),
@@ -571,7 +864,7 @@ fn native_kernel_admit(
         ChallengeEvent::Observed {
             posture: ObservationPosture::Eligible,
             provider_id: provider,
-            now_ms: now_ms()?,
+            now_ms: current_time.latest_ms(),
         },
     )
     .map_err(|_| "browser_native_challenge_admission_refused")?
@@ -583,7 +876,9 @@ fn native_kernel_admit(
         decide(
             &policy,
             &snapshot,
-            ChallengeEvent::StartAttempt { now_ms: now_ms()? }
+            ChallengeEvent::StartAttempt {
+                now_ms: current_time.latest_ms()
+            }
         ),
         Ok(ChallengeDecision::PermitAttempt(_))
     ) {
@@ -603,10 +898,9 @@ fn original_native_observation(
         .as_str()
         .filter(|id| valid_request_id(id))
         .ok_or("browser_native_original_observation_request_invalid")?;
-    let capture = state
-        .task_operations
-        .get(task_id)
-        .and_then(|rows| rows.get(request))
+    let history = operation_history(state, task_id)?;
+    let capture = history
+        .get(request)
         .ok_or("browser_native_original_observation_missing")?;
     let encoded = capture
         .evidence_references
@@ -622,7 +916,7 @@ fn original_native_observation(
     {
         return Err("browser_native_original_observation_context_changed".into());
     }
-    observation.validate(now_ms()?)?;
+    observation.validate_structure()?;
     Ok(observation)
 }
 
@@ -919,6 +1213,9 @@ pub(crate) fn retain_native_site_policy_for_owner(
     let request = command["id"]
         .as_str()
         .ok_or("browser_native_original_operation_invalid")?;
+    // The supported client may wait on I/O; unrelated tasks must never wait
+    // behind that I/O while this process owns the SQLite writer transaction.
+    let qualified_time = crate::connection::stable_time::native_now()?;
     let after = store.mutate_session_state(|state| {
         if state != expected {
             return Err("browser_native_policy_publication_conflict".into());
@@ -939,7 +1236,13 @@ pub(crate) fn retain_native_site_policy_for_owner(
             return Err("browser_native_original_observation_context_changed".into());
         }
         let image_plan = if command.get("imageAttempt").is_some() {
-            Some(native_image_kernel_plan(state, task, command, binding)?)
+            Some(native_image_kernel_plan(
+                state,
+                task,
+                command,
+                binding,
+                &qualified_time,
+            )?)
         } else {
             None
         };
@@ -972,7 +1275,8 @@ pub(crate) fn retain_native_site_policy_for_owner(
             let observation = observation
                 .as_ref()
                 .ok_or("browser_native_original_observation_unqualified")?;
-            let policy = native_kernel_admit(state, task, command, observation, binding)?;
+            let policy =
+                native_kernel_admit(state, task, command, observation, binding, &qualified_time)?;
             (
                 observation.family.clone(),
                 policy.policy_digest,
@@ -1187,7 +1491,7 @@ pub(crate) fn finish(
                 let observation: super::browser_native_image::NativeImageObservation =
                     serde_json::from_value(value.clone())
                         .map_err(|_| "browser_native_image_observation_invalid")?;
-                observation.validate_current()?;
+                observation.validate_structure()?;
                 references.insert(
                     "nativeImageObservation".into(),
                     serde_json::to_string(&observation)
@@ -1202,7 +1506,7 @@ pub(crate) fn finish(
                 let observation: super::browser_native_control::NativeChallengeObservation =
                     serde_json::from_value(value.clone())
                         .map_err(|_| "browser_native_original_observation_invalid")?;
-                observation.validate(now_ms()?)?;
+                observation.validate_structure()?;
                 references.insert(
                     "nativeObservation".into(),
                     serde_json::to_string(&observation)
@@ -1341,10 +1645,9 @@ fn original_native_image_observation(
     let request = command["imageAttempt"]["observationRequestId"]
         .as_str()
         .ok_or("browser_native_original_observation_request_invalid")?;
-    let capture = state
-        .task_operations
-        .get(task)
-        .and_then(|rows| rows.get(request))
+    let history = operation_history(state, task)?;
+    let capture = history
+        .get(request)
         .ok_or("browser_native_original_observation_missing")?;
     let encoded = capture
         .evidence_references
@@ -1359,7 +1662,7 @@ fn original_native_image_observation(
     {
         return Err("browser_native_original_observation_context_changed".into());
     }
-    observation.validate_current()?;
+    observation.validate_structure()?;
     if observation.registered_action_id != super::browser_native_image::command_profile(command) {
         return Err("browser_native_image_round_changed".into());
     }
@@ -1408,7 +1711,8 @@ pub(crate) fn native_image_attempt_observation(
     if let Some(binding) = original.evidence_references.get("nativeSitePolicy") {
         let binding: Value =
             serde_json::from_str(binding).map_err(|_| "browser_native_site_policy_invalid")?;
-        let plan = native_image_kernel_plan(&state, task, command, &binding)?;
+        let current = crate::connection::stable_time::native_now()?;
+        let plan = native_image_kernel_plan(&state, task, command, &binding, &current)?;
         let retained = original
             .evidence_references
             .get("nativeImageRound")
@@ -1423,6 +1727,7 @@ fn native_image_kernel_plan(
     task: &str,
     command: &Value,
     binding: &Value,
+    qualified_time: &crate::connection::stable_time::Stamp,
 ) -> Result<super::browser_native_image::NativeImagePlan, String> {
     super::browser_host_policy::check_state(state, task, command)?;
     if binding["registeredActionId"] != super::browser_native_image::command_profile(command)
@@ -1432,17 +1737,21 @@ fn native_image_kernel_plan(
     }
     image_attempt_budget(state, task, command)?;
     let observation = original_native_image_observation(state, task, command)?;
+    observation.validate_at(&super::browser_native_image::NativeImageClockReading {
+        wall_time_ms: qualified_time.earliest_ms(),
+        elapsed: None,
+        service_time: Some(qualified_time.clone()),
+    })?;
     let selected = image_attempt_selection(command)?;
     if let Some(prior) = image_attempt_budget(state, task, command)? {
-        let old_capture = state
-            .task_operations
-            .get(task)
-            .and_then(|rows| rows.get(&prior.evidence_references["nativeObservationRequestId"]))
+        let history = operation_history(state, task)?;
+        let old_capture = history
+            .get(&prior.evidence_references["nativeObservationRequestId"])
             .filter(|capture| {
                 capture.action == "native_capture"
                     && capture.state == BrowserTaskOperationState::OwnerAcknowledged
                     && RetainedContext::from_operation(capture)
-                        == RetainedContext::from_operation(prior)
+                        == RetainedContext::from_operation(&prior)
             })
             .ok_or("browser_native_original_observation_missing")?;
         let encoded = old_capture
@@ -1474,7 +1783,7 @@ fn native_image_kernel_plan(
             &observation,
             &selected,
             binding,
-            observation.current_time_ms()?,
+            qualified_time.latest_ms(),
             (&prior.evidence_references["nativeImageRound"], &old),
         );
     }
@@ -1486,23 +1795,23 @@ fn native_image_kernel_plan(
         &observation,
         &selected,
         binding,
-        observation.current_time_ms()?,
+        qualified_time.latest_ms(),
     )
 }
 
 /// Admit at most one continuation of the immutable acknowledged first image row.
-fn image_attempt_budget<'a>(
-    state: &'a BrowserSessionState,
+fn image_attempt_budget(
+    state: &BrowserSessionState,
     task: &str,
     command: &Value,
-) -> Result<Option<&'a BrowserTaskOperation>, String> {
+) -> Result<Option<BrowserTaskOperation>, String> {
     let request = command["id"].as_str().unwrap_or_default();
-    let rows = state.task_operations.get(task);
+    let rows = operation_history(state, task)?;
     let prior = rows
-        .into_iter()
-        .flat_map(|rows| rows.values())
+        .values()
         .filter(|row| {
             row.request_id != request
+                && row.state != BrowserTaskOperationState::OwnerRefusedNoEffect
                 && row.action == "native_input"
                 && row
                     .evidence_references
@@ -1530,7 +1839,7 @@ fn image_attempt_budget<'a>(
             && old.evidence_references.contains_key("nativeImageRound")
             && RetainedContext::from_operation(old) == context(state, task)?
         {
-            return Ok(Some(old));
+            return Ok(Some((**old).clone()));
         }
     }
     Err("browser_native_challenge_attempt_budget_exhausted:human assistance required".into())
@@ -1570,16 +1879,13 @@ fn original_login_observation(
     command: &Value,
 ) -> Result<Value, String> {
     login_target_request(command)?;
-    let capture = state
-        .task_operations
-        .get(task)
-        .and_then(|rows| {
-            rows.get(
-                command["loginTarget"]["observationRequestId"]
-                    .as_str()
-                    .unwrap(),
-            )
-        })
+    let history = operation_history(state, task)?;
+    let capture = history
+        .get(
+            command["loginTarget"]["observationRequestId"]
+                .as_str()
+                .unwrap(),
+        )
         .ok_or("browser_native_login_observation_missing")?;
     if capture.action != "native_capture"
         || capture.state != BrowserTaskOperationState::OwnerAcknowledged
@@ -1597,81 +1903,91 @@ fn original_login_observation(
     super::native_login_perception::select_target(
         &observation,
         command["loginTarget"]["targetRef"].as_str().unwrap(),
-        now_ms()?,
+        observation["binding"]["serviceTime"]
+            .as_object()
+            .and_then(|_| {
+                serde_json::from_value::<crate::connection::stable_time::Stamp>(
+                    observation["binding"]["serviceTime"].clone(),
+                )
+                .ok()
+            })
+            .map(|stamp| stamp.earliest_ms())
+            .or_else(|| observation["binding"]["observedAtMs"].as_u64())
+            .ok_or("browser_native_login_observation_invalid")?,
     )?;
     Ok(observation)
 }
-/// The original per-task episode cannot be replaced to renew its budget. Only
-/// acknowledged previous steps allow progression; pending/unknown input stops.
+/// An episode is a scoped progress sequence, not a permanent task-wide veto.
+/// New episodes require all previous task input settled; every new step still
+/// binds a fresh owner observation and exact current task/process context.
 fn login_episode_step(
     state: &BrowserSessionState,
     task: &str,
     command: &Value,
     current: Option<&str>,
+    qualified_time: Option<&crate::connection::stable_time::Stamp>,
 ) -> Result<usize, String> {
     let episode = command["loginTarget"]["episodeId"]
         .as_str()
         .ok_or("browser_native_login_episode_invalid")?;
-    let rows = state.task_operations.get(task);
-    let mut prior = vec![];
-    if let Some(rows) = rows {
-        for row in rows.values() {
-            if let Some(id) = row.evidence_references.get("nativeLoginEpisode") {
-                if id != episode {
-                    return Err("browser_native_login_episode_changed".into());
-                }
-                if current == Some(row.request_id.as_str()) {
-                    continue;
-                }
-                prior.push(row);
+    let history = operation_history(state, task)?;
+    let task_context = context(state, task)?;
+    let mut prior = Vec::new();
+    for row in history.values() {
+        if row.state == BrowserTaskOperationState::OwnerRefusedNoEffect {
+            continue;
+        }
+        let Some(id) = row.evidence_references.get("nativeLoginEpisode") else {
+            continue;
+        };
+        if current == Some(row.request_id.as_str()) {
+            continue;
+        }
+        if row.state != BrowserTaskOperationState::OwnerAcknowledged {
+            return Err(format!("browser_native_login_previous_input_unsettled: requestId={}; inspect browser_command action=task_operation params.requestId for this original and reconcile before continuing any login episode; no input replay", row.request_id));
+        }
+        if id == episode {
+            if RetainedContext::from_operation(row) != task_context {
+                return Err("browser_native_login_context_changed: inspect browser_command action=task_briefing and original task_operation records; after settling prior inputs, begin a new scoped episode with a fresh native_capture".into());
             }
+            prior.push(row);
         }
     }
     prior.sort_by_key(|row| {
         row.evidence_references
             .get("nativeLoginStep")
-            .and_then(|s| s.parse::<usize>().ok())
+            .and_then(|step| step.parse::<usize>().ok())
             .unwrap_or(usize::MAX)
     });
-    let now = now_ms()?;
-    if prior.len() >= 3 {
-        return Err("browser_native_login_budget_exhausted".into());
-    }
     for (step, row) in prior.iter().enumerate() {
-        if row.state != BrowserTaskOperationState::OwnerAcknowledged
-            || RetainedContext::from_operation(row) != context(state, task)?
-            || row.evidence_references.get("nativeLoginStep") != Some(&step.to_string())
-            || row
-                .evidence_references
-                .get("nativeLoginKind")
-                .map(String::as_str)
-                != Some(["username", "credential_entry", "submit"][step])
+        if row.evidence_references.get("nativeLoginStep") != Some(&step.to_string())
+            || !matches!(
+                row.evidence_references
+                    .get("nativeLoginKind")
+                    .map(String::as_str),
+                Some("username" | "credential_entry" | "submit")
+            )
         {
-            return Err("browser_native_login_previous_input_unsettled".into());
+            return Err("browser_native_login_previous_input_unsettled: inspect original task_operation records before explicit episode continuation; no input replay".into());
         }
     }
-    let start = prior
-        .first()
-        .map(|r| r.created_at_ms)
-        .or_else(|| {
-            current
-                .and_then(|id| rows.and_then(|rows| rows.get(id)))
-                .map(|r| r.created_at_ms)
-        })
-        .unwrap_or(now);
-    // Elapsed time is an SDK invocation policy, not authority to replay input.
-    // Retain rollback rejection; ordered ACKs, current context and fresh targets
-    // above/below still fence a later continuation of this same episode.
-    if now < start {
-        return Err("browser_native_login_budget_exhausted".into());
-    }
-    let selection = super::native_login_perception::select_target(
-        &original_login_observation(state, task, command)?,
-        command["loginTarget"]["targetRef"].as_str().unwrap(),
-        now,
+    let store = BrowserSessionSqliteStore::open_read_only(
+        &BrowserSessionSqliteStore::default_sqlite_path()?,
     )?;
-    if selection.kind != ["username", "credential_entry", "submit"][prior.len()] {
-        return Err("browser_native_login_step_invalid".into());
+    let maximum = store.login_step_limit(task)?;
+    if prior.len() >= maximum {
+        return Err(format!("browser_native_login_budget_exhausted: completedSteps={};maximumLoginSteps={maximum}; inspect browser_command action=task_operation params={{\"operation\":\"capacity\"}} and increase policy.maximumLoginSteps for this task before continuing the same episode; acknowledged originals are retained", prior.len()));
+    }
+    let observed = original_login_observation(state, task, command)?;
+    if let Some(current) = qualified_time {
+        let now = super::native_login_perception::qualified_time(&observed, current)?;
+        // Shape/order checks above remain under the original custody boundary;
+        // the caller supplies a single service observation acquired outside it.
+        super::native_login_perception::select_target(
+            &observed,
+            command["loginTarget"]["targetRef"].as_str().unwrap(),
+            now,
+        )?;
     }
     Ok(prior.len())
 }
@@ -1713,7 +2029,7 @@ pub(crate) fn native_login_attempt_observation(command: &Value) -> Result<Value,
     {
         return Err("browser_native_login_original_context_changed".into());
     }
-    let step = login_episode_step(&state, task, command, Some(request))?;
+    let step = login_episode_step(&state, task, command, Some(request), None)?;
     if original.evidence_references.get("nativeLoginStep") != Some(&step.to_string()) {
         return Err("browser_native_login_step_invalid".into());
     }

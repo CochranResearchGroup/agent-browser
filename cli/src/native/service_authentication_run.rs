@@ -18,7 +18,6 @@ use super::service_model::{LeaseState, ServiceState, ServiceTabHandle};
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
 };
-use super::service_trace::service_now_timestamp;
 use super::site_login_recipe::{
     classify_site_page, load_site_login_recipe, login_entry_fallback_url, site_login_recipe_digest,
     PasswordValueSource, SiteLoginRecipe, SitePageEvidence,
@@ -26,9 +25,9 @@ use super::site_login_recipe::{
 use super::{auth, interaction};
 use agent_browser_challenge_control::ChallengeConsumerKind;
 use agent_browser_service_model::{
-    project_service_authentication_run, require_live_authentication_run,
-    ServiceAuthenticationRunCompletion, ServiceAuthenticationRunRecord,
-    ServiceAuthenticationRunStartDecision, ServiceAuthenticationRunStartInput,
+    project_service_authentication_run, ServiceAuthenticationRunCompletion,
+    ServiceAuthenticationRunRecord, ServiceAuthenticationRunStartDecision,
+    ServiceAuthenticationRunStartInput,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -75,7 +74,33 @@ fn required_string(command: &Value, field: &str) -> Result<String, String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| format!("authentication_run_{field}_required"))
+        .ok_or_else(|| {
+            let code = match field {
+                "accountRef" => "authentication_run_account_ref_required",
+                "agentName" => "authentication_run_agent_name_required",
+                "authenticationRunId" => "authentication_run_authentication_run_id_required",
+                "browserId" => "authentication_run_browser_id_required",
+                "challengeProviderAccountRef" => {
+                    "authentication_run_challenge_provider_account_ref_required"
+                }
+                "challengeProviderId" => "authentication_run_challenge_provider_id_required",
+                "challengeProviderTenantRef" => {
+                    "authentication_run_challenge_provider_tenant_ref_required"
+                }
+                "idempotencyKey" => "authentication_run_idempotency_key_required",
+                "operationId" => "authentication_run_operation_id_required",
+                "organizationRef" => "authentication_run_organization_ref_required",
+                "policyDigest" => "authentication_run_policy_digest_required",
+                "profileId" => "authentication_run_profile_id_required",
+                "serviceName" => "authentication_run_service_name_required",
+                "sessionName" => "authentication_run_session_name_required",
+                "siteRecipeId" => "authentication_run_site_recipe_id_required",
+                "targetServiceId" => "authentication_run_target_service_id_required",
+                "taskName" => "authentication_run_task_name_required",
+                _ => "authentication_run_argument_required",
+            };
+            format!("{code}:field={field}")
+        })
 }
 
 fn optional_string(command: &Value, field: &str) -> Result<Option<String>, String> {
@@ -87,7 +112,14 @@ fn optional_string(command: &Value, field: &str) -> Result<Option<String>, Strin
             .filter(|value| !value.is_empty())
             .map(str::to_string)
             .map(Some)
-            .ok_or_else(|| format!("authentication_run_{field}_invalid")),
+            .ok_or_else(|| {
+                let code = match field {
+                    "challengeTaskId" => "authentication_run_challenge_task_id_invalid",
+                    "sitePolicyId" => "authentication_run_site_policy_id_invalid",
+                    _ => "authentication_run_argument_invalid",
+                };
+                format!("{code}:field={field}")
+            }),
     }
 }
 
@@ -349,9 +381,31 @@ fn run_projection(record: &ServiceAuthenticationRunRecord, replayed: bool) -> Va
         .expect("service authentication projection must serialize")
 }
 
+fn qualified_run_time(
+    record: &ServiceAuthenticationRunRecord,
+) -> Result<agent_browser_service_model::ServiceTimeOrigin, String> {
+    // Pending original effects outrank time availability and remain non-replayable.
+    if project_service_authentication_run(record, false).effect_pending {
+        return Err("authentication_run_effect_outcome_unknown".into());
+    }
+    if record.deadline_origin.is_none() || record.relative_deadline_ms.is_none() {
+        return Err("authentication_run_deadline_origin_unqualified".into());
+    }
+    let now = crate::connection::stable_time::authority_now()?.service_origin()?;
+    record.require_qualified_deadline(&now)?;
+    Ok(now)
+}
+
+fn qualified_timestamp(
+    now: &agent_browser_service_model::ServiceTimeOrigin,
+) -> Result<String, String> {
+    chrono::DateTime::from_timestamp_millis(now.latest_utc_ms as i64)
+        .map(|time| time.to_rfc3339())
+        .ok_or_else(|| "authentication_run_observed_at_invalid".into())
+}
+
 fn require_live_run(record: &ServiceAuthenticationRunRecord) -> Result<(), String> {
-    require_live_authentication_run(record, &service_now_timestamp())
-        .map_err(|error| error.cli_message())
+    qualified_run_time(record).map(|_| ())
 }
 
 fn exact_current_handle(
@@ -820,12 +874,19 @@ fn reserve_effect(
     action: AuthenticationActionKind,
     state_instance_id: &str,
 ) -> Result<(), String> {
-    let reserved_at = service_now_timestamp();
+    let snapshot = repository.load_snapshot()?;
+    let original = snapshot
+        .service_authentication_run(run_id)
+        .ok_or("authentication_run_not_found")?;
+    caller_owns_run(command, original)?;
+    let now = qualified_run_time(original)?;
+    let reserved_at = qualified_timestamp(&now)?;
     repository.mutate(|state| {
         let record = state
             .service_authentication_run(run_id)
             .ok_or_else(|| "authentication_run_not_found".to_string())?;
         caller_owns_run(command, record)?;
+        record.require_qualified_deadline(&now)?;
         state
             .reserve_service_authentication_effect(
                 run_id,
@@ -833,7 +894,7 @@ fn reserve_effect(
                 action,
                 state_instance_id,
                 &reserved_at,
-                &service_now_timestamp(),
+                &reserved_at,
             )
             .map(|_| ())
             .map_err(|error| error.cli_message(""))
@@ -853,6 +914,21 @@ async fn resume_authentication_run(
         .cloned()
         .ok_or_else(|| "authentication_run_not_found".to_string())?;
     caller_owns_run(command, &record)?;
+    if project_service_authentication_run(&record, false).effect_pending {
+        return Err("authentication_run_effect_outcome_unknown".into());
+    }
+    if record.run.used_operation_ids.contains(&operation_id)
+        || matches!(
+            record.run.state,
+            AuthenticationRunState::Authenticated
+                | AuthenticationRunState::OperatorInterventionRequired
+                | AuthenticationRunState::Blocked
+                | AuthenticationRunState::Failed
+                | AuthenticationRunState::Cancelled
+        )
+    {
+        return Ok(run_projection(&record, true));
+    }
     require_live_run(&record)?;
     let current_handle = exact_current_handle(&snapshot, &record)?;
     let recipe = load_site_login_recipe(&record.run.binding.site_recipe_id)?;
@@ -900,17 +976,20 @@ async fn resume_authentication_run(
                 exact_account_authenticated: classified.exact_organization_authenticated,
                 browser_chrome_semantics_used: false,
             };
+            let now = qualified_run_time(&record)?;
+            let observed_at = qualified_timestamp(&now)?;
             let updated = repository.mutate(|state| {
                 let current = state
                     .service_authentication_run(&run_id)
                     .ok_or_else(|| "authentication_run_not_found".to_string())?;
                 caller_owns_run(command, current)?;
+                current.require_qualified_deadline(&now)?;
                 state
                     .observe_service_authentication_run(
                         &run_id,
                         &operation_id,
                         receipt.clone(),
-                        &service_now_timestamp(),
+                        &observed_at,
                     )
                     .map_err(|error| error.cli_message("authentication_run_observe_failed"))
             })?;
@@ -994,11 +1073,14 @@ async fn resume_authentication_run(
             }
             let watch = arm_im_receipts_watch(&record).await?;
             let challenge_id = format!("sms:{}", watch.watch_id);
+            let now = qualified_run_time(&record)?;
+            let observed_at = qualified_timestamp(&now)?;
             let updated = repository.mutate(|state| {
                 let current = state
                     .service_authentication_run(&run_id)
                     .ok_or_else(|| "authentication_run_not_found".to_string())?;
                 caller_owns_run(command, current)?;
+                current.require_qualified_deadline(&now)?;
                 state
                     .prepare_service_authentication_watch(
                         &run_id,
@@ -1006,7 +1088,7 @@ async fn resume_authentication_run(
                         &challenge_id,
                         AuthenticationChallengeChannel::SmsOtp,
                         watch.clone(),
-                        &service_now_timestamp(),
+                        &observed_at,
                     )
                     .map_err(|error| error.cli_message("authentication_run_watch_prepare_failed"))
             })?;
@@ -1328,9 +1410,31 @@ pub(crate) async fn handle_service_authentication_run(
     match action {
         "service_authentication_run_start" => {
             let intent = parse_start_intent(command)?;
-            let created_at = service_now_timestamp();
-            let (record, replayed) = repository
-                .mutate(|state| start_run_in_state(state, intent.clone(), &created_at))?;
+            let mut snapshot = repository.load_snapshot()?;
+            let (existing, replayed) =
+                start_run_in_state(&mut snapshot, intent.clone(), "1970-01-01T00:00:00Z")?;
+            if replayed {
+                return Ok(run_projection(&existing, true));
+            }
+            let origin = crate::connection::stable_time::authority_now()?.service_origin()?;
+            origin
+                .deadline_ms(intent.deadline_ms)
+                .map_err(str::to_owned)?;
+            let created_at = chrono::DateTime::from_timestamp_millis(origin.earliest_utc_ms as i64)
+                .ok_or("authentication_run_created_at_invalid")?
+                .to_rfc3339();
+            let (record, replayed) = repository.mutate(|state| {
+                let (mut record, replayed) =
+                    start_run_in_state(state, intent.clone(), &created_at)?;
+                if !replayed {
+                    record.deadline_origin = Some(origin.clone());
+                    record.relative_deadline_ms = Some(intent.deadline_ms);
+                    state
+                        .authentication_runs
+                        .insert(record.run.run_id.clone(), record.clone());
+                }
+                Ok((record, replayed))
+            })?;
             Ok(run_projection(&record, replayed))
         }
         "service_authentication_run_status" => {
@@ -1494,6 +1598,151 @@ mod tests {
             "maxTransitions": 32,
             "serviceTabHandle": current,
         })
+    }
+
+    #[tokio::test]
+    async fn public_authentication_origin_preserves_legacy_reads_and_pending_fences() {
+        use crate::connection::stable_time::{Fixture, Stamp};
+        let home = std::env::temp_dir().join(format!("ab-auth-origin-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&home).unwrap();
+        let environment =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        environment.set("HOME", home.to_str().unwrap());
+        environment.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        let state = service_state();
+        let command = start_command(&state);
+        repository
+            .mutate(|retained| {
+                *retained = state.clone();
+                Ok(())
+            })
+            .unwrap();
+        let stamp = Stamp {
+            epoch: "11111111-1111-4111-8111-111111111111".into(),
+            counter: 1,
+            frequency_hz: 1000,
+            earliest_utc_ns: 1767225600000000000,
+            latest_utc_ns: 1767225600000000000,
+        };
+        let _time = Fixture::set(Ok(stamp.clone()));
+        let mut daemon = DaemonState::new();
+        let started = handle_service_authentication_run(&command, &mut daemon)
+            .await
+            .unwrap();
+        let id = started["runId"].as_str().unwrap();
+        assert_eq!(started["createdAt"], "2026-01-01T00:00:00+00:00");
+        let mut resume = command.clone();
+        resume["action"] = json!("service_authentication_run_resume");
+        resume["authenticationRunId"] = json!(id);
+        resume["operationId"] = json!("new-original-intent");
+        let retained = repository.load_snapshot().unwrap().authentication_runs[id].clone();
+        assert_eq!(retained.relative_deadline_ms, Some(120000));
+        let deadline = retained
+            .deadline_origin
+            .as_ref()
+            .unwrap()
+            .deadline_ms(120000)
+            .unwrap();
+        let _overlap = Fixture::set(Ok(Stamp {
+            counter: 2,
+            earliest_utc_ns: (deadline as i64 - 1) * 1_000_000,
+            latest_utc_ns: deadline as i64 * 1_000_000,
+            ..stamp.clone()
+        }));
+        assert_eq!(
+            handle_service_authentication_run(&resume, &mut daemon)
+                .await
+                .unwrap_err(),
+            "authentication_run_deadline_time_uncertain"
+        );
+        let _expired = Fixture::set(Ok(Stamp {
+            counter: 3,
+            earliest_utc_ns: deadline as i64 * 1_000_000,
+            latest_utc_ns: deadline as i64 * 1_000_000,
+            ..stamp.clone()
+        }));
+        assert_eq!(
+            handle_service_authentication_run(&resume, &mut daemon)
+                .await
+                .unwrap_err(),
+            "authentication_run_deadline_expired"
+        );
+        let _outage = Fixture::set(Err("stable_time_client_start_failed".into()));
+        assert_eq!(
+            handle_service_authentication_run(&command, &mut daemon)
+                .await
+                .unwrap()["replayed"],
+            true
+        );
+        repository
+            .mutate(|state| {
+                let record = state.authentication_runs.get_mut(id).unwrap();
+                record.deadline_origin = None;
+                record.relative_deadline_ms = None;
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            handle_service_authentication_run(&resume, &mut daemon)
+                .await
+                .unwrap_err(),
+            "authentication_run_deadline_origin_unqualified"
+        );
+        let mut status = resume.clone();
+        status["action"] = json!("service_authentication_run_status");
+        assert_eq!(
+            handle_service_authentication_run(&status, &mut daemon)
+                .await
+                .unwrap()["runId"],
+            id
+        );
+        // Retain an exact unresolved effect through the existing model seam.
+        // No network/browser/provider call is made by reservation.
+        repository
+            .mutate(|state| {
+                state
+                    .reserve_service_authentication_effect(
+                        id,
+                        "pending-original",
+                        AuthenticationActionKind::SubmitAccountIdentifier,
+                        "page-original",
+                        "2026-01-01T00:00:01Z",
+                        "2026-01-01T00:00:01Z",
+                    )
+                    .map_err(|error| error.cli_message(""))?;
+                Ok(())
+            })
+            .unwrap();
+        let pending = repository.load_snapshot().unwrap().authentication_runs[id].clone();
+        assert_eq!(
+            handle_service_authentication_run(&resume, &mut daemon)
+                .await
+                .unwrap_err(),
+            "authentication_run_effect_outcome_unknown"
+        );
+        assert_eq!(
+            repository.load_snapshot().unwrap().authentication_runs[id],
+            pending
+        );
+        let mut cancel = resume.clone();
+        cancel["action"] = json!("service_authentication_run_cancel");
+        cancel["operationId"] = json!("cancel-retained-intent");
+        assert_eq!(
+            handle_service_authentication_run(&cancel, &mut daemon)
+                .await
+                .unwrap()["state"],
+            "cancelled"
+        );
+        assert!(
+            project_service_authentication_run(
+                &repository.load_snapshot().unwrap().authentication_runs[id],
+                false
+            )
+            .effect_pending,
+            "cancellation must not erase an unresolved original effect"
+        );
+        std::fs::remove_dir_all(&home).unwrap();
     }
 
     #[test]

@@ -3005,6 +3005,17 @@ mod native_frame_tests {
             locator_calls: usize,
         }
         impl NativeOwner for Owner {
+            fn image_observation_clock(
+                &mut self,
+            ) -> Result<crate::native::browser_native_image::NativeImageClockReading, String>
+            {
+                Ok(
+                    crate::native::browser_native_image::NativeImageClockReading::fixture(
+                        1_000_000,
+                    ),
+                )
+            }
+
             fn challenge_target(
                 &mut self,
                 png: &[u8],

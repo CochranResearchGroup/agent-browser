@@ -1,4 +1,7 @@
 "use client";
+import {dashboardConfirmationFailure,responseFailureMetadata} from "@/lib/response-failure";
+import {reportDashboardComponentFailure} from "@/lib/failure-observation";
+
 import { useRef, useState } from "react";
 import { BrowserBuildPicker, type BrowserBuildEvidence, type BrowserBuildInspection } from "@/components/browser-build-picker";
 import { BrowserModeDialog } from "@/components/browser-mode-dialog";
@@ -35,11 +38,11 @@ export function BrowserBuildDialog({ open, onOpenChange, profileId, taskId, onRe
       const requestId = choice === "open_selected" ? receiptId : operationId.current;
       const response = await fetch("/api/command", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ action: "browser_session_build_select", choice, profileId, operationId: requestId, ...(choice === "select_for_next_launch" ? { ...build!.selection, mode, ownerConfirmed: confirmed } : {}) }) });
       const reply = await response.json();
-      if (!response.ok || reply.success !== true || reply.data?.operationId !== requestId || reply.data?.schemaVersion !== "agent-browser.build-selection.v1") throw new Error(typeof reply.error === "string" ? reply.error : "Outcome could not be confirmed.");
+      if ((!response.ok || reply.success !== true || reply.data?.operationId !== requestId || reply.data?.schemaVersion !== "agent-browser.build-selection.v1") || responseFailureMetadata(reply)) throw dashboardConfirmationFailure(reply,"dashboard_build_selection_unconfirmed",{source:"packages/dashboard/src/components/browser-build-dialog.tsx",owningFunction:"select",...{operationId:requestId}});
       setStatus(reply.data.phase); setUnknown(false);
       if (choice === "select_for_next_launch") { setReceiptId(requestId); setInspection({ ...inspection, nextLaunchBuild: build!, nextLaunchMode: mode, currentSelectionOperationId: requestId! }); setConfirmed(false); operationId.current = crypto.randomUUID(); }
       await onRefresh().catch(() => setError("Inventory could not refresh. Read browser builds again."));
-    } catch (error) { setUnknown(true); setError(`${error instanceof Error ? error.message : "Unknown result"} Refresh browser builds to read retained selection and active tasks before another action.`); }
+    } catch (error) {void reportDashboardComponentFailure(error,"browser-build-dialog.tsx"); setUnknown(true); setError(`${error instanceof Error ? error.message : "Unknown result"} Refresh browser builds to read retained selection and active tasks before another action.`); }
     finally { pending.current = false; setBusy(false); }
   };
   return <><Dialog open={open && child === null} onOpenChange={onOpenChange}><DialogContent style={{ maxWidth: 560, maxHeight: "90vh", overflowY: "auto" }}>

@@ -6,6 +6,7 @@ mod browser_build;
 #[cfg(test)]
 mod browser_build_tests;
 mod catalog;
+mod failure_recovery;
 mod host_control;
 mod host_policy;
 mod host_reconnect;
@@ -110,6 +111,8 @@ const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 // Advanced commands address one task. Explicit profile duplication also
 // supports a source profile without acquiring a task.
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
+    "failure_recovery",
+    "failure_log",
     "task_operation",
     "task_retirement",
     "mode",
@@ -228,23 +231,40 @@ pub fn run_mcp_command(
                     serde_json::to_string_pretty(&value).unwrap_or_default()
                 );
             }
-            0
+            if value["success"] == false {
+                1
+            } else {
+                0
+            }
         }
         Err(err) => {
+            let mut response = json!({"success":false,"error":err});
+            crate::native::service_failure::attach_public_failure(
+                &mut response,
+                &json!({"action":"mcp_cli"}),
+                "mcp_cli",
+            );
             if json_output {
-                println!(
-                    "{}",
-                    serde_json::to_string(&json!({
-                        "success": false,
-                        "error": err,
-                    }))
-                    .unwrap_or_default()
-                );
+                println!("{}", serde_json::to_string(&response).unwrap_or_default());
             } else {
                 eprintln!("{}", err);
             }
             1
         }
+    }
+}
+
+fn cli_public_tool_response(params: &Value, configured: &ServiceState) -> Result<Value, String> {
+    match call_service_mcp_tool(Some(params), "default", configured) {
+        Ok(reply) => reply["content"]
+            .as_array()
+            .and_then(|blocks| blocks.iter().find_map(|block| block["text"].as_str()))
+            .and_then(|text| serde_json::from_str(text).ok())
+            .ok_or_else(|| "mcp_cli_tool_response_invalid".into()),
+        Err(error) => Ok(json!({"success":false,
+            "error":error.data.as_ref().and_then(|data|data["message"].as_str()).unwrap_or(error.message),
+            "failure":error.data.as_ref().and_then(|data|data.get("failure")),
+            "data":error.data})),
     }
 }
 
@@ -258,6 +278,7 @@ fn mcp_command_response_with_config(
     configured_service_state: &ServiceState,
 ) -> Result<Value, String> {
     match args.get(1).map(|value| value.as_str()) {
+        Some("failure-recovery") => failure_recovery::cli(args, configured_service_state),
         Some("host-control") => host_control::cli(args),
         Some("host-reconnect") => host_reconnect::cli(args),
         Some("host-policy") => host_policy::cli(args),
@@ -310,6 +331,20 @@ fn mcp_command_response_with_config(
                     arguments[field] = value;
                 }
             }
+            if let Some(original_failure) =
+                task_operations::settled_native_refusal(&arguments).map_err(native_request_error)?
+            {
+                let request = original_failure
+                    .data
+                    .as_ref()
+                    .and_then(|data| data["requestId"].as_str())
+                    .unwrap_or("original")
+                    .to_owned();
+                return Err(format!(
+                    "{};originalRequestId={request};effectStatus=no_effect;dispatchAttempted=false",
+                    native_request_error(original_failure)
+                ));
+            }
             validate_browser_command_action(&arguments).map_err(|error| error.message)?;
             let mut command = browser_command_command(BrowserCommandArgs {
                 action: &args[3],
@@ -327,9 +362,20 @@ fn mcp_command_response_with_config(
             )
         }
         Some("task-operation") => {
-            if args.len() != 4 || args[2].trim().is_empty() || args[3].trim().is_empty() {
+            if !(4..=5).contains(&args.len())
+                || args[2].trim().is_empty()
+                || args[3].trim().is_empty()
+                || (args.len() == 5 && args[4] != "reconcile")
+            {
                 return Err(
-                    "Usage: agent-browser --json mcp task-operation <task-id> <request-id>".into(),
+                    "Usage: agent-browser --json mcp task-operation <task-id> <request-id> [reconcile]".into(),
+                );
+            }
+            if args.len() == 5 {
+                return cli_public_tool_response(
+                    &json!({"name":"browser_command","arguments":{
+                    "taskId":args[2],"action":"task_operation","params":{"operation":"reconcile","requestId":args[3]}}}),
+                    configured_service_state,
                 );
             }
             Ok(json!({"success":true,"data":task_operations::lookup(&args[2], &args[3])?}))
@@ -5507,9 +5553,56 @@ fn call_service_mcp_tool(
     session: &str,
     configured_service_state: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
-    task_operations::with_context(params, || {
+    let mut command = params
+        .map(|value| value["arguments"].clone())
+        .unwrap_or_else(|| json!({}));
+    if !command.is_object() {
+        command = json!({});
+    }
+    if command["action"].is_null() {
+        command["action"] = params
+            .map(|value| value["name"].clone())
+            .unwrap_or(Value::Null);
+    }
+    let result = task_operations::with_context(params, || {
         call_service_mcp_tool_inner(params, session, configured_service_state)
-    })
+    });
+    result
+        .map(|mut result| {
+            if let Some(text) = result["content"][0]["text"]
+                .as_str()
+                .filter(|_| result["isError"] == true)
+            {
+                if let Ok(mut payload) = serde_json::from_str::<Value>(text) {
+                    if payload["success"] == false {
+                        crate::native::service_failure::attach_public_failure(
+                            &mut payload,
+                            &command,
+                            "mcp_workflow",
+                        );
+                        result["content"][0]["text"] = json!(payload.to_string());
+                    }
+                }
+            }
+            result
+        })
+        .map_err(|mut error| {
+            let mut response = json!({"success":false,"error":error.data.as_ref()
+            .and_then(|data| data["message"].as_str()).unwrap_or(error.message)});
+            if let Some(data) = &error.data {
+                if data["failure"].is_object() {
+                    response["failure"] = data["failure"].clone();
+                }
+            }
+            crate::native::service_failure::attach_public_failure(
+                &mut response,
+                &command,
+                "mcp_workflow",
+            );
+            let data = error.data.get_or_insert_with(|| json!({}));
+            data["failure"] = response["failure"].clone();
+            error
+        })
 }
 
 fn call_service_mcp_tool_inner(
@@ -5547,7 +5640,7 @@ fn call_service_mcp_tool_inner(
         && !(name == "browser_command"
             && matches!(
                 arguments["action"].as_str(),
-                Some("profile_duplicate" | "browser_build")
+                Some("profile_duplicate" | "browser_build" | "failure_log" | "failure_recovery")
             ))
     {
         required_string_argument(arguments, "taskId")?;
@@ -5617,7 +5710,13 @@ fn call_service_mcp_tool_inner(
         if arguments["action"] == "playbook" {
             return playbooks::call(arguments, session);
         }
+        if let Some(original_failure) = task_operations::settled_native_refusal(arguments)? {
+            return Err(original_failure);
+        }
         validate_browser_command_action(arguments)?;
+        if arguments["action"] == "failure_recovery" {
+            return failure_recovery::call(arguments, session, configured_service_state);
+        }
         if matches!(
             arguments["action"].as_str(),
             Some("native_input" | "native_capture")
@@ -5685,6 +5784,38 @@ fn call_service_mcp_tool_inner(
         }
         if arguments["action"] == "task_retirement" {
             return task_retirement::call(arguments, session);
+        }
+        if arguments["action"] == "failure_log" {
+            let task = optional_string_argument(arguments, "taskId")?;
+            let params = &arguments["params"];
+            let occurrence = optional_string_argument(params, "occurrenceId")?;
+            let limit = match params.get("limit") {
+                None => 100,
+                Some(value) => value
+                    .as_u64()
+                    .filter(|limit| (1..=1000).contains(limit))
+                    .ok_or_else(|| {
+                        JsonRpcError::invalid_params("failure_log limit must be an integer1..1000")
+                    })? as usize,
+            };
+            let journal = match task {
+                Some(task) => crate::native::service_failure_journal::read_task_failures(
+                    task, occurrence, limit,
+                ),
+                None => crate::native::service_failure_journal::read_failure_occurrence(
+                    occurrence.ok_or_else(|| {
+                        JsonRpcError::invalid_params("failure_log requires taskId or occurrenceId")
+                    })?,
+                ),
+            }
+            .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            return Ok(tool_response_from_payload(
+                "browser_command",
+                session,
+                json!({}),
+                serde_json::to_value(journal).expect("journal is serializable"),
+                false,
+            ));
         }
         if arguments["action"] == "task_operation" {
             return task_operations::call(arguments, session);
@@ -6459,6 +6590,58 @@ fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, Js
     ))
 }
 
+fn native_allowance_issue(code: &str, message: &str) -> JsonRpcError {
+    let mut error = if matches!(
+        code,
+        "browser_native_owner_allowance_invalid" | "browser_native_owner_deadline_expired"
+    ) {
+        JsonRpcError::invalid_params(message)
+    } else {
+        JsonRpcError {
+            code: -32603,
+            message: "Native owner allowance unavailable",
+            data: Some(json!({"message":message})),
+        }
+    };
+    error.data.as_mut().expect("allowance failure carries data")["failure"] = json!({
+        "code":code,"axis":"request","phase":"ingress_validation","effectState":"no_effect",
+        "scope":"current_invocation_validation","originalOutcome":"not_inferred"
+    });
+    error
+}
+
+/// Assess only the supported service measurement instant. Never extrapolate
+/// with a guest clock or extend the caller's unchanged absolute deadline.
+fn check_native_deadline_at_observation(
+    deadline_ms: u64,
+    stamp: &crate::connection::stable_time::Stamp,
+) -> Result<(), JsonRpcError> {
+    stamp.validate().map_err(|error| {
+        native_allowance_issue("browser_native_owner_deadline_evidence_invalid", &error)
+    })?;
+    let observed_issue = |code: &str, message: &str| {
+        let mut error = native_allowance_issue(code, message);
+        error.data.as_mut().expect("allowance failure data")["failure"]["recoveryPlan"] = json!({
+            "requiredActor":"caller","check":"caller_absolute_native_deadline",
+            "evidence":{"status":"qualified_service_observation","measurementInstant":"StableTime service observation",
+                "epoch":stamp.epoch,"earliestUtcNs":stamp.earliest_utc_ns.to_string(),"latestUtcNs":stamp.latest_utc_ns.to_string(),
+                "callerDeadlineAtMs":deadline_ms,"guestClockSubstituted":false,"deliveryDelayExtrapolated":false}
+        });
+        error
+    };
+    let deadline_ns = i128::from(deadline_ms) * 1_000_000;
+    if i128::from(stamp.earliest_utc_ns) >= deadline_ns {
+        return Err(observed_issue(
+            "browser_native_owner_deadline_expired",
+            "Native owner deadline expired at the StableTime measurement instant",
+        ));
+    }
+    if i128::from(stamp.latest_utc_ns) >= deadline_ns {
+        return Err(observed_issue("browser_native_owner_deadline_uncertain", "StableTime uncertainty overlaps the caller's absolute Native owner deadline; preserve that deadline and inspect original outcomes before continuing"));
+    }
+    Ok(())
+}
+
 fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcError> {
     let action = required_string_argument(arguments, "action")?;
     if !BROWSER_COMMAND_ALLOWED_ACTIONS.contains(&action) {
@@ -6519,20 +6702,26 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
                 )
                 .is_err()
             {
-                return Err(JsonRpcError::invalid_params(
-                    "Native owner allowance requires ownerTimeoutMs100..300000 and optional positive safe-integer ownerDeadlineAtMs",
-                ));
+                return Err(native_allowance_issue("browser_native_owner_allowance_invalid",
+                    "Native owner allowance requires ownerTimeoutMs100..300000 and optional positive safe-integer ownerDeadlineAtMs"));
             }
             if key == "ownerDeadlineAtMs" && matches!(action, "native_capture" | "native_input") {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|_| JsonRpcError::invalid_params("Native owner clock unavailable"))?
-                    .as_millis() as u64;
-                if params[key].as_u64().is_some_and(|deadline| deadline <= now) {
-                    return Err(JsonRpcError::invalid_params(
-                        "Native owner deadline expired before admission",
-                    ));
-                }
+                let stamp = crate::connection::stable_time::native_now().map_err(|error| {
+                    let candidate = error.split(':').next().unwrap_or_default();
+                    let code = if matches!(
+                        candidate,
+                        "browser_native_time_unavailable" | "browser_native_time_evidence_invalid"
+                    ) {
+                        candidate
+                    } else {
+                        "browser_native_owner_deadline_time_unavailable"
+                    };
+                    native_allowance_issue(code, &error)
+                })?;
+                let deadline = params[key]
+                    .as_u64()
+                    .expect("allowance shape validated above");
+                check_native_deadline_at_observation(deadline, &stamp)?;
             }
             if !page_arguments.contains_key(key) {
                 return Err(JsonRpcError::invalid_params(&format!(
@@ -11512,6 +11701,9 @@ struct JsonRpcError {
     data: Option<Value>,
 }
 
+#[cfg(test)]
+mod refusal_tests;
+
 impl JsonRpcError {
     fn invalid_params(message: &str) -> Self {
         Self {
@@ -11649,6 +11841,61 @@ fn profile_lease_resource(uri: &str) -> Option<(String, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_absolute_deadline_uses_one_qualified_interval_without_guest_time() {
+        use crate::connection::stable_time::{fixture_stamp, Fixture};
+        let stamp = fixture_stamp(1_000);
+        assert!(check_native_deadline_at_observation(1_001, &stamp).is_ok());
+        let expired = check_native_deadline_at_observation(1_000, &stamp).unwrap_err();
+        assert_eq!(
+            expired.data.unwrap()["failure"]["code"],
+            "browser_native_owner_deadline_expired"
+        );
+        let mut uncertain = stamp.clone();
+        uncertain.earliest_utc_ns = 999_000_000;
+        uncertain.latest_utc_ns = 1_001_000_000;
+        assert_eq!(
+            check_native_deadline_at_observation(1_000, &uncertain)
+                .unwrap_err()
+                .data
+                .unwrap()["failure"]["code"],
+            "browser_native_owner_deadline_uncertain"
+        );
+        let mut invalid = stamp;
+        invalid.epoch = "unqualified-domain".into();
+        assert_eq!(
+            check_native_deadline_at_observation(2_000, &invalid)
+                .unwrap_err()
+                .data
+                .unwrap()["failure"]["code"],
+            "browser_native_owner_deadline_evidence_invalid"
+        );
+        let _clock = Fixture::set(Err(
+            "browser_native_time_unavailable:cause=stable_time_client_start_failed".into(),
+        ));
+        let ordinary =
+            json!({"taskId":"task","action":"native_capture","params":{"ownerTimeoutMs":1000}});
+        assert!(
+            validate_browser_command_action(&ordinary).is_ok(),
+            "relative allowance must not require StableTime"
+        );
+        let mut absolute = ordinary;
+        absolute["params"]["ownerDeadlineAtMs"] = json!(2_000);
+        let error = validate_browser_command_action(&absolute).unwrap_err();
+        assert_eq!(
+            error.data.as_ref().unwrap()["failure"]["code"],
+            "browser_native_time_unavailable"
+        );
+        assert_eq!(
+            error.data.as_ref().unwrap()["failure"]["effectState"],
+            "no_effect"
+        );
+        assert!(error.data.unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .contains("stable_time_client_start_failed"));
+    }
 
     #[test]
     fn profile_capability_arguments_use_the_service_state_authority_boundary() {
@@ -12579,6 +12826,57 @@ mod tests {
         assert_eq!(store.load_session_state().unwrap(), enriched);
         store.save_session_state(&state).unwrap();
         assert_eq!(cli["data"], mcp["data"]);
+        let reconnect = mcp_command_response(&[
+            "mcp".into(),
+            "host-reconnect".into(),
+            "task".into(),
+            "status".into(),
+        ])
+        .unwrap();
+        assert_eq!(reconnect["data"]["taskId"], "task");
+        assert_eq!(reconnect["data"]["browserId"], "browser");
+        assert_eq!(reconnect["data"]["status"], "task_retained");
+        assert_eq!(
+            reconnect["data"]["recovery"]["freshFacadeCommand"]["args"][3],
+            "task"
+        );
+        assert_eq!(reconnect["data"]["recovery"]["replayAllowed"], false);
+        let missing = mcp_command_response(&[
+            "mcp".into(),
+            "host-reconnect".into(),
+            "missing-task".into(),
+            "reconnect".into(),
+        ]);
+        assert!(missing
+            .unwrap_err()
+            .contains("browser_reconnect_task_metadata_unavailable"));
+        let mut ended = state.clone();
+        ended.sessions.remove("task");
+        ended.session_history.push(
+            serde_json::from_value(json!({
+                    "id":"task","name":"lane","profileId":"profile","browserId":"browser",
+                    "createdAtMs":1,"lastActivityAtMs":1,"endedAtMs":2,"reason":"explicit_close"}))
+            .unwrap(),
+        );
+        store.save_session_state(&ended).unwrap();
+        let closed = mcp_command_response(&[
+            "mcp".into(),
+            "host-reconnect".into(),
+            "task".into(),
+            "reconnect".into(),
+        ]);
+        assert!(closed.unwrap_err().contains("browser_reconnect_task_ended"));
+        let ended_status = mcp_command_response(&[
+            "mcp".into(),
+            "host-reconnect".into(),
+            "task".into(),
+            "status".into(),
+        ])
+        .unwrap();
+        assert_eq!(ended_status["data"]["status"], "task_ended");
+        assert_eq!(ended_status["data"]["terminalReason"], "explicit_close");
+        assert_eq!(store.load_session_state().unwrap(), ended);
+        store.save_session_state(&state).unwrap();
         let wrong = mcp_command_response(&["mcp".into(), "task-briefing".into(), "lane".into()]);
         assert!(wrong.unwrap_err().contains("browser_task_not_found"));
         assert_eq!(store.load_session_state().unwrap(), state);

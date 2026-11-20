@@ -5,8 +5,10 @@ export interface NativeImageObservation {
   desktopId:string;generation:number;windowId:number;processDigest:string;
   window:NativeImageBounds;displayWidth:number;displayHeight:number;region:NativeImageBounds;
   frameSha256:string;nativeControlEpoch:number;observedAtMs:number;registeredActionId:'hcaptcha-image-grid-3x3-v1'|'hcaptcha-image-grid-3x3-two-round-v1';
-  /** Same-boot elapsed authority; observedAtMs above remains wall-clock diagnostics. */
+  /** Legacy owner diagnostics only; client age/expiry authority is never inferred. */
   clock?:{kind:'linux-boottime-v1';bootId:string;observedAtMs:number};
+  /** Original owner capture stamp. Owner input admission qualifies freshness. */
+  serviceTime?:{epoch:string;counter:string;frequencyHz:string;earliestUtcNs:string;latestUtcNs:string};
   tileImageSha256s?:string[];
   puzzleSha256:string;candidates:Array<{candidateId:string;bounds:NativeImageBounds}>;verify:NativeImageBounds;
 }
@@ -29,12 +31,17 @@ export interface NativeImageOptions {
   verifyClearance:(context:ChallengeVerificationContext)=>Promise<ChallengeVerification>;
   verifyAccess:(context:ChallengeVerificationContext)=>Promise<ChallengeVerification>;
   captureRegion?:NativeImageBounds;
+  /** Diagnostic wall projection only; owner input admission qualifies freshness. */
   now?:()=>number;
-  /** Elapsed receiving timer, independent of wall-clock corrections. */
+  /** Ordinary per-invocation wait budget, default 60000 ms. */
+  timeoutMs?:number;
+  /** Legacy option retained for compatibility; never a freshness or expiry authority. */
   steadyNow?:()=>number;
 }
 export interface NativeImageResult {
-  taskId:string;status:'verified_access_after_native_image'|'awaiting_operator'|'intervention';reason?:string;
+  clientRecovery?:import('./client-recovery.js').ClientRecovery;failure?:Record<string,unknown>;occurrenceId?:string|null;
+  recovery?:{inspect:{interface:string;arguments:{taskId:string;requestId:string}};resumeCondition:string;newIntent?:{method:'resolve';requiredArguments:string[];instruction:string}};
+  taskId:string;status:'verified_access_after_native_image'|'awaiting_operator'|'intervention'|'failed_no_effect';reason?:string;
   originalOperation:Record<string,unknown>|null;roundOperations?:Array<Record<string,unknown>>;retryAllowed:false;
   binding?:ChallengeBinding;verification?:{clearance:string;access:string;frameSha256:string};continuation?:Record<string,unknown>;
 }

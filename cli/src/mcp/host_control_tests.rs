@@ -366,7 +366,14 @@ fn terminal_control611_public_target_process_epoch_races_preserve_original() {
 
 #[test]
 fn terminal_request619_public_completed_ordinary_request_with_live_supervisor_reconciles() {
-    for action in ["click", "evaluate"] {
+    for (action, created, completed, human_return) in [
+        ("click", 1_u64, 2_u64, false),
+        ("evaluate", 1, 2, false),
+        // A guest UTC correction changes diagnostic ordering, not the owner's
+        // terminal dispatcher/original proof or permission to observe it.
+        ("fill", 2_000, 1_000, true),
+        ("type", 1_000, 2_000, false),
+    ] {
         let f = fixture();
         let crate::process_identity::ProcessObservation::Observed(owner) =
             crate::process_identity::observe_process(std::process::id())
@@ -378,17 +385,68 @@ fn terminal_request619_public_completed_ordinary_request_with_live_supervisor_re
         std::fs::write(control::path("browser").unwrap(), original.to_string()).unwrap();
         BrowserSessionSqliteStore::default_sqlite().unwrap().mutate_session_state(|state| {
         let identity = state.adopted_browser_process_identities["browser"].process.clone();
-        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":action,"fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":1,"completedAtMs":2,"evidenceReferences":{}});
+        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":action,"fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":created,"completedAtMs":completed,"evidenceReferences":{}});
         state.task_operations.entry("task".into()).or_default().insert("original".into(), serde_json::from_value(value).unwrap());
         Ok(())
     }).unwrap();
-        let result = call(request());
+        let mut observed_request = request();
+        if human_return {
+            // Exercise actual independent viewer claims and returns; historical
+            // original proof must survive their current generation changes.
+            let digest = "a".repeat(64);
+            control::begin_handoff("browser", "assistance", &digest).unwrap();
+            control::take_handoff("browser", "assistance", &digest, "viewer-a:take-a").unwrap();
+            control::take_handoff("browser", "assistance", &digest, "viewer-b:take-b").unwrap();
+            control::return_handoff("browser", "assistance", &digest, "viewer-a:return-a").unwrap();
+            assert!(control::read("browser").unwrap().human);
+            observed_request["params"]["arguments"]["expectedEpoch"] =
+                json!(control::read("browser").unwrap().epoch);
+            let held = call(observed_request.clone());
+            assert!(held.to_string().contains("browser_control_human"), "{held}");
+            assert!(
+                f.commands.lock().unwrap().is_empty(),
+                "Another viewer's claim prevents observation/input"
+            );
+            control::return_handoff("browser", "assistance", &digest, "viewer-b:return-b").unwrap();
+            let returned = control::read("browser").unwrap();
+            assert!(returned.epoch > 2);
+            assert!(!returned.human);
+            assert!(returned.awaiting_observation);
+            assert!(
+                control::check("browser", "fill").is_err(),
+                "Returning claims alone is not a fresh observation"
+            );
+            observed_request["params"]["arguments"]["expectedEpoch"] = json!(returned.epoch);
+        }
+        let result = call(observed_request);
         assert!(result.get("error").is_none(), "{result}");
         assert_eq!(
             read_control()["flights"]["original"],
             "observed_uncertain_no_replay"
         );
-        assert_eq!(f.commands.lock().unwrap().len(), 1);
+        let commands = f.commands.lock().unwrap();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(
+            commands[0]["action"], "url",
+            "Reconciliation observes, never redispatches {action}"
+        );
+        let retained = BrowserSessionSqliteStore::default_sqlite()
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        let original = &retained.task_operations["task"]["original"];
+        assert_eq!(
+            original.state,
+            agent_browser_service_model::BrowserTaskOperationState::Uncertain
+        );
+        assert_eq!(original.action, action);
+        assert_eq!(
+            original.control_epoch, 2,
+            "Historical original generation is immutable"
+        );
+        assert!(!control::read("browser").unwrap().awaiting_observation);
+        assert_eq!(original.created_at_ms, created);
+        assert_eq!(original.completed_at_ms, Some(completed));
     }
 }
 
@@ -397,8 +455,10 @@ fn terminal_request619_public_incomplete_or_private_request_keeps_live_dispatch_
     for case in [
         "pending",
         "native",
+        "unregistered_action",
         "missing_completion",
-        "epoch",
+        "future_epoch",
+        "reset_epoch",
         "target",
         "active_flight",
     ] {
@@ -413,13 +473,17 @@ fn terminal_request619_public_incomplete_or_private_request_keeps_live_dispatch_
         std::fs::write(control::path("browser").unwrap(), original.to_string()).unwrap();
         BrowserSessionSqliteStore::default_sqlite().unwrap().mutate_session_state(|state| {
         let identity = state.adopted_browser_process_identities["browser"].process.clone();
-        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":"click","fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":1,"completedAtMs":2,"evidenceReferences":{}});
+        let value = json!({"requestId":"original","taskId":"task","profileId":"profile","browserId":"browser","tabId":"tab","targetId":"target","processPid":identity.pid,"processIdentity":identity,"controlEpoch":2,"action":"fill","fingerprint":"a".repeat(64),"state":"uncertain","createdAtMs":1,"completedAtMs":2,"evidenceReferences":{}});
         state.task_operations.entry("task".into()).or_default().insert("original".into(), serde_json::from_value(value).unwrap());
         Ok(())
     }).unwrap();
-        if case == "active_flight" {
+        if matches!(case, "active_flight" | "reset_epoch") {
             let mut control_state = read_control();
-            control_state["flights"]["original"] = json!("dispatched");
+            if case == "active_flight" {
+                control_state["flights"]["original"] = json!("dispatched");
+            } else {
+                control_state["epoch"] = json!(0);
+            }
             std::fs::write(control::path("browser").unwrap(), control_state.to_string()).unwrap();
         } else {
             BrowserSessionSqliteStore::default_sqlite()
@@ -437,8 +501,9 @@ fn terminal_request619_public_incomplete_or_private_request_keeps_live_dispatch_
                                 agent_browser_service_model::BrowserTaskOperationState::Pending
                         }
                         "native" => row.action = "native_input".into(),
+                        "unregistered_action" => row.action = "unreviewed_private_input".into(),
                         "missing_completion" => row.completed_at_ms = None,
-                        "epoch" => row.control_epoch = 1,
+                        "future_epoch" => row.control_epoch = 3,
                         "target" => row.target_id = "other".into(),
                         _ => unreachable!(),
                     }
@@ -447,7 +512,11 @@ fn terminal_request619_public_incomplete_or_private_request_keeps_live_dispatch_
                 .unwrap();
         }
         let before = read_control();
-        let result = call(request());
+        let mut observed_request = request();
+        if case == "reset_epoch" {
+            observed_request["params"]["arguments"]["expectedEpoch"] = json!(0);
+        }
+        let result = call(observed_request);
         assert!(
             result
                 .to_string()

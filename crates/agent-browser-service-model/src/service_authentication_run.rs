@@ -28,12 +28,49 @@ pub struct ServiceAuthenticationRunRecord {
     pub idempotency_key_sha256: String,
     pub created_at: String,
     pub deadline_at: String,
+    /// Immutable service provenance; absent on unqualified legacy records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deadline_origin: Option<crate::ServiceTimeOrigin>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_deadline_ms: Option<u64>,
     pub service_tab_handle: ServiceTabHandle,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub challenge_consumer_admission: Option<ChallengeConsumerAdmissionReceipt>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pending_effect: Option<PendingAuthenticationEffect>,
     pub run: AuthenticationRun,
+}
+
+impl ServiceAuthenticationRunRecord {
+    /// Validate an immutable relative origin against another qualified service
+    /// observation. This performs no I/O and does not trust caller/guest UTC.
+    pub fn require_qualified_deadline(&self, now: &crate::ServiceTimeOrigin) -> Result<(), String> {
+        if self.pending_effect.is_some() {
+            return Err("authentication_run_effect_outcome_unknown".into());
+        }
+        let origin = self
+            .deadline_origin
+            .as_ref()
+            .ok_or("authentication_run_deadline_origin_unqualified")?;
+        let duration = self
+            .relative_deadline_ms
+            .ok_or("authentication_run_deadline_origin_unqualified")?;
+        let deadline = origin.deadline_ms(duration).map_err(str::to_owned)?;
+        now.validate().map_err(str::to_owned)?;
+        let retained = DateTime::parse_from_rfc3339(&self.deadline_at)
+            .map_err(|_| "authentication_run_deadline_evidence_invalid")?
+            .timestamp_millis();
+        if u64::try_from(retained).ok() != Some(deadline) {
+            return Err("authentication_run_deadline_evidence_invalid".into());
+        }
+        if now.earliest_utc_ms >= deadline {
+            return Err("authentication_run_deadline_expired".into());
+        }
+        if now.latest_utc_ms >= deadline || now.latest_utc_ms < origin.earliest_utc_ms {
+            return Err("authentication_run_deadline_time_uncertain".into());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -259,6 +296,8 @@ pub fn complete_service_authentication_run_start(
         idempotency_key_sha256: prepared.idempotency_key_sha256,
         created_at: created.to_rfc3339(),
         deadline_at,
+        deadline_origin: None,
+        relative_deadline_ms: None,
         service_tab_handle: prepared.input.current_service_tab_handle,
         challenge_consumer_admission,
         pending_effect: None,

@@ -172,6 +172,14 @@ not transfer termination or relocation authority. Metadata reports
 `custody: "app_borrowed"`; capability presence is not readiness or account proof.
 
 
+### Viewer activity and continued automation
+
+Interactive mode enables input; opening or reconnecting a viewer does not prove human activity. Actual admitted Native viewer input temporarily pauses cooperative automation. Agent input never renews that pause. Remote View measures quiet using StableTime observations and `REMOTE_VIEW_HUMAN_INPUT_QUIET_MS` (default 1500 milliseconds). An unavailable or unqualified time observation keeps the affected return pending and reports the actual time failure.
+
+**Take control** creates an explicit hold for that authenticated viewer until it selects view-only. Returning one viewer does not release other viewers' holds or activity; status explains activity elsewhere and the remaining quiet interval. The viewer displays agent activity with a Take control option. This evidence covers instrumented Native viewer input, not independent physical OS controllers.
+
+After the last claim ends, Agent Browser requires a successful fresh observation of the retained page before another mutation. Process status alone is insufficient. Effects already dispatched retain their original uncertainty and must be reconciled without replay.
+
 ### Human takeover and return
 
 Viewing alone does not pause automation. Use `browser_control` with `taskId` and
@@ -1441,3 +1449,16 @@ remains passive. A confirmed graceful relaunch returns only the current viewer's
 own Native control lease, then closes with the fresh agent epoch. Generic input
 still requires its supplied epoch. A different controller or unresolved original
 return keeps the browser open and reports the precise control boundary.
+
+## Native input freshness time
+
+Native checkbox, login and image input uses owner-minted StableTime `serviceTime` evidence with service measurement bounds, epoch and counter continuity. Guest wall/boot clocks do not establish freshness. Existing age budgets remain 10 seconds for checkbox/login and 60 seconds for image input. Expired evidence, excessive uncertainty, changed time domain and helper/service failures have distinct recourse. Legacy unqualified evidence requires a fresh supported `native_capture`; original uncertain input is never replayed. A timing failure remains visible in `timeQualificationFailure` on a capture, while freshness-dependent input pauses. Ordinary CDP and read-only task inspection continue.
+
+`AGENT_BROWSER_STABLE_TIME_CLIENT` selects an absolute supported client configuration (default `~/.local/share/stable-time/client.json`); `AGENT_BROWSER_STABLE_TIME_BINARY` selects its executable (default `stable-time`). Credentials remain inside that private supported client. Each helper exchange is bounded to five seconds. Helper/configuration failure is not proof that the StableTime service is down. No local host-counter bridge or guest-clock extrapolation is used.
+
+
+Finite handoffs and new Auth/challenge deadlines retain a trusted service-time origin. Ordinary status and original completed-result replay remain available during time-client failure. Legacy finite handoffs require an explicit owner-reviewed `set_link_lifetime` on the same handoff; neither inspection nor an outage extends permission. A finite link whose deadline is not qualified reports `time_unqualified`, not expired. Explicit inspection returns `timeError` and typed `timeRecovery` without recording another refusal occurrence. Returning an existing authenticated viewer's own control remains available without renewing the link. First qualified handoff retention publishes runtime schema 8 atomically; older readers must refuse that database.
+
+Profile recovery/reset plans keep their sealed absolute deadline. New defaults use trusted service time; apply requires the entire current time interval before the deadline. An overlapping interval is uncertain; only a lower bound at or beyond the deadline proves expiry. Authenticated, sealed completed receipts replay before time-client or current-route availability checks. Repairing time qualification never renews the plan or permits replay of unknown input.
+
+Cold runtime startup uses a persistent kernel-owned admission lock. A healthy exact warm continuation bypasses unrelated cold admission. A legacy marker's age never proves its owner absent: preserve live or unqualified ownership and use the reported startup diagnosis/replacement plan rather than deleting markers or killing processes.

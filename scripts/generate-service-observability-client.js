@@ -152,6 +152,8 @@ export type ServiceEffectState = 'no_effect' | 'effect_uncertain' | 'verified_ef
 export type ServiceRetryDisposition = 'do_not_retry' | 'inspect_before_retry' | 'retry_same_request' | 'refresh_access_plan';
 
 export interface ServiceFailureRecourse {
+  occurrenceId?: string;
+  logging?: { state: "durable_pending" | "failed"; projection?: string; code?: string };
   schemaVersion: 'agent-browser.service-failure-recourse.v1' | string;
   code: string;
   axis: ServiceFailureAxis;
@@ -166,6 +168,7 @@ export interface ServiceFailureRecourse {
   waitMs?: number | null;
   holderOperation?: string | null;
   recoveryPlan?: Record<string, unknown> | null;
+  recoveryRegistry?: Record<string, unknown> | null;
   jobId?: string | null;
   traceId?: string | null;
   safeNextActions?: string[];
@@ -260,6 +263,7 @@ export interface ServiceJobRecord {
   result: unknown;
   error: string | null;
   failure?: ServiceFailureRecourse | null;
+  deadlineEvidence?: {state: "unqualified_legacy_start"; automaticTerminalization: false; nextAction: Record<string, unknown>; resumeCondition: string};
   [key: string]: unknown;
 }
 

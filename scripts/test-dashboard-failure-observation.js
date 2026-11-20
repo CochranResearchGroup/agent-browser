@@ -49,6 +49,10 @@ async function withInstrumentedFetch(fetcher, run, visibility = 'visible') {
   }
 }
 
+function recordedObservation(init={}) {
+ const observation=JSON.parse(init.body??'{}');
+ return jsonResponse({success:true,data:{schemaVersion:'agent-browser.service-failure-record.v1',recorded:true,occurrenceId:'11111111-1111-4111-8111-111111111111',originalClientObservationId:observation.observationId}},202);
+}
 function jsonResponse(payload = { success: true }, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -61,7 +65,7 @@ async function testExistingActionObservation() {
   await withInstrumentedFetch(async (input, init = {}) => {
     const path = new URL(String(input), globalThis.location.href).pathname;
     calls.push({ path, init: structuredClone(init) });
-    if (path === '/api/service/failure-observation') return jsonResponse({}, 202);
+    if (path === '/api/service/failure-observation') return recordedObservation(init);
     if (path === '/api/service/request' && init.method !== 'DELETE') {
       return jsonResponse({ success: false, error: 'synthetic rejection' }, 409);
     }
@@ -111,7 +115,7 @@ async function testReadFailuresDeliverOnlyAfterRecovery() {
     calls.push({ path: parsed.pathname, search: parsed.search, init: structuredClone(init) });
     if (parsed.pathname === '/api/service/failure-observation') {
       reports.push(JSON.parse(init.body));
-      return jsonResponse({}, 202);
+      return recordedObservation(init);
     }
     if (recovered) return jsonResponse({ success: true, data: {} });
     if (parsed.pathname === '/api/service/status') {
@@ -178,7 +182,7 @@ async function testQueueDedupeAndGapAccounting() {
     isVisible: () => true,
     fetcher: async (_input, init = {}) => {
       reports.push(JSON.parse(init.body));
-      return jsonResponse({}, 202);
+      return recordedObservation(init);
     },
   });
   const base = {
@@ -210,7 +214,7 @@ async function testFrozenCampaignCeilingHasNoGap() {
     isVisible: () => true,
     fetcher: async (_input, init = {}) => {
       reports.push(JSON.parse(init.body));
-      return jsonResponse({}, 202);
+      return recordedObservation(init);
     },
   });
   for (let index = 0; index < MAX_PENDING_DASHBOARD_READ_FAILURES; index += 1) {
@@ -240,7 +244,7 @@ async function testFailedDeliveryRetainedUntilNextRecovery() {
     isVisible: () => true,
     fetcher: async (_input, init = {}) => {
       attempts.push(JSON.parse(init.body));
-      return jsonResponse({}, accept ? 202 : 503);
+      return accept?recordedObservation(init):jsonResponse({},503);
     },
   });
   queue.enqueue({
@@ -269,7 +273,7 @@ async function testHiddenPageDoesNotObserveOrFlushReads() {
     const path = new URL(String(input), globalThis.location.href).pathname;
     if (path === '/api/service/failure-observation') {
       reports.push(JSON.parse(init.body));
-      return jsonResponse({}, 202);
+      return recordedObservation(init);
     }
     if (!recovered) return new Response('unavailable', { status: 504 });
     return jsonResponse({ success: true });
@@ -299,3 +303,41 @@ try {
 }
 
 process.stdout.write('Dashboard failure observation behavior passed\n');
+
+const projected = [];
+await withInstrumentedFetch(async (input, init) => {
+  if (String(input).includes('failure-observation')) {projected.push(JSON.parse(init.body));return recordedObservation(init);}
+  return new Response(JSON.stringify({success:true,data:{ok:false,failure:{code:'browser_task_operation_outcome_uncertain',occurrenceId:'failure-original-760',privateValue:'never-log-this'}}}), {headers:{'content-type':'application/json'}});
+}, async()=> {
+  const response=await fetch('/api/command',{method:'POST'});
+  assert.equal((await response.json()).data.ok,false,'observer preserves caller body');
+  await tick();await tick();
+});
+assert.equal(projected[0]?.code,'browser_task_operation_outcome_uncertain');
+assert.equal(projected[0]?.observationId,'failure-original-760');
+assert.ok(!JSON.stringify(projected).includes('never-log-this'));
+
+const {dashboardConfirmationFailure,dashboardLocalFailure}=await import('../packages/dashboard/src/lib/response-failure.ts');
+const {reportDashboardComponentFailure}=await import('../packages/dashboard/src/lib/failure-observation.ts');
+const {inspectDashboardBrowserOperation}=await import('../packages/dashboard/src/lib/browser-operation-readback.ts');
+let ownerReads=0;
+await inspectDashboardBrowserOperation({action:'browser_session_mode_convert',sessionId:'task-original',operationId:'operation-original'},async(_url,init)=>{ownerReads++;assert.equal(JSON.parse(init.body).choice,'inspect');return new Response('{}');});
+assert.throws(()=>inspectDashboardBrowserOperation({action:'browser_session_mode_convert',choice:'apply'},async()=>{ownerReads++;return new Response('{}');}),error=>error instanceof TypeError&&error.code==='dashboard_browser_inspection_scope_invalid');
+assert.equal(ownerReads,1,'inspection cannot accept or dispatch a mutation choice');
+const ownerFailure={code:'browser_task_operation_outcome_uncertain',occurrenceId:'owner-publication-760',recourse:{recoveryRegistry:{recipe:'original'}}};
+const realOwnerLogging={state:'owner_recorded',receipt:{id:'original-owner-log'}};
+const publication=dashboardConfirmationFailure({success:true,logging:realOwnerLogging,data:{ok:false,failure:ownerFailure}},'unconfirmed_exact_close_receipt',{taskId:'task-original',operationId:'operation-original'});
+assert.equal(publication.failure,ownerFailure);assert.equal(publication.logging,realOwnerLogging);assert.equal(publication.effectState,'unknown');assert.equal(publication.originalOperationId,'operation-original');assert.equal(publication.clientRecovery.coverage,'registered');
+const guard=dashboardLocalFailure(new TypeError('profileId is required'),'dashboard_argument_invalid','fixture-source','fixture-function');
+assert.equal(guard.clientLogging.state,'not_attempted');assert.equal(guard.clientLogging.ownerOccurrenceId,null);
+const fetchBeforePublication=globalThis.fetch;const publicationEvents=[];
+try {
+ globalThis.fetch=async(_url,init)=>{publicationEvents.push(JSON.parse(init.body));return new Response('{}',{status:503});};
+ await reportDashboardComponentFailure(guard,'local_guard');assert.equal(publicationEvents.length,0);
+ await reportDashboardComponentFailure(publication,'exact_close');assert.equal(publication.clientLogging.state,'observer_receipt_unverified');assert.equal(publication.clientLogging.ownerOccurrenceId,ownerFailure.occurrenceId);assert.equal(publication.occurrenceId,ownerFailure.occurrenceId);assert.ok(!JSON.stringify(publicationEvents).includes('operation-original'));
+ globalThis.fetch=async(_url,init)=>recordedObservation(init);await reportDashboardComponentFailure(publication,'exact_close');assert.equal(publication.clientLogging.state,'observer_receipt_confirmed');assert.equal(publication.clientLogging.observerReceipt.data.recorded,true);assert.equal(publication.clientLogging.observerReceipt.data.occurrenceId,'11111111-1111-4111-8111-111111111111');assert.equal(publication.clientLogging.durableOwnerJournal,'not_asserted');assert.equal(publication.logging,realOwnerLogging);
+ for(const payload of [{success:false},{success:true,data:{recorded:false}},{success:true,data:{ok:false}},{success:true,data:{recorded:true}}]){globalThis.fetch=async()=>jsonResponse(payload);await reportDashboardComponentFailure(publication,'malformed_receipt');assert.equal(publication.clientLogging.state,'observer_receipt_unverified');assert.equal(publication.clientLogging.observerReceipt,null);assert.equal(publication.failure,ownerFailure);}
+ for(const extra of [{failure:{code:'journal_write_failed'}},{logging:{state:'failed'}},{logging:{success:false}}]){globalThis.fetch=async()=>jsonResponse({success:true,...extra,data:{schemaVersion:'agent-browser.service-failure-record.v1',recorded:true,occurrenceId:'11111111-1111-4111-8111-111111111111'}});await reportDashboardComponentFailure(publication,'explicit_logging_failure');assert.equal(publication.clientLogging.state,'observer_receipt_unverified');assert.equal(publication.clientLogging.observerReceipt,null);}
+ globalThis.fetch=async()=>new Response('not-json');await reportDashboardComponentFailure(publication,'missing_json');assert.equal(publication.clientLogging.state,'observer_receipt_unverified');
+ await reportDashboardComponentFailure(Object.freeze(publication),'frozen_original');
+} finally {globalThis.fetch=fetchBeforePublication;}

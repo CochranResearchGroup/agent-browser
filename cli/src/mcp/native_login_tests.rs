@@ -7,6 +7,7 @@ struct LoginFixture {
     root: std::path::PathBuf,
     child: std::process::Child,
     _guard: crate::test_utils::EnvGuard<'static>,
+    _clock: crate::connection::stable_time::Fixture,
 }
 impl Drop for LoginFixture {
     fn drop(&mut self) {
@@ -51,14 +52,15 @@ fn fixture() -> LoginFixture {
         root,
         child,
         _guard: guard,
+        _clock: crate::connection::stable_time::Fixture::set(Ok(
+            crate::connection::stable_time::fixture_stamp(clock()),
+        )),
     }
 }
 fn clock() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64
+    10_000_000
 }
+
 fn observed(kind: &str) -> Value {
     let reference = format!("login:{}", "a".repeat(64));
     let mut controls = vec![
@@ -68,7 +70,7 @@ fn observed(kind: &str) -> Value {
         controls.push(json!({"kind":"username","label":"Username","targetRef":format!("login:{}","c".repeat(64)),"bounds":{"x":100,"y":50,"width":300,"height":40},"configuredAccountMatch":true,"fieldValueState":"text_present"}));
         controls.push(json!({"kind":"password","label":"Password","targetRef":format!("login:{}","d".repeat(64)),"bounds":{"x":100,"y":100,"width":300,"height":40},"configuredAccountMatch":false,"fieldValueState":"masked"}));
     }
-    json!({"binding":{"desktopId":"desktop","generation":7,"windowId":11,"window":{"x":0,"y":0,"width":800,"height":600},"displayWidth":800,"displayHeight":600,"region":{"x":0,"y":0,"width":800,"height":600},"nativeControlEpoch":4,"observedAtMs":clock()},"controls":{"schemaVersion":"agent-browser.native-login-controls.v1","profile":"english-chrome-v1","status":"observed","controls":controls,"frameSha256":"b".repeat(64)}})
+    json!({"binding":{"desktopId":"desktop","generation":7,"windowId":11,"window":{"x":0,"y":0,"width":800,"height":600},"displayWidth":800,"displayHeight":600,"region":{"x":0,"y":0,"width":800,"height":600},"nativeControlEpoch":4,"observedAtMs":clock(),"serviceTime":crate::connection::stable_time::fixture_stamp(clock())},"controls":{"schemaVersion":"agent-browser.native-login-controls.v1","profile":"english-chrome-v1","status":"observed","controls":controls,"frameSha256":"b".repeat(64)}})
 }
 fn capture(id: &str, kind: &str) {
     let params = json!({"name":"browser_command","arguments":{"taskId":"task","action":"native_capture","requestId":id,"params":{"loginControls":{"profile":"english-chrome-v1"}}}});
@@ -127,9 +129,10 @@ fn input(
     .map_err(native_request_error)
 }
 #[test]
-fn native_login_perception_public_journal_retains_three_steps_and_refuses_replay_or_new_episode() {
+fn native_login_perception_public_journal_extends_and_renews_settled_episodes_without_replay() {
     let _fixture = fixture();
     let mut calls = 0;
+    BrowserSessionSqliteStore::default_sqlite().unwrap().task_operation_capacity("task", "task", Some(serde_json::from_value(json!({"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096,"maximumLoginSteps":3})).unwrap())).unwrap();
     for (n, kind) in ["username", "credential_entry", "submit"]
         .iter()
         .enumerate()
@@ -148,25 +151,49 @@ fn native_login_perception_public_journal_retains_three_steps_and_refuses_replay
         "2"
     );
     capture("fresh-capture", "username");
-    assert!(input(
-        "new-episode",
-        "fresh-capture",
-        "renewed-episode",
-        false,
-        &mut calls
-    )
-    .unwrap_err()
-    .contains("episode_changed"));
-    assert!(input(
+    let exhausted = input(
         "extra-input",
         "fresh-capture",
         "original-episode",
         false,
-        &mut calls
+        &mut calls,
     )
-    .unwrap_err()
-    .contains("budget_exhausted"));
-    assert_eq!(calls, 3);
+    .unwrap_err();
+    assert!(exhausted.contains("budget_exhausted"));
+    assert!(exhausted.contains("maximumLoginSteps"));
+    BrowserSessionSqliteStore::default_sqlite().unwrap().task_operation_capacity("task", "task", Some(serde_json::from_value(json!({"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096,"maximumLoginSteps":4})).unwrap())).unwrap();
+    input(
+        "extra-input",
+        "fresh-capture",
+        "original-episode",
+        false,
+        &mut calls,
+    )
+    .unwrap();
+    input(
+        "extra-input",
+        "fresh-capture",
+        "original-episode",
+        false,
+        &mut calls,
+    )
+    .unwrap();
+    assert_eq!(calls, 4);
+    capture("renewed-capture", "credential_entry");
+    input(
+        "renewed-input",
+        "renewed-capture",
+        "renewed-episode",
+        false,
+        &mut calls,
+    )
+    .unwrap();
+    assert_eq!(calls, 5);
+    let renewed = task_operations::lookup("task", "renewed-input").unwrap();
+    assert_eq!(
+        renewed["operation"]["evidenceReferences"]["nativeLoginStep"],
+        "0"
+    );
 }
 #[test]
 fn native_login_perception_public_journal_unknown_input_survives_reopen_and_blocks_progression() {
@@ -176,6 +203,15 @@ fn native_login_perception_public_journal_unknown_input_survives_reopen_and_bloc
     input("input-0", "cap-0", "episode", false, &mut calls).unwrap();
     capture("cap-1", "credential_entry");
     assert!(input("input-1", "cap-1", "episode", true, &mut calls).is_err());
+    assert!(input(
+        "new-episode-after-unknown",
+        "cap-1",
+        "renewed-episode",
+        false,
+        &mut calls
+    )
+    .unwrap_err()
+    .contains("previous_input_unsettled"));
     let reopened = BrowserSessionSqliteStore::default_sqlite().unwrap();
     let original =
         reopened.load_session_state().unwrap().task_operations["task"]["input-1"].clone();
@@ -231,7 +267,7 @@ fn native_login_perception_public_journal_old_ack_prefix_uses_fresh_submit_witho
     );
 }
 #[test]
-fn native_login_perception_public_journal_old_ack_prefix_still_refuses_rollback_context_and_stale_frame(
+fn native_login_perception_public_journal_old_ack_prefix_ignores_guest_rollback_but_fences_context_and_stale_frame(
 ) {
     for scenario in ["rollback", "context", "stale"] {
         let _fixture = fixture();
@@ -270,18 +306,23 @@ fn native_login_perception_public_journal_old_ack_prefix_still_refuses_rollback_
                 .unwrap();
             let mut observation: Value =
                 serde_json::from_str(&row.evidence_references["nativeLoginObservation"]).unwrap();
-            observation["binding"]["observedAtMs"] = json!(clock() - 10_001);
+            observation["binding"]["serviceTime"] = json!(
+                crate::connection::stable_time::fixture_stamp(clock() - 10_001)
+            );
             row.evidence_references.insert(
                 "nativeLoginObservation".into(),
                 serde_json::to_string(&observation).unwrap(),
             );
             store.save_session_state(&state).unwrap();
         }
-        assert!(
-            input("input-2", "new-submit", "episode", false, &mut calls).is_err(),
-            "{scenario}"
-        );
-        assert_eq!(calls, 2);
+        let outcome = input("input-2", "new-submit", "episode", false, &mut calls);
+        if scenario == "rollback" {
+            outcome.expect("guest diagnostic timestamps cannot veto a fresh qualified step");
+            assert_eq!(calls, 3);
+        } else {
+            assert!(outcome.is_err(), "{scenario}");
+            assert_eq!(calls, 2);
+        }
     }
 }
 
