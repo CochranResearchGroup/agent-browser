@@ -2638,6 +2638,44 @@
       },
       "resumeCondition": "Doctor and actual owner readback confirm the same configured host/listener/lane identity and original startup outcome before continuation; no new browser effects are implied.",
       "maximumAutomaticAttempts": 1
+    },
+    "runtime_lane_capacity": {
+      "rationale": "The current global runtime host lane count reached the live system-default maximumRuntimeLanes; existing lanes and duplicate lane identity remain admitted.",
+      "requiredActor": "existing_runtime_capacity_policy_owner",
+      "evidenceRequirement": "Current refusal activeCount/limit/policySource and an actual retained owned task binding for the existing capacity API; startup manifest maxLanes is only a startup snapshot.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "operation": "capacity",
+            "scope": "defaults"
+          }
+        },
+        "precondition": "Bind an actual retained owned task from the original request or authenticated current inventory. The global system-default policy applies regardless of that task override; never fabricate a task ID."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect current system defaults through the existing task_operation capacity API. The capacity owner may raise policy.maximumRuntimeLanes while preserving the other current policy fields, then inspect runtimeLaneLimit/runtimeLanePolicySource. Alternatively explicitly close a positively owned no-longer-needed lane through its existing owner. New lane creation can continue under the same original request after reconciling its outcome; existing lanes are never evicted on a lower limit.",
+          "interface": "original_public_request",
+          "precondition": "Current original startup outcome and actual retained task binding are known; the existing policy owner authorizes a system-default update. No uncertain launch/input is replayed."
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "operation": "capacity",
+            "scope": "defaults"
+          }
+        },
+        "precondition": "Bind an actual retained owned task from the original request or authenticated current inventory. The global system-default policy applies regardless of that task override; never fabricate a task ID."
+      },
+      "resumeCondition": "Current capacity readback confirms the global admission limit admits the requested new lane, and the original startup outcome is reconciled; no restart or recompile is required.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -20845,6 +20883,94 @@
       "policySource": "cli/src/dashboard_ingress/native_journey.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
+    },
+    "runtime_host_lane_capacity_exhausted": {
+      "recipe": "runtime_lane_capacity",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_task_operation_archive.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "runtime_host_lane_config_invalid": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_lane_invalid": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_manifest_encode_failed": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_manifest_permissions_failed": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_manifest_write_failed": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_socket_identity_failed": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "runtime_host_lane_registry_poisoned": {
+      "recipe": "runtime_host_installation",
+      "owningChecks": [
+        {
+          "path": "cli/src/runtime_host.rs"
+        }
+      ],
+      "policySource": "cli/src/runtime_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     }
   },
   "enforcedProducerCodePrefixes": [

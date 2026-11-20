@@ -14837,6 +14837,7 @@ mod tests {
                 socket_identity: "unix:fixture-runtime-host".to_string(),
                 authentication_record: "runtime-host.token".to_string(),
                 max_lanes: crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
+                max_lanes_scope: "startup_snapshot".into(),
             })
             .unwrap(),
         )
@@ -14891,6 +14892,7 @@ mod tests {
                 socket_identity: "unix:fixture-live-replacement".to_string(),
                 authentication_record: "runtime-host.token".to_string(),
                 max_lanes: crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
+                max_lanes_scope: "startup_snapshot".into(),
             })
             .unwrap(),
         )
