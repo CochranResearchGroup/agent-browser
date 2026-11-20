@@ -2888,9 +2888,9 @@
       "maximumAutomaticAttempts": 1
     },
     "profile_reset_qualified_time": {
-      "rationale": "Profile reset planning could not obtain supported qualified time; the actual helper/client/service cause is separate from permission or reset outcome.",
+      "rationale": "The exact original profile/lease planning or sealed absolute-expiry admission cannot obtain qualified service time, overlaps the sealed expiry, or proves that expiry has passed.",
       "requiredActor": "authenticated_original_profile_owner",
-      "evidenceRequirement": "Original profile/reset plan or receipt, actual configured supported-time failure cause and existing profile-owner authority; no new plan or expired apply is inferred safe.",
+      "evidenceRequirement": "Exact original profile, sealed plan/claim or completed receipt and existing authenticated authority, plus current supported service UTC bounds. These v1 plans carry absolute expiry; they do not require a new relative-origin record.",
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
         "arguments": {
@@ -2901,9 +2901,9 @@
       },
       "remediation": [
         {
-          "instruction": "Inspect the original profile diagnosis and retained reset plan/receipt. Repair the actual supported StableTime client/helper/configuration or service qualification without treating a helper failure as a service outage. Retry only planning/admission that the original owner proves undispatched. If the owner explicitly requests a new plan, review its scope and new expiry separately; never replay an uncertain apply, fabricate time, renew an immutable plan in place, or treat this repair as deletion authority.",
+          "instruction": "Inspect the original profile/lease diagnosis, plan and completed receipt through the existing authenticated owner. A completed authenticated and sealed original replays before time or route availability; do not create a replacement operation to obtain that receipt. For unavailable time repair the actual supported client/helper/configuration or service qualification separately. If bounds straddle the sealed expiry, pause only that new admission until qualified evidence separates it. If earliest is at or beyond expiry, only a separately reviewed new plan/authorization may proceed after original effects settle. Never retrofit an origin into the v1 plan, extend its sealed expiry, broaden permissions, or replay uncertain apply/acquisition/launch effects.",
           "interface": "original_public_request",
-          "precondition": "The authenticated owner retains the exact original profile/reset IDs and capability in the existing client. Any prior reset effects are reconciled; time repair does not grant reset approval."
+          "precondition": "Actual original IDs, existing authenticated owner/capability and sealed intent are retained. Independent diagnosis/status is not time or effect proof; any new intent requires its existing explicit authority and original uncertainty is preserved."
         }
       ],
       "verification": {
@@ -2914,7 +2914,7 @@
         },
         "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
-      "resumeCondition": "Supported time is qualified and the exact original plan/receipt is understood; any new reset plan/apply independently satisfies existing owner, scope, integrity and expiry checks.",
+      "resumeCondition": "The same original authenticated owner accounts for prior effects and current public admission proves latest service bound is strictly before the existing absolute expiry. Earliest at/beyond expiry is expired; overlap stays unknown. A completed sealed original remains independently readable/replayable without time or current route availability.",
       "maximumAutomaticAttempts": 1
     },
     "service_origin_public_boundary": {
@@ -2975,6 +2975,99 @@
         "precondition": "Use the original authenticated owner, retained run/challenge ID and actual principal/service context. Labels are not identity; missing scope remains nonexecutable. Status does not submit input or mint a new deadline."
       },
       "resumeCondition": "The original effect owner supplies trustworthy settlement and the normal task state transition admits continuation; current immutable deadline and same-target checks still apply without extension.",
+      "maximumAutomaticAttempts": 1
+    },
+    "profile_recovery_qualified_time": {
+      "rationale": "The exact original profile/lease planning or sealed absolute-expiry admission cannot obtain qualified service time, overlaps the sealed expiry, or proves that expiry has passed.",
+      "requiredActor": "authenticated_original_profile_owner",
+      "evidenceRequirement": "Exact original profile, sealed plan/claim or completed receipt and existing authenticated authority, plus current supported service UTC bounds. These v1 plans carry absolute expiry; they do not require a new relative-origin record.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original profile/lease diagnosis, plan and completed receipt through the existing authenticated owner. A completed authenticated and sealed original replays before time or route availability; do not create a replacement operation to obtain that receipt. For unavailable time repair the actual supported client/helper/configuration or service qualification separately. If bounds straddle the sealed expiry, pause only that new admission until qualified evidence separates it. If earliest is at or beyond expiry, only a separately reviewed new plan/authorization may proceed after original effects settle. Never retrofit an origin into the v1 plan, extend its sealed expiry, broaden permissions, or replay uncertain apply/acquisition/launch effects.",
+          "interface": "original_public_request",
+          "precondition": "Actual original IDs, existing authenticated owner/capability and sealed intent are retained. Independent diagnosis/status is not time or effect proof; any new intent requires its existing explicit authority and original uncertainty is preserved."
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileRecoveryStatus",
+        "arguments": {
+          "recoveryId": "$recoveryId",
+          "profileCapability": "$profileCapability",
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "resumeCondition": "The same original authenticated owner accounts for prior effects and current public admission proves latest service bound is strictly before the existing absolute expiry. Earliest at/beyond expiry is expired; overlap stays unknown. A completed sealed original remains independently readable/replayable without time or current route availability.",
+      "maximumAutomaticAttempts": 1
+    },
+    "profile_acquisition_qualified_time": {
+      "rationale": "The exact original profile/lease planning or sealed absolute-expiry admission cannot obtain qualified service time, overlaps the sealed expiry, or proves that expiry has passed.",
+      "requiredActor": "existing_scoped_service_owner",
+      "evidenceRequirement": "Exact original profile, sealed plan/claim or completed receipt and existing authenticated authority, plus current supported service UTC bounds. These v1 plans carry absolute expiry; they do not require a new relative-origin record.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original profile/lease diagnosis, plan and completed receipt through the existing authenticated owner. A completed authenticated and sealed original replays before time or route availability; do not create a replacement operation to obtain that receipt. For unavailable time repair the actual supported client/helper/configuration or service qualification separately. If bounds straddle the sealed expiry, pause only that new admission until qualified evidence separates it. If earliest is at or beyond expiry, only a separately reviewed new plan/authorization may proceed after original effects settle. Never retrofit an origin into the v1 plan, extend its sealed expiry, broaden permissions, or replay uncertain apply/acquisition/launch effects.",
+          "interface": "original_public_request",
+          "precondition": "Actual original IDs, existing authenticated owner/capability and sealed intent are retained. Independent diagnosis/status is not time or effect proof; any new intent requires its existing explicit authority and original uncertainty is preserved."
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "resumeCondition": "The same original authenticated owner accounts for prior effects and current public admission proves latest service bound is strictly before the existing absolute expiry. Earliest at/beyond expiry is expired; overlap stays unknown. A completed sealed original remains independently readable/replayable without time or current route availability.",
+      "maximumAutomaticAttempts": 1
+    },
+    "lease_authority_qualified_time": {
+      "rationale": "The exact original profile/lease planning or sealed absolute-expiry admission cannot obtain qualified service time, overlaps the sealed expiry, or proves that expiry has passed.",
+      "requiredActor": "authenticated_original_profile_lease_owner",
+      "evidenceRequirement": "Exact original profile, sealed plan/claim or completed receipt and existing authenticated authority, plus current supported service UTC bounds. These v1 plans carry absolute expiry; they do not require a new relative-origin record.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileLeases",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original profile/lease diagnosis, plan and completed receipt through the existing authenticated owner. A completed authenticated and sealed original replays before time or route availability; do not create a replacement operation to obtain that receipt. For unavailable time repair the actual supported client/helper/configuration or service qualification separately. If bounds straddle the sealed expiry, pause only that new admission until qualified evidence separates it. If earliest is at or beyond expiry, only a separately reviewed new plan/authorization may proceed after original effects settle. Never retrofit an origin into the v1 plan, extend its sealed expiry, broaden permissions, or replay uncertain apply/acquisition/launch effects.",
+          "interface": "original_public_request",
+          "precondition": "Actual original IDs, existing authenticated owner/capability and sealed intent are retained. Independent diagnosis/status is not time or effect proof; any new intent requires its existing explicit authority and original uncertainty is preserved."
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileLeases",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
+      },
+      "resumeCondition": "The same original authenticated owner accounts for prior effects and current public admission proves latest service bound is strictly before the existing absolute expiry. Earliest at/beyond expiry is expired; overlap stays unknown. A completed sealed original remains independently readable/replayable without time or current route availability.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -15529,17 +15622,6 @@
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
     },
-    "browser_runtime_clock_readback_required": {
-      "recipe": "runtime_storage",
-      "owningChecks": [
-        {
-          "path": "cli/src/native/browser_session_store.rs"
-        }
-      ],
-      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
-      "evidenceFreshness": "not_observed_by_projection",
-      "evidenceClass": "unavailable"
-    },
     "browser_runtime_status_failed": {
       "recipe": "runtime_storage",
       "owningChecks": [
@@ -21573,6 +21655,94 @@
       "policySource": "crates/agent-browser-service-model/src/service_time_origin.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
+    },
+    "profile_reset_time_uncertain": {
+      "recipe": "profile_reset_qualified_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_time_unavailable": {
+      "recipe": "profile_recovery_qualified_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_recovery_time_uncertain": {
+      "recipe": "profile_recovery_qualified_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_time_unavailable": {
+      "recipe": "profile_acquisition_qualified_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_acquisition_time_uncertain": {
+      "recipe": "profile_acquisition_qualified_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_plan_expired": {
+      "recipe": "profile_acquisition_qualified_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "lease_authority_time_unavailable": {
+      "recipe": "lease_authority_qualified_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "lease_authority_time_uncertain": {
+      "recipe": "lease_authority_qualified_time",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -22135,6 +22305,32 @@
       "retiredByRevision": "2148577fbca02f3f1f72ceb22b03f6dddcc80da2",
       "sourceEvidence": "\"remote_view_clock_invalid\"",
       "reason": "The accepted handoff timing repair removed this guest-clock failure producer. Qualified handoff timing and exact private viewer-release handling now have their own source-owned contracts; reintroduction requires fresh qualification."
+    },
+    {
+      "code": "remote_view_handoff_",
+      "source": "cli/src/native/browser_session_remote_view.rs",
+      "sourceEvidence": "code.starts_with(\"remote_view_handoff_\")",
+      "reason": "Namespace-prefix predicate used by the pure handoff time-metadata classifier. It is not a raised owner code or a successful time qualification; exact handoff failure codes retain their separately reviewed recourse."
+    },
+    {
+      "code": "browser_runtime_clock_readback_required",
+      "source": "cli/src/native/browser_session_store.rs",
+      "revision": "3899f4b269d45cb4111d5272fbb5d77c07b22005",
+      "retiredByRevision": "668d7ccc3c0e331d2ec969115d357581d879a59c",
+      "sourceEvidence": "\"browser_runtime_clock_readback_required\"",
+      "reason": "The qualified handoff retention transaction removed this guest-clock readback producer. Actual supported-time handoff errors and owner inspection now carry their own contracts; it is historical source evidence, not a current storage failure."
+    },
+    {
+      "code": "stable_time_",
+      "source": "cli/src/native/browser_session_remote_view.rs",
+      "sourceEvidence": "code.starts_with(\"stable_time_\")",
+      "reason": "Namespace-prefix predicate in independent handoff time-recourse projection. This marker is not an emitted error or a successful time qualification; actual owner/helper codes retain distinct classification and recourse."
+    },
+    {
+      "code": "service_time_origin_",
+      "source": "cli/src/native/browser_session_remote_view.rs",
+      "sourceEvidence": "code.starts_with(\"service_time_origin_\")",
+      "reason": "Namespace-prefix predicate in independent handoff time-recourse projection. This marker is not an emitted error or a successful time qualification; actual owner/helper codes retain distinct classification and recourse."
     }
   ],
   "fragments": [
@@ -22490,6 +22686,11 @@
       "path": "crates/agent-browser-service-model/src/service_time_origin.rs",
       "codePattern": "service_time_origin_[a-z0-9_]+",
       "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/service_profile_recovery.rs",
+      "codePattern": "(?:profile_(?:reset|recovery|acquisition)|lease_authority)_time_(?:unavailable|uncertain)",
+      "beforeNamedTestModule": true
     }
   ],
   "cliPublicationChecks": [
@@ -22538,7 +22739,7 @@
     "qualification": "Known finite human-readable and exact producer families must be registered separately. Runtime fallback is reserved for unreviewed future defects and never satisfies a known producer coverage gate."
   },
   "qualificationEvidence": {
-    "sourceBaseline": "7a41e455bffc3c6cb9133a05f78d8e20c8824511",
+    "sourceBaseline": "1761b86c3fd0a999ccc8291dc82a4001738951a5",
     "originalCandidateCensus": "docs/dev/contracts/public-original-error-candidate-census.v1.json",
     "unknownRuntimeCoverage": "uncovered",
     "validation": "Existing test-service-failure-journal-contract.js --require-complete-recovery joins exact contracts, source-backed exclusions, original candidate census, current producer gates, legacy producer/negative anchors, client factory/literal qualification and full dashboard frontend AST inventories. Runtime acceptance is recorded separately."

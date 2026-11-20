@@ -9,12 +9,6 @@
       "flags::resolve_browser_build_manifest -> effective configuration readiness warnings"
     ],
     "effectAuthority": "Registry metadata never proves no effect, freshness, permission, or successful completion; preserve the original owner outcome.",
-    "unqualifiedAuthorityClock": {
-      "source": "cli/src/native/service_trace.rs",
-      "producer": "service_commands::service_now_timestamp uses chrono::Utc::now",
-      "consumer": "cli/src/native/service_profile_recovery.rs validate_plan_preconditions and validate_profile_reset_preconditions",
-      "limitation": "Plan expiry decisions still consume guest UTC and are not qualified by Native StableTime work. Diagnosis/status and original owner reconciliation remain available; registry metadata cannot authorize bypass, extend lease security or claim expired evidence is reliable."
-    },
     "dynamicUnknownPreflight": {
       "source": "cli/src/native/service_profile_recovery.rs",
       "code": "profile_acquisition_preflight_unclassified",
@@ -34,6 +28,14 @@
         "crates/agent-browser-service-model/src/service_challenge_task.rs"
       ],
       "qualification": "Root reviewed exact current public codes, seven specific owner workflows and the forwarded closed site-login recipe producer. The same verified opaque task has a supported browser_handoff fallback under current authority; arbitrary dependency messages remain unknown rather than complete coverage."
+    },
+    "authorityClockQualification": {
+      "source": "cli/src/native/service_profile_recovery.rs",
+      "producer": "profile_authority_time consumes supported StableTime authority observations before Service State writer admission",
+      "consumer": "profile_deadline_admission checks the existing sealed v1 absolute expiresAt at public planning/apply/acquisition/lease authorization boundaries",
+      "status": "qualified_public_bounds",
+      "qualification": "New default createdAt uses earliest qualified service UTC. Live admission requires latest strictly before expiry, expired requires earliest at or beyond expiry, and overlap is unknown. Authenticated and sealed completed reset/recovery originals replay before clock and route checks. Pure explicit-now core validators remain deterministic; no relative-origin retrofit or permission/expiry extension is required or authorized. Independent diagnosis/status remains available; this is admission-time qualification, not delivery/completion-time assurance.",
+      "sourceCommit": "1761b86c3fd0a999ccc8291dc82a4001738951a5"
     }
   },
   "interfaces": {
