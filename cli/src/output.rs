@@ -7439,7 +7439,10 @@ Commands:
   task-briefing TASK Read retained task context without browser effects
   host-control TASK status|view reads any retained managed task; standalone return verifies the original process and freshly observes the same target before release; reconcile checks exact owned task and terminal dispatcher; takeover/override require hosted app binding.
   Task briefing processPid is retained metadata; authentication verifies current physical ownership separately.
-  task-operation TASK REQUEST Read original addressed CDP operation without retry
+  task-operation TASK REQUEST [reconcile] Read original; reconcile only owner-proven no-effect refusal
+  failure-recovery JSON Inspect/packet/history/run/reconcile; live configure maxAttempts/maxNoProgress with actor/reason
+  Recovery default budgets: 3 attempts, 2 without progress; 0 attempts disables automation; history survives extension
+  Recovery never replays original input; record_resume verifies exact owner ACK, not website/task completion
   Teaching evidence: client teaching-evidence / teaching-evidence-http; recheck Saved provenance before Speech ranges
   Teaching drafts: inspect_guide / client inspectTeachingDraft; inert until reviewed
   Teaching review: client teaching-review edits/reviews; MCP candidate validation stays inert
@@ -7457,7 +7460,7 @@ Commands:
   Native image: explicit provider membership; static 3x3 bus grid; returned IDs only
   Native image budget: one attempt, at most four tiles plus Verify, 60 seconds
   Native image rounds: separate two-round grant; originalRequestId anchors 60 seconds/10 clicks
-  Native image timing: Linux same-boot elapsed age; wall timestamps are diagnostic
+  Native image timing: supported StableTime observation bounds; guest wall/boot clocks are diagnostic
   Native image ROI: declare complete_puzzle_region before capture; original region/hash stay fixed
   Native image expiry: safe observationClock timings diagnose refusal; inspect original, never replay
   Native policy: verified CDP origin/provider required; CDP-free uses human assistance

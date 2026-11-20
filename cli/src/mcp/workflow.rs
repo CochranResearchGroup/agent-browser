@@ -332,10 +332,9 @@ pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {
             "humanUse":"unverified"})
         })
         .unwrap_or(json!({"status":"none_recorded"}));
-    let after = store.load_session_state()?;
-    if after != state {
-        return Err("browser_task_briefing_changed_retry_read".into());
-    }
+    // This is a retained snapshot, not an input-admission decision. Peer or
+    // activity publications after the read cannot invalidate its historical
+    // context. Physical actions independently revalidate their exact binding.
     Ok(
         json!({"schemaVersion":"agent-browser.task-briefing.v1","taskId":task_id,
         "profileId":task.profile_id,"browserId":task.browser_id,

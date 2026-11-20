@@ -92,7 +92,7 @@ function isServiceClient(file) {
   if (file === 'scripts/smoke-task-operation-continuation.mjs') return true;
   if (file === 'scripts/smoke-service-incident-summary-http.js') return true;
   if (file === 'scripts/test-native-checkbox-assistance.js') return true;
-  if (file === 'scripts/test-native-saved-login.js') return true;
+  if (file === 'scripts/test-native-saved-login.js' || file === 'scripts/generate-client-recovery.js') return true;
   return file.startsWith('packages/client/') || file.startsWith('examples/service-client/') || file.startsWith('scripts/generate-service-') || file.startsWith('scripts/test-service-') || file.startsWith('docs/dev/contracts/') || file === 'cli/src/native/service_contracts.rs' || file === 'cli/src/native/service_request.rs' || file === 'cli/src/native/service_model.rs' || file.startsWith('cli/src/native/mcp');
 }
 function isRepositoryTooling(file) {

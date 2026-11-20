@@ -6,6 +6,10 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Task operation capacity**: Runtime-configured active history capacity, distinct from lifetime operation count. Acknowledged completed records move to durable original-operation custody before extension; pending and uncertain records remain active. Archived originals retain lookup, duplicate protection and Native attempt/episode evidence.
 
+**Recovery attempt**: One occurrence-bound inspection, supported remedy and verification cycle with a stable attempt ID. Live policy limits attempts and checks without progress; extension preserves originals. Interrupted attempts reconcile verification without remedy replay. A verified owner acknowledgement can support a caller-attributed resume report, separately from website success or task completion.
+
+**Owner-refused no-effect original**: A terminal failed operation whose immutable owner seal proves input was not dispatched. Historical settlement remains valid across later browser epochs; a new input intent still requires current observation and authority. Unknown effects cannot enter this state.
+
 **Refusal occurrence**: One sanitized public failure linked to private journal custody. Its occurrence ID survives workflow adapters; logging delivery, operation effect certainty and successful recovery are separate observations. Supported task-scoped failure-log reads do not dispatch browser input.
 
 **Workspace launch acknowledgement**: The original operator-bound launch intent

@@ -1,7 +1,7 @@
 //! Supported StableTime service consumer shared by Native freshness and opt-in diagnostics.
 //! OS waits bound the helper only; they never prove observation age.
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 #[cfg(unix)]
 use std::io::{Read, Write};
 use std::path::PathBuf;

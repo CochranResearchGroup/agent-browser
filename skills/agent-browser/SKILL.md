@@ -8,6 +8,8 @@ allowed-tools: Bash(agent-browser:*)
 
 Inspect or change operation and artifact budgets at runtime: [capacity guide](references/cli-and-service.md#task-operation-capacity).
 
+For bounded recovery, live budgets and retained attempts, see [continuation](references/cli-and-service.md#continue-after-a-refusal).
+
 For public refusal occurrence IDs and no-launch task error-log readback, see [the CLI and service reference](references/cli-and-service.md#recover-a-public-refusal).
 
 Authelia supplies access; dashboard login, enrollment and roles are disabled.

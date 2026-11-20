@@ -46,6 +46,8 @@
     "test:cargo-build-benchmark": "node scripts/test-cargo-build-benchmark.js",
     "benchmark:cargo-build-jobs": "node scripts/benchmark-cargo-build-jobs.js",
     "test:actions-architecture-self": "node scripts/check-actions-architecture.js --self-test",
+    "generate:client-recovery": "node scripts/generate-client-recovery.js",
+    "test:client-recovery-contract": "node scripts/generate-client-recovery.js --check",
     "generate:service-client": "node scripts/generate-service-request-client.js && node scripts/generate-service-observability-client.js",
     "build:development-candidate": "pnpm version:sync && pnpm build:dashboard && scripts/ci/cargo-safe.sh build --profile ci --manifest-path cli/Cargo.toml",
     "build:native": "pnpm version:sync && scripts/ci/cargo-safe.sh build --release --manifest-path cli/Cargo.toml && node scripts/copy-native.js",

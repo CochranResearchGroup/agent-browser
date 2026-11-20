@@ -30,6 +30,42 @@ The first archive promotes the runtime database to schema 6; older binaries
 must not consume that database and silently forget archived duplicate protection.
 
 
+### Continue after a refusal
+
+Use the existing `browser_command` action `failure_recovery` with
+`params:{"operation":"inspect","occurrenceId":"RETURNED-UUID"}` and the original
+`taskId` when available. `packet` returns sanitized escalation context; `history`
+reads retained attempts. These reads do not dispatch browser input.
+
+`run` accepts a stable UUID `attemptId` and optionally one declared `remedy`
+containing `tool` and `arguments`. It performs registered inspection, one supported
+remedy and verification. Supported remedies use existing task-bound observation,
+reconnect, capacity or owner-proof reconciliation interfaces. Original input and
+permission overrides are excluded. The same attempt and arguments return its
+retained result; changed arguments conflict. After interruption, `reconcile`
+verifies the retained attempt without repeating its remedy.
+
+Configure budgets live with `params:{"operation":"configure","scope":"task",
+"actor":"AGENT","reason":"REVIEWED REPAIR","policy":{"maxAttempts":5,
+"maxNoProgress":3}}`. Use `scope:"defaults"` for defaults. Defaults are three
+attempts and two consecutive checks without progress; zero `maxAttempts` disables
+automatic recovery. Inspection and history remain available after exhaustion.
+Updates preserve prior attempts and require no restart or recompile. Configuration
+and actor labels do not grant new permissions or authenticate the caller.
+
+CLI clients use `agent-browser --json mcp failure-recovery '<JSON request containing
+taskId and params>'`. `agent-browser --json mcp task-operation TASK REQUEST reconcile`
+settles an original failure only from verified owner evidence of no dispatched
+input. Its state is `owner_refused_no_effect`, never a successful acknowledgement.
+A new input intent still needs fresh observation and existing authority. First
+such settlement promotes runtime schema to 7; older readers must refuse it.
+
+After ordinary work resumes, `record_resume` accepts the recovery `attemptId`,
+original occurrence, acknowledged new `requestId` and `actor`. It verifies that
+exact task operation's owner acknowledgement. The association is caller supplied;
+it does not establish website success or task completion. Attempt and outcome
+journal records link the original occurrence without copying private input.
+
 ### Recover a public refusal
 
 Workflow refusals preserve structured `failure` recourse alongside the original
