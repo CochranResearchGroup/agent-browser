@@ -7441,6 +7441,9 @@ Commands:
   Task briefing processPid is retained metadata; authentication verifies current physical ownership separately.
   task-operation TASK REQUEST [reconcile] Read original; reconcile only owner-proven no-effect refusal
   failure-recovery JSON Inspect/packet/history/run/reconcile; live configure maxAttempts/maxNoProgress with actor/reason
+  Retention/popup limits: live maximumRetentionClaims=4096, maximumPopupAdmissions=64; released history retained
+  Popup overflow: bounded admission plus deferredEligibleTargetCount; increase policy and refresh same task
+  Legacy helper expiry: helper_grant_time_unqualified before new input; original readback/current owner SDK remain
   Legacy automatic expiry/profile deletion: deferred without qualified start time; inspect or explicit scoped close
   Recovery default budgets: 3 attempts, 2 without progress; 0 attempts disables automation; history survives extension
   Optional maxDurationMs qualifies dispatch intervals with StableTime; inspect/history stay available

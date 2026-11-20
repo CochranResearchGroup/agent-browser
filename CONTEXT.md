@@ -6,6 +6,8 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Task operation capacity**: Runtime-configured active history capacity, distinct from lifetime operation count. Acknowledged completed records move to durable original-operation custody before extension; pending and uncertain records remain active. Archived originals retain lookup, duplicate protection and Native attempt/episode evidence.
 
+**Retention and popup admission**: Live operational policy bounds unreleased retained claims and new eligible popup admissions. Released original claims remain discoverable without consuming admission. Popup overflow defers targets while the original task continues; increasing policy does not replay input or expand access.
+
 **Deferred legacy expiry**: Automatic maintenance cannot close tasks or delete disposable profiles using unqualified guest timestamps. Deferred maintenance evidence does not establish qualified lifetime or cleanup; explicit scoped close retains its existing authority.
 
 **Teaching capacity**: Live admission limits for append-only lineage revisions and retained working contexts/catalog entries. Existing owners inspect/update policy without truncating original history, duplicate detection or task permissions.

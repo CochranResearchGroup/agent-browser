@@ -8,7 +8,7 @@ allowed-tools: Bash(agent-browser:*)
 
 Inspect or change operation and artifact budgets at runtime: [capacity guide](references/cli-and-service.md#task-operation-capacity).
 
-For recovery, live budgets and deferred expiry, see [continuation](references/cli-and-service.md#continue-after-a-refusal).
+For recovery, capacity and owner continuation, see [continuation](references/cli-and-service.md#continue-after-a-refusal).
 
 For public refusal occurrence IDs and no-launch task error-log readback, see [the CLI and service reference](references/cli-and-service.md#recover-a-public-refusal).
 

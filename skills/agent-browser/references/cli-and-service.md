@@ -26,6 +26,17 @@ The first archive promotes the runtime database to schema 6; older binaries
 must not consume that database and silently forget archived duplicate protection.
 
 
+Retention and popup admission use optional positive `maximumRetentionClaims`
+(default 4096) and `maximumPopupAdmissions` (default 64) in the same live policy.
+Retention admission counts all retained unreleased claims; released original
+history remains inspectable and does not consume admission. Guest expiry never
+releases a claim. Capacity status reports `retentionClaimActiveCount`,
+`retentionClaimReleasedHistoryCount`, `retentionClaimCountScope`,
+`retentionClaimLimit` and `popupAdmissionLimit` with the effective policy source.
+Popup refresh admits a bounded batch and reports `deferredEligibleTargetCount`
+instead of refusing the original task. Raise its live policy and refresh the same
+task to admit remaining eligible targets; no input replay or permission change.
+
 ### Live teaching capacity
 
 Existing client teaching review, submission and workspace owners expose
@@ -88,6 +99,15 @@ original occurrence, acknowledged new `requestId` and `actor`. It verifies that
 exact task operation's owner acknowledgement. The association is caller supplied;
 it does not establish website success or task completion. Attempt and outcome
 journal records link the original occurrence without copying private input.
+
+Legacy helper callbacks without owner-qualified executable expiry now return
+`helper_grant_time_unqualified` before new private input. Original request
+inspection/reconciliation and independently verified prior completion remain
+available. Continue through the existing authenticated owner SDK
+(`createOwnerLoginPlaybook` / `connectHostedAuthHelper`) under its current grants;
+caller timestamps or assertions cannot qualify a new credential use. Teaching
+sources with finite, unqualified expiry similarly use current recording-owner
+pin/qualified-read recourse; owner revocation and deletion still apply.
 
 ### Recover a public refusal
 
