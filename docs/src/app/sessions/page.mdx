@@ -1,5 +1,31 @@
 # Sessions
 
+### Task operation capacity
+
+Inspect or update capacity through the existing task-operation interface:
+
+```json
+{"name":"browser_command","arguments":{"taskId":"session:report","action":"task_operation","params":{"operation":"capacity","scope":"task","policy":{"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096}}}}
+```
+
+Omit `policy` to inspect usage and the effective policy. Use `scope:"defaults"`
+for default policy and `scope:"task"` for a retained task override. Updates do not
+restart or rename the task. The initial default is 256, the default increment
+is 256 and the default maximum is 4,096 active records.
+
+Admission archives acknowledged completed operations before extending active
+capacity. Original operation lookup and duplicate detection include archived
+records. Pending and uncertain operations remain active. Native episode and
+attempt checks include archived history. Archival retains evidence; it does not
+delete records or reset an attempt budget.
+
+If unsettled operations fill the configured maximum, inspect and reconcile the
+originals or increase the appropriate configured capacity through this interface.
+Changing a request ID does not make an uncertain effect safe to repeat.
+The first archive promotes the runtime database to schema 6; older binaries
+must not consume that database and silently forget archived duplicate protection.
+
+
 Run multiple isolated browser instances.
 
 Ordinary continuation reconnects to the current live profile browser and
@@ -636,8 +662,10 @@ or repeat an action. `pending` and `uncertain` require inspection; they never
 permit an automatic retry. `owner_acknowledged` records the owner's successful
 reply and does not prove the site's business outcome. Receipts expose identifiers,
 status and selected evidence references, without raw fill values, scripts, page
-bodies or private command fingerprints. Each task retains at most 256 operations;
-capacity exhaustion preserves history and rejects further effects.
+bodies or private command fingerprints. Active history starts at 256 records by default. Completed operations archive
+before configured extension; archived originals preserve lookup and duplicate
+protection. Unsettled operations at the configured maximum return actionable
+capacity recourse while inspection remains available.
 
 Software can call `getTaskOperation({baseUrl, taskId, requestId, headers})` from
 `@agent-browser/client/task-briefing`, using the existing dashboard session cookie.

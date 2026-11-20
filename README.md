@@ -4,6 +4,32 @@
 
 # agent-browser
 
+### Task operation capacity
+
+Inspect or update capacity through the existing task-operation interface:
+
+```json
+{"name":"browser_command","arguments":{"taskId":"session:report","action":"task_operation","params":{"operation":"capacity","scope":"task","policy":{"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096}}}}
+```
+
+Omit `policy` to inspect usage and the effective policy. Use `scope:"defaults"`
+for default policy and `scope:"task"` for a retained task override. Updates do not
+restart or rename the task. The initial default is 256, the default increment
+is 256 and the default maximum is 4,096 active records.
+
+Admission archives acknowledged completed operations before extending active
+capacity. Original operation lookup and duplicate detection include archived
+records. Pending and uncertain operations remain active. Native episode and
+attempt checks include archived history. Archival retains evidence; it does not
+delete records or reset an attempt budget.
+
+If unsettled operations fill the configured maximum, inspect and reconcile the
+originals or increase the appropriate configured capacity through this interface.
+Changing a request ID does not make an uncertain effect safe to repeat.
+The first archive promotes the runtime database to schema 6; older binaries
+must not consume that database and silently forget archived duplicate protection.
+
+
 ### Recover a public refusal
 
 Workflow refusals preserve structured `failure` recourse alongside the original
@@ -7763,8 +7789,9 @@ getTaskOperation from @agent-browser/client/task-briefing.
 The software helper reads authenticated
 GET /api/browser/tasks/{task}/operations/{request} with the existing dashboard
 cookie. Pending/uncertain operations require observation; owner acknowledgement
-is separate from site completion. The 256-operation task limit retains history
-and refuses new effects when full. Continuation observes the retained current
+is separate from site completion. Configured active-history capacity archives completed operations before extending;
+original history and duplicate protection remain available. Unsettled records
+that fill the configured maximum return an actionable capacity refusal. Continuation observes the retained current
 target or returns intervention for lost/changed state without navigation restore.
 Legacy unscoped CLI effects and Native/Auth journals retain their own contracts.
 Operation-backed screenshot references require availability readback before reuse.

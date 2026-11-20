@@ -4,6 +4,8 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Task operation capacity**: Runtime-configured active history capacity, distinct from lifetime operation count. Acknowledged completed records move to durable original-operation custody before extension; pending and uncertain records remain active. Archived originals retain lookup, duplicate protection and Native attempt/episode evidence.
+
 **Refusal occurrence**: One sanitized public failure linked to private journal custody. Its occurrence ID survives workflow adapters; logging delivery, operation effect certainty and successful recovery are separate observations. Supported task-scoped failure-log reads do not dispatch browser input.
 
 **Workspace launch acknowledgement**: The original operator-bound launch intent
