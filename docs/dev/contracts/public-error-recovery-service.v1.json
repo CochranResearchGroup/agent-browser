@@ -114,7 +114,9 @@
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
         "arguments": {
-          "baseUrl": "$configuredServiceBaseUrl"
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
         },
         "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
@@ -128,7 +130,9 @@
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
         "arguments": {
-          "baseUrl": "$configuredServiceBaseUrl"
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
         },
         "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
@@ -170,7 +174,9 @@
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
         "arguments": {
-          "baseUrl": "$configuredServiceBaseUrl"
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
         },
         "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
@@ -184,7 +190,9 @@
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
         "arguments": {
-          "baseUrl": "$configuredServiceBaseUrl"
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
         },
         "precondition": "Use the original configured authenticated transport and retain the exact original identifiers; this read does not grant permission. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
@@ -806,7 +814,9 @@
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
         "arguments": {
-          "baseUrl": "$configuredServiceBaseUrl"
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
         },
         "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
@@ -903,7 +913,9 @@
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
         "arguments": {
-          "baseUrl": "$configuredServiceBaseUrl"
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
         },
         "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
@@ -1210,7 +1222,9 @@
       "inspect": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
         "arguments": {
-          "baseUrl": "$configuredServiceBaseUrl"
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
         },
         "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
@@ -1224,7 +1238,9 @@
       "verification": {
         "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
         "arguments": {
-          "baseUrl": "$configuredServiceBaseUrl"
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
         },
         "precondition": "Use the authenticated original service transport; exact IDs/capabilities must come from original owner readback and never a guessed replacement. Resolve configuredServiceBaseUrl from the original reviewed authenticated client configuration; this placeholder is not executable until supplied. Keep credentials in that client, never in failure records."
       },
