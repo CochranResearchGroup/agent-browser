@@ -180,6 +180,12 @@ function validateRecoveryCall(call) {
   }
   if (call.interface && call.interface !== 'cli') {
     validateRecoveryInterface(call.interface);
+    if (call.method !== undefined) {
+      const entry = recoveryRegistry.interfaces[call.interface];
+      assert(entry.methods?.includes(call.method), `Undeclared recovery instance method ${call.interface}#${call.method}`);
+      const source = readFileSync(entry.source, 'utf8');
+      assert(new RegExp(`(?:return\\s*\\{[\\s\\S]*?\\b|^\\s*)${call.method}\\s*[,(:]`, 'm').test(source), `Missing returned recovery instance method ${call.interface}#${call.method}`);
+    }
     assert(call.precondition?.length > 10, 'Client read interface needs explicit binding preconditions');
     return;
   }

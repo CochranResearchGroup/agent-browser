@@ -1511,6 +1511,36 @@
       },
       "resumeCondition": "The caller has a valid still-authorized allowance, current qualified service bounds assess it at the documented measurement instant, and any earlier original uncertainty is reconciled. Consumer OS waits and a service observation do not prove delivery/completion before an absolute deadline; no input is replayed.",
       "maximumAutomaticAttempts": 1
+    },
+    "legacy_session_expiry": {
+      "rationale": "Legacy guest-clock session, tab and retention starts cannot establish qualified expiry. Automatic browser closure and profile deletion are deferred while exact custody remains inspectable.",
+      "requiredActor": "Current scoped browser/task owner; explicit close requires existing authority.",
+      "evidenceRequirement": "Inspect the retained original session and current browser ownership. A fresh UTC observation cannot qualify the legacy start.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect retained task custody and choose an explicit scoped close only when authorized; automatic legacy expiry remains deferred. Do not rewrite timestamps or infer expired retention from guest age.",
+          "precondition": "Current task/browser scope and close authority have been verified; preserve all unrelated peers and retained artifacts.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Continue independent browser work immediately; verify any explicitly requested close through current owner readback. Automatic qualified garbage collection is not implemented for legacy starts.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -3122,12 +3152,15 @@
       "recipe": "native_time",
       "owningChecks": [
         {
-          "path": "cli/src/mcp/task_operations.rs"
+          "path": "cli/src/mcp/task_operations.rs",
+          "revision": "bf181f4ca3b54d4e0e7117b931e7e67337b7807e"
         }
       ],
       "policySource": "AGENTS.md",
       "evidenceFreshness": "not_observed_by_projection",
-      "evidenceClass": "unavailable"
+      "evidenceClass": "unavailable",
+      "legacy": true,
+      "replacementCode": "browser_native_owner_allowance_unqualified"
     },
     "browser_native_owner_configuration_invalid": {
       "recipe": "native_capability",
@@ -7053,6 +7086,28 @@
       "policySource": "cli/src/native/profile_duplicate_copy.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
+    },
+    "browser_task_operation_owner_refused": {
+      "recipe": "original",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/task_operations.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_session_expiry_start_unqualified": {
+      "recipe": "legacy_session_expiry",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_host.rs"
+        }
+      ],
+      "policySource": "AGENTS.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -7128,6 +7183,18 @@
       "source": "cli/src/native/profile_duplicate_host.rs",
       "reason": "Test assertion starts_with prefix, not a complete emitted public error code.",
       "sourceEvidence": "first_error.starts_with(\"browser_native_original_identity_\")"
+    },
+    {
+      "code": "browser_control_human_active",
+      "source": "cli/src/mcp/failure_recovery.rs",
+      "sourceEvidence": "data[\"owner\"] == \"agent\" && data[\"awaitingObservation\"] == false",
+      "reason": "This literal matches a retained producer code when checking a recovery prerequisite; it does not emit a new owner failure at this boundary. Actual owner codes remain independently inventoried."
+    },
+    {
+      "code": "browser_control_paused",
+      "source": "cli/src/mcp/failure_recovery.rs",
+      "sourceEvidence": "data[\"owner\"] == \"agent\" && data[\"awaitingObservation\"] == false",
+      "reason": "This literal matches a retained producer code when checking a recovery prerequisite; it does not emit a new owner failure at this boundary. Actual owner codes remain independently inventoried."
     }
   ],
   "fragments": [
