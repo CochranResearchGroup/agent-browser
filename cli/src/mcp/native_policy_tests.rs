@@ -530,7 +530,8 @@ fn native_policy_override_public_mcp_preserves_exact_scope_and_refusal() {
         assert_eq!(lookup["originalOverride"]["state"], "archived");
     }
     drop(store);
-    let reopened = BrowserSessionSqliteStore::open(&path).unwrap();
+    // open accepts the Service store directory, not the SQLite file path.
+    let reopened = BrowserSessionSqliteStore::open(path.parent().unwrap()).unwrap();
     assert!(reopened
         .load_session_state()
         .unwrap()
