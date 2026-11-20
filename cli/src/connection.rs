@@ -1549,6 +1549,119 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn startup_kernel_admission_releases_without_replacing_its_inode() {
+        use std::os::unix::fs::MetadataExt;
+
+        let root = std::env::temp_dir().join(format!("ab-kernel-startup-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let environment = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        environment.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        environment.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let owner = acquire_runtime_host_startup_lock("first").unwrap().unwrap();
+        let path = root.join("runtime-host.startup.v2.lock");
+        let probe = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .unwrap();
+        let original = probe.metadata().unwrap();
+        for modified in [
+            std::time::SystemTime::UNIX_EPOCH,
+            std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(4_102_444_800),
+        ] {
+            probe.set_modified(modified).unwrap();
+            assert!(matches!(
+                probe.try_lock(),
+                Err(std::fs::TryLockError::WouldBlock)
+            ));
+        }
+        let (finished, completion) = std::sync::mpsc::channel();
+        let contender = thread::spawn(move || {
+            assert!(finished
+                .send(acquire_runtime_host_startup_lock("second"))
+                .is_ok());
+        });
+        // Coordination bounds detect a leaked lease, not elapsed performance.
+        let before_release = completion.recv_timeout(Duration::from_millis(200));
+        let blocked = matches!(
+            &before_release,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        );
+        drop(owner);
+        let after_release = match before_release {
+            Ok(result) => Ok(result),
+            Err(_) => completion.recv_timeout(Duration::from_secs(5)),
+        };
+        let admitted = matches!(&after_release, Ok(Ok(Some(_))));
+        let current = fs::metadata(&path).unwrap();
+        let same_entry = (original.dev(), original.ino()) == (current.dev(), current.ino());
+        drop(after_release);
+        drop(probe);
+        contender.join().unwrap();
+        fs::remove_dir_all(root).unwrap();
+        assert!(
+            blocked && admitted && same_entry,
+            "kernel ownership must outlive metadata changes and release on the same inode"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn absent_legacy_owner_retains_bytes_and_failed_inspection_releases_guard() {
+        let root = std::env::temp_dir().join(format!("ab-legacy-startup-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let environment = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+        ]);
+        environment.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        environment.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        let path = root.join("runtime-host.startup.lock");
+        let mut legacy = Command::new("/bin/sh")
+            .args([
+                "-c",
+                "printf '%s:1' \"$$\" > \"$1\"",
+                "legacy-startup-owner",
+            ])
+            .arg(&path)
+            .spawn()
+            .unwrap();
+        assert!(legacy.wait().unwrap().success());
+        assert!(matches!(
+            crate::process_identity::observe_process(legacy.id()),
+            crate::process_identity::ProcessObservation::Missing
+        ));
+        let original = fs::read(&path).unwrap();
+        let admission = acquire_runtime_host_startup_lock("after-death")
+            .unwrap()
+            .unwrap();
+        assert_eq!(fs::read(&path).unwrap(), original);
+        drop(admission);
+
+        fs::write(&path, b"unqualified-owner").unwrap();
+        let failed = acquire_runtime_host_startup_lock("unknown-owner");
+        let refused = failed.is_err();
+        drop(failed);
+        let probe = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join("runtime-host.startup.v2.lock"))
+            .unwrap();
+        let released = probe.try_lock().is_ok();
+        let retained = fs::read(&path).unwrap() == b"unqualified-owner";
+        drop(probe);
+        fs::remove_dir_all(root).unwrap();
+        assert!(
+            refused && released && retained,
+            "unqualified legacy evidence must retain its bytes without leaking v2 ownership"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn warm_shared_runtime_reuse_does_not_wait_for_another_lanes_startup_lock() {
         let root = std::env::temp_dir().join(format!("ab-warm-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
