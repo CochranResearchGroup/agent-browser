@@ -1069,9 +1069,7 @@ fn classify_browser_compatibility_failure(error: &str) -> Option<ServiceFailureR
         "browser_action_transport_outcome_uncertain"
     } else if error.starts_with("Invalid response: ") {
         "browser_action_transport_response_invalid"
-    } else if error == "Command payload must be a JSON object" {
-        "browser_action_argument_invalid"
-    } else if error.starts_with("Unknown subaction: ") || error == "Missing 'value' for fill subaction" || error == "At least one of 'selector', 'name', or 'url' is required" {
+    } else if error == "Command payload must be a JSON object" || error.starts_with("Unknown subaction: ") || error == "Missing 'value' for fill subaction" || error == "At least one of 'selector', 'name', or 'url' is required" {
         "browser_action_argument_invalid"
     } else if matches!(error, "evaluate requires serviceTabHandle" | "evaluate requires returnByValue=true so results can be capped" | "evaluate requires script or expression" | "evaluate requires positive timeoutMs" | "evaluate requires positive maxReturnBytes" | "evaluate requires serviceTabHandle.targetId") {
         "browser_action_evaluate_arguments_invalid"
