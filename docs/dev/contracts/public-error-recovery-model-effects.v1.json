@@ -1,0 +1,1595 @@
+{
+  "schemaVersion": "agent-browser.public-error-recovery-registry.v1",
+  "qualificationScope": {
+    "sourceRevision": "9d3958421084820cf0e6a01bc6f0c6ee2e1acf1a",
+    "meaning": "Bounded original-census model-effects partition: all65 assigned literals are actual fallible model emitters. Full four-source gates additionally qualify21 related owner errors and exclude one nested cause token. Projection supplies recourse, not runtime acceptance or permission. Reconnect receipt ceiling continuation remains an explicit source repair dependency.",
+    "effectUncertainty": "No listed error establishes zero physical effects or authorizes retry, browser replacement, receipt deletion, policy bypass or archive."
+  },
+  "recipes": {
+    "model_effects_attachment_request": {
+      "rationale": "The app attachment request does not match the profile or valid exact-recipient sharing shape.",
+      "requiredActor": "original_application_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect original attachment/profile and exact host, participant and session identifiers. Correct the named invalid field in the original supported browser_open attachment request without changing the retained process, endpoint, target or profile. A different intended task requires explicitly selected identity.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_attachment_owner": {
+      "rationale": "Existing borrowed-browser custody or sharing membership conflicts with this caller.",
+      "requiredActor": "original_application_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Have the recorded application owner inspect the current attachment and explicitly share with the exact recipient through its existing browser_open attachment/sharedWith binding, or retain its current sharing list. A recipient cannot transfer ownership or edit another owner's sharing policy.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_attachment_identity": {
+      "rationale": "The originally attached task, browser, process or desktop identity changed during admission.",
+      "requiredActor": "original_application_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect exact-task status and the existing app attachment. Obtain a current owner-proven attachment to the original process/target and use the existing explicit reconnect/rebind interface with current revision; do not attach a replacement or move a profile based on a stale observation.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_reconnect_request": {
+      "rationale": "The exact reconnect request identity or revision is invalid or conflicts with its durable receipt.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read current continuity revision and original request receipt through browser_reconnect status. Correct invalid request shape before admission; preserve the original request ID for exact receipt lookup. Changed intent requires a deliberately chosen new request ID and current expectedRevision, never overwriting an existing receipt.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_reconnect_capacity": {
+      "rationale": "The retained reconnect request ledger reached its current hardcoded 128-receipt ceiling.",
+      "requiredActor": "original_task_and_capacity_policy_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect exact-task reconnect status and original receipts; exact completed request replay and independent reads remain available. Preserve every receipt. This source baseline has no supported reconnect-ledger archive or live-limit setter, so further distinct reconnect intents require the bounded live-capacity repair tracked under spec749; do not delete rows or silently create another task.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_recovery_state": {
+      "rationale": "The retained browser recovery identity, generation or state cannot be validated.",
+      "requiredActor": "existing_runtime_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect exact-task status and the original runtime custody records. Have the current runtime owner reconcile the named original generation/state with its actual process and launch readbacks; use existing reconnect only after original continuity is proven. Never edit counters, erase retained state or create a replacement from missing evidence.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_recovery_budget": {
+      "rationale": "Automatic browser recovery policy or its attempt/generation accounting cannot admit more work.",
+      "requiredActor": "existing_runtime_policy_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect original recovery state and exact-task status. The existing runtime owner must reconcile pending generations and actual launch outcome, then repair its reviewed recovery configuration if invalid. An exhausted immutable counter is not permission to reset history, replace a browser or replay website input; current owner inspection and unaffected task reads continue.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_provider_inventory": {
+      "rationale": "The existing Remote View inventory, configured pool or assignment cannot qualify the requested original desktop.",
+      "requiredActor": "existing_runtime_and_remote_view_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect exact task and retained handoff. Have the existing provider/runtime owner repair the named configured pool, inventory transport or assignment publication using its supported configuration/owner path. Reopen the SAME durable handoff only after current readiness and matching desktop generation are observed; never invent provider IDs or substitute a raw route URL.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_activity_custody": {
+      "rationale": "Durable browser activity or idle-retirement custody cannot prove admission or acknowledge an earlier effect.",
+      "requiredActor": "existing_task_and_runtime_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect browser_reconnect status and task_briefing for the original task and pending activity. Reconcile the actual original dispatcher/retirement result with the current owner and freshly probe the original target through explicit reconnect when admitted. Lost acknowledgement or unavailable store is not no-effect proof; retain uncertain work without replay or deletion.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_original_exit": {
+      "rationale": "The original browser process identity or its actual exit cannot be proven.",
+      "requiredActor": "existing_runtime_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect retained original task/process identity and runtime owner readback. Reconcile the exact retirement/close effect and confirm exit of that recorded process before another lifecycle effect. Never kill a replacement process, infer exit from a missing transport, or replay close blindly; independent task/status inspection continues.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_launch_recovery": {
+      "rationale": "Recovery cannot prove absence, prior launch custody, exact assignment or completed launch publication.",
+      "requiredActor": "existing_task_and_runtime_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect exact-task status, original recovery generation and retained launch custody through the current runtime owner. Repair only the named missing owner readback/configuration, reconcile pending launch and prove the original process absent before an explicitly admitted recovery. Preserve logical task/profile/browser and uncertain originals; do not rerun launch after an ambiguous reply.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_focus_observation": {
+      "rationale": "The requested focus cannot prove one owned window and the current published desktop assignment.",
+      "requiredActor": "existing_task_and_remote_view_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect exact-task/handoff state and have the current Remote View owner freshly observe the exact recorded process window and matching published assignment. Reconnect or explicitly rebind the same task only when current ownership is proven; do not focus a similarly titled peer window or treat focus failure as no-effect proof.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_native_registration": {
+      "rationale": "Native handoff registration or replacement target no longer matches original launch custody.",
+      "requiredActor": "existing_task_and_remote_view_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original task, same durable handoff and retained launch claim. Have the existing Remote View/runtime owner reconcile registration and actual current assignment/target; an unpublished or changed replacement must retain its cleanup/publication obligation. Never mint a substitute handoff or repeat Native input to test whether registration succeeded.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_view_readback": {
+      "rationale": "Retained viewer issuance or transport observation cannot prove current original target and assignment.",
+      "requiredActor": "existing_task_and_remote_view_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect task_briefing and reconnect through the SAME opaque durable handoff URL. Have the existing authenticated Remote View owner reconcile issuance/transport readback and matching publication before claiming readiness. URL presence is not readiness; do not create another viewer access layer, expose provider URLs or retry uncertain browser effects.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    },
+    "model_effects_session_request": {
+      "rationale": "The runtime's original Remote View session configuration or launch intent is malformed or incomplete.",
+      "requiredActor": "existing_runtime_configuration_owner",
+      "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact original task and current runtime configuration. Correct the named assignment, pool or desktop intent in the existing runtime owner configuration, preserving original launch custody and profile ownership; validate current provider inventory before explicitly continuing the original admitted operation.",
+          "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "maximumAutomaticAttempts": 1
+    }
+  },
+  "codes": {
+    "browser_attachment_browser_identity_changed": {
+      "recipe": "model_effects_attachment_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+          "line": 245,
+          "sourceEvidence": "    if let Some(row) = &previous {\n        if state.app_browser_attachments.get(&browser_id) != Some(row) {\n            return Err(\"browser_attachment_browser_identity_changed\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_owner_conflict": {
+      "recipe": "model_effects_attachment_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+          "line": 165,
+          "sourceEvidence": "        .any(|row| row.profile_id == profile.id || row.pid == request.process.pid)\n    {\n        return Err(\"browser_attachment_owner_conflict: the current owner must explicitly share; attachment does not transfer custody\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_profile_invalid": {
+      "recipe": "model_effects_attachment_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+          "line": 123,
+          "sourceEvidence": "        || request.profile_path != profile.user_data_dir\n    {\n        return Err(\"browser_attachment_profile_invalid\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_attachment_sharing_invalid": {
+      "recipe": "model_effects_attachment_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+          "line": 96,
+          "sourceEvidence": "            ] {\n                if value.is_empty() || value.len() > 512 || value.chars().any(char::is_control) {\n                    return Err(\"browser_attachment_sharing_invalid\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_attachment_sharing_owner_required": {
+      "recipe": "model_effects_attachment_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+          "line": 155,
+          "sourceEvidence": "        }\n        if row.owner != identity && row.request.shared_with != request.shared_with {\n            return Err(\"browser_attachment_sharing_owner_required\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_attachment_task_conflict": {
+      "recipe": "model_effects_attachment_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+          "line": 176,
+          "sourceEvidence": "            .host_bindings\n            .get(&task.id)\n            .ok_or(\"browser_attachment_task_conflict\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_request_capacity_reached": {
+      "recipe": "model_effects_reconnect_capacity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_reconnect.rs",
+          "line": 80,
+          "sourceEvidence": "        }\n        if self.requests.len() >= 128 {\n            return Err(\"browser_reconnect_request_capacity_reached\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "browser_reconnect_request_id_invalid": {
+      "recipe": "model_effects_reconnect_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_reconnect.rs",
+          "line": 62,
+          "sourceEvidence": "            || request_id.chars().any(char::is_control)\n        {\n            return Err(\"browser_reconnect_request_id_invalid\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_request_identity_conflict": {
+      "recipe": "model_effects_reconnect_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_reconnect.rs",
+          "line": 66,
+          "sourceEvidence": "        if let Some(prior) = self.requests.get(request_id) {\n            if prior.fingerprint != fingerprint {\n                return Err(\"browser_reconnect_request_identity_conflict\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_revision_conflict": {
+      "recipe": "model_effects_reconnect_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_host_reconnect.rs",
+          "line": 74,
+          "sourceEvidence": "        }\n        if self.revision != expected {\n            return Err(\"browser_reconnect_revision_conflict\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_recovery_attempts_exhausted": {
+      "recipe": "model_effects_recovery_budget",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_recovery.rs",
+          "line": 168,
+          "sourceEvidence": "                .attempts\n                .checked_add(1)\n                .ok_or_else(|| \"browser_recovery_attempts_exhausted\".to_string())?,"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "browser_recovery_browser_id_invalid": {
+      "recipe": "model_effects_recovery_state",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_recovery.rs",
+          "line": 108,
+          "sourceEvidence": "    let policy = policy.validate()?;\n    if browser_id.is_empty() {\n        return Err(\"browser_recovery_browser_id_invalid\".to_string());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_recovery_generation_exhausted": {
+      "recipe": "model_effects_recovery_budget",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_recovery.rs",
+          "line": 155,
+          "sourceEvidence": "                .generation\n                .checked_add(1)\n                .ok_or_else(|| \"browser_recovery_generation_exhausted\".to_string())?,"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "browser_recovery_policy_invalid": {
+      "recipe": "model_effects_recovery_budget",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_recovery.rs",
+          "line": 72,
+          "sourceEvidence": "            || self.deadline_ms == 0\n        {\n            return Err(\"browser_recovery_policy_invalid\".to_string());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_recovery_state_invalid": {
+      "recipe": "model_effects_recovery_state",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_recovery.rs",
+          "line": 253,
+          "sourceEvidence": "        || state.next_eligible_at_ms > state.deadline_at_ms\n    {\n        return Err(\"browser_recovery_state_invalid\".to_string());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_attachment_desktop_changed": {
+      "recipe": "model_effects_attachment_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 904,
+          "sourceEvidence": "        self.adapter\n            .observe_assignment(&assignment)\n            .map_err(|_| \"browser_attachment_desktop_changed\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_desktop_process_changed": {
+      "recipe": "model_effects_attachment_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 915,
+          "sourceEvidence": "            })\n        {\n            return Err(\"browser_attachment_desktop_process_changed\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_window_observation_unavailable": {
+      "recipe": "model_effects_attachment_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 892,
+          "sourceEvidence": "            .adapter\n            .windows(&assignment)\n            .map_err(|_| \"browser_attachment_window_observation_unavailable\")?"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_lifecycle_original_identity_missing": {
+      "recipe": "model_effects_original_exit",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1700,
+          "sourceEvidence": "            .published_launch_process_identity(browser)\n            .map_err(|_| \"browser_lifecycle_original_identity_unavailable\")?\n            .ok_or(\"browser_lifecycle_original_identity_missing\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_lifecycle_original_identity_unavailable": {
+      "recipe": "model_effects_original_exit",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1699,
+          "sourceEvidence": "            .store\n            .published_launch_process_identity(browser)\n            .map_err(|_| \"browser_lifecycle_original_identity_unavailable\")?"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_lifecycle_process_exit_unproven": {
+      "recipe": "model_effects_original_exit",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1715,
+          "sourceEvidence": "            effects.apply_idle_retirement_effect(&scope, None)?;\n            if !effects.observe_idle_retirement_effect(&scope, None)? {\n                return Err(\"browser_lifecycle_process_exit_unproven\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_placement_inventory_unavailable": {
+      "recipe": "model_effects_provider_inventory",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1300,
+          "sourceEvidence": "            .adapter\n            .inventory()\n            .map_err(|_| \"browser_placement_inventory_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_placement_pool_unavailable": {
+      "recipe": "model_effects_provider_inventory",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1309,
+          "sourceEvidence": "            .iter()\n            .find(|candidate| candidate.name == pool.name)\n            .ok_or(\"browser_placement_pool_unavailable\")?"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_activity_admission_conflict": {
+      "recipe": "model_effects_activity_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 138,
+          "sourceEvidence": "                    BrowserIdleRetirementStoreError::Conflict => \"current_conflict_unclassified\",\n                };\n                format!(\"browser_session_activity_admission_conflict:{cause}: browser={} profile={}; inspect exact-task browser_reconnect status and task_briefing, then reconnect to freshly probe the original target; retain original uncertain operations without replay\", browser.id, browser.profile_id)"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_activity_readback_required": {
+      "recipe": "model_effects_activity_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 144,
+          "sourceEvidence": "        self.store\n            .acknowledge_browser_activity(&id)\n            .map_err(|_| \"browser_session_activity_readback_required\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_activity_readback_unavailable": {
+      "recipe": "model_effects_activity_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 689,
+          "sourceEvidence": "            .store\n            .browser_activity_records()\n            .map_err(|_| \"browser_session_activity_readback_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_activity_unavailable": {
+      "recipe": "model_effects_activity_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 115,
+          "sourceEvidence": "            .expected\n            .as_ref()\n            .ok_or(\"browser_session_activity_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_idle_custody_identity_changed": {
+      "recipe": "model_effects_activity_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 215,
+          "sourceEvidence": "                || baseline.desktop != browser.desktop\n            {\n                return Err(\"browser_session_idle_custody_identity_changed\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_idle_viewer_observation_unavailable": {
+      "recipe": "model_effects_activity_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 327,
+          "sourceEvidence": "                .adapter\n                .observe_idle(assignment)\n                .map_err(|_| \"browser_session_idle_viewer_observation_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_recovery_absence_unproven": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2051,
+          "sourceEvidence": "        self.effects\n            .prove_recovery_absence(browser, profile)\n            .map_err(|_| \"browser_session_recovery_absence_unproven\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_assignment_conflict": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2128,
+          "sourceEvidence": "            || assignment.generation != desktop.generation\n        {\n            return Err(\"browser_session_recovery_assignment_conflict\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_assignment_unavailable": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2122,
+          "sourceEvidence": "                        && assignment.generation == desktop.generation\n                })\n                .ok_or(\"browser_session_recovery_assignment_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_recovery_custody_conflict": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2223,
+          "sourceEvidence": "                browser,\n            )\n            .map_err(|_| \"browser_session_recovery_custody_conflict\")?"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_desktop_unavailable": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2037,
+          "sourceEvidence": "            .get(index)\n            .map(|candidate| candidate.desktop.clone())\n            .ok_or_else(|| \"browser_session_recovery_desktop_unavailable\".into())"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_recovery_environment_unavailable": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2165,
+          "sourceEvidence": "            Err(error) => {\n                let unavailable =\n                    || format!(\"browser_session_recovery_environment_unavailable:{error:?}\");"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_recovery_launch_readback_required": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2234,
+          "sourceEvidence": "            .effects\n            .recover_launch(browser, profile, &intent, environment, &observation)\n            .map_err(|_| \"browser_session_recovery_launch_readback_required\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_observation_readback_required": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2241,
+          "sourceEvidence": "        self.store\n            .observe_launch_intent(&intent, &launch)\n            .map_err(|_| \"browser_session_recovery_observation_readback_required\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_pool_missing": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2111,
+          "sourceEvidence": "                .pool\n                .as_ref()\n                .ok_or(\"browser_session_recovery_pool_missing\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_recovery_prior_custody_unavailable": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2103,
+          "sourceEvidence": "                .store\n                .published_launch_assignment(browser)\n                .map_err(|_| \"browser_session_recovery_prior_custody_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_readback_required": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2059,
+          "sourceEvidence": "            .store\n            .unpublished_launch_records()\n            .map_err(|_| \"browser_session_recovery_readback_required\")?"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_focus_assignment_conflict": {
+      "recipe": "model_effects_focus_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1837,
+          "sourceEvidence": "            || assignment.generation != desktop.generation\n        {\n            return Err(\"remote_view_focus_assignment_conflict\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_focus_desktop_missing": {
+      "recipe": "model_effects_focus_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1829,
+          "sourceEvidence": "            .desktop\n            .as_ref()\n            .ok_or(\"remote_view_focus_desktop_missing\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_focus_launch_custody_unavailable": {
+      "recipe": "model_effects_focus_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1833,
+          "sourceEvidence": "            .store\n            .published_presentation_assignment(browser)\n            .map_err(|_| \"remote_view_focus_launch_custody_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_focus_owned_window_unproven": {
+      "recipe": "model_effects_focus_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1859,
+          "sourceEvidence": "            .count();\n        if browser.pid == 0 || count != 1 {\n            return Err(\"remote_view_focus_owned_window_unproven\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_focus_window_readback_required": {
+      "recipe": "model_effects_focus_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1847,
+          "sourceEvidence": "            .adapter\n            .windows(&assignment)\n            .map_err(|_| \"remote_view_focus_window_readback_required\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_registration_unavailable": {
+      "recipe": "model_effects_native_registration",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1034,
+          "sourceEvidence": "                300_000,\n            )\n            .map_err(|_| \"remote_view_native_registration_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_native_replacement_changed": {
+      "recipe": "model_effects_native_registration",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 973,
+          "sourceEvidence": "            || desktop.generation != intent.assignment.generation\n        {\n            return Err(\"remote_view_native_replacement_changed\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_replacement_custody_missing": {
+      "recipe": "model_effects_native_registration",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 981,
+          "sourceEvidence": "            .into_iter()\n            .find(|claim| claim.intent == intent)\n            .ok_or(\"remote_view_native_replacement_custody_missing\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_replacement_custody_unavailable": {
+      "recipe": "model_effects_native_registration",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 978,
+          "sourceEvidence": "            .store\n            .unpublished_launch_records()\n            .map_err(|_| \"remote_view_native_replacement_custody_unavailable\")?"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_replacement_desktop_missing": {
+      "recipe": "model_effects_native_registration",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 967,
+          "sourceEvidence": "            .desktop\n            .as_ref()\n            .ok_or(\"remote_view_native_replacement_desktop_missing\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_native_replacement_target_unavailable": {
+      "recipe": "model_effects_native_registration",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 996,
+          "sourceEvidence": "            .observe_assignment(&intent.assignment)\n            .map(|observed| observed.target)\n            .map_err(|_| \"remote_view_native_replacement_target_unavailable\".into())"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_native_target_unavailable": {
+      "recipe": "model_effects_native_registration",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 939,
+          "sourceEvidence": "            .observe_assignment(&assignment)\n            .map(|observed| observed.target)\n            .map_err(|_| \"remote_view_native_target_unavailable\".into())"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_session_assignment_invalid": {
+      "recipe": "model_effects_session_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 61,
+          "sourceEvidence": "                    .is_some()\n            {\n                return Err(\"remote_view_session_assignment_invalid\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_session_desktop_required": {
+      "recipe": "model_effects_session_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1568,
+          "sourceEvidence": "    ) -> Result<BrowserLaunch, String> {\n        self.require_operation()?;\n        let desktop = desktop.ok_or_else(|| \"remote_view_session_desktop_required\".to_string())?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_session_intent_invalid": {
+      "recipe": "model_effects_session_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1582,
+          "sourceEvidence": "        intent\n            .validate()\n            .map_err(|_| \"remote_view_session_intent_invalid\".to_string())?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_session_launch_readback_required": {
+      "recipe": "model_effects_session_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1084,
+          "sourceEvidence": "                    .store\n                    .unpublished_launch_records()\n                    .map_err(|_| \"remote_view_session_launch_readback_required\")?"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_session_pool_invalid": {
+      "recipe": "model_effects_session_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 84,
+          "sourceEvidence": "    pub fn with_pool(mut self, pool: RemoteViewSessionPool) -> Result<Self, String> {\n        if pool.name.is_empty() || pool.desired_desktops == 0 {\n            return Err(\"remote_view_session_pool_invalid\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_tab_transport_readback_required": {
+      "recipe": "model_effects_view_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1267,
+          "sourceEvidence": "                clock.map_or(now_ms, |clock| clock())\n            })\n            .map_err(|_| \"remote_view_tab_transport_readback_required\".into())"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_tab_view_assignment_conflict": {
+      "recipe": "model_effects_view_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1968,
+          "sourceEvidence": "        .map_err(|_| \"remote_view_tab_view_launch_custody_unavailable\")?;\n    if assignment != published {\n        return Err(\"remote_view_tab_view_assignment_conflict\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_tab_view_assignment_unavailable": {
+      "recipe": "model_effects_view_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1962,
+          "sourceEvidence": "    let assignment = match matching.as_slice() {\n        [assignment] => (*assignment).clone(),\n        _ => return Err(\"remote_view_tab_view_assignment_unavailable\".into()),"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_tab_view_identity_conflict": {
+      "recipe": "model_effects_view_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1190,
+          "sourceEvidence": "            || view.idempotency_key.is_empty()\n        {\n            return Err(\"remote_view_tab_view_identity_conflict\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_tab_view_inventory_unavailable": {
+      "recipe": "model_effects_view_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1949,
+          "sourceEvidence": "    let inventory = adapter\n        .inventory()\n        .map_err(|_| \"remote_view_tab_view_inventory_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "remote_view_tab_view_issuance_readback_required": {
+      "recipe": "model_effects_view_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1240,
+          "sourceEvidence": "                    \"remote_view_tab_view_grant_terminal\".into()\n                }\n                _ => \"remote_view_tab_view_issuance_readback_required\".into(),"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_tab_view_launch_custody_unavailable": {
+      "recipe": "model_effects_view_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1966,
+          "sourceEvidence": "    let published = store\n        .published_presentation_assignment(&target.browser)\n        .map_err(|_| \"remote_view_tab_view_launch_custody_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_tab_view_resolution_failed": {
+      "recipe": "model_effects_view_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1199,
+          "sourceEvidence": "                    .adapter\n                    .observe_assignment(&assignment)\n                    .map_err(|_| \"remote_view_tab_view_resolution_failed\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_attachment_desktop_observation_unavailable": {
+      "recipe": "model_effects_attachment_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+          "line": 186,
+          "sourceEvidence": "    let candidates = effects\n        .remote_view_placement_candidates(&binding.placement)?\n        .ok_or(\"browser_attachment_desktop_observation_unavailable\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_desktop_process_mismatch": {
+      "recipe": "model_effects_attachment_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+          "line": 218,
+          "sourceEvidence": "                break;\n            }\n            Err(error) if error == \"browser_attachment_desktop_process_mismatch\" => continue,"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_observation_mismatch": {
+      "recipe": "model_effects_attachment_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+          "line": 230,
+          "sourceEvidence": "        || observed.launch.desktop.as_ref() != Some(&desktop)\n    {\n        return Err(\"browser_attachment_observation_mismatch\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_target_owned_by_task": {
+      "recipe": "model_effects_attachment_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+          "line": 150,
+          "sourceEvidence": "        {\n            return Err(\n                \"browser_attachment_target_owned_by_task: retain the existing task's tab custody\""
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_recovery_failure_fence_mismatch": {
+      "recipe": "model_effects_recovery_state",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_recovery.rs",
+          "line": 228,
+          "sourceEvidence": "    validate_state(current, &current.browser_id)?;\n    if current.phase != BrowserRecoveryPhase::Admitted || current.generation != generation {\n        return Err(\"browser_recovery_failure_fence_mismatch\".to_string());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_recovery_observed_live_fence_mismatch": {
+      "recipe": "model_effects_recovery_state",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_recovery.rs",
+          "line": 194,
+          "sourceEvidence": "    validate_state(current, &current.browser_id)?;\n    if current.phase != BrowserRecoveryPhase::Admitted || current.generation != generation {\n        return Err(\"browser_recovery_observed_live_fence_mismatch\".to_string());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_recovery_success_fence_mismatch": {
+      "recipe": "model_effects_recovery_state",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_recovery.rs",
+          "line": 208,
+          "sourceEvidence": "    validate_state(current, &current.browser_id)?;\n    if current.phase != BrowserRecoveryPhase::ObservedLive || current.generation != generation {\n        return Err(\"browser_recovery_success_fence_mismatch\".to_string());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_desktop_stale": {
+      "recipe": "model_effects_attachment_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 888,
+          "sourceEvidence": "        self.adapter\n            .observe_assignment(&assignment)\n            .map_err(|_| \"browser_attachment_desktop_stale\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_placement_provider_unconfigured": {
+      "recipe": "model_effects_provider_inventory",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1304,
+          "sourceEvidence": "            .pool\n            .as_ref()\n            .ok_or(\"browser_placement_provider_unconfigured\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_recovery_target_released": {
+      "recipe": "model_effects_launch_recovery",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 2136,
+          "sourceEvidence": "        {\n            if target.is_some() {\n                return Err(\"browser_reconnect_recovery_target_released\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_idle_previous_assignment_unresolved": {
+      "recipe": "model_effects_activity_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 302,
+          "sourceEvidence": "                    };\n                    if self.effects.observe_idle_retirement_effect(&scope, None) != Ok(true) {\n                        return Err(\"browser_session_idle_previous_assignment_unresolved\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_idle_readback_required": {
+      "recipe": "model_effects_activity_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 164,
+          "sourceEvidence": "            })\n        {\n            return Err(\"browser_session_idle_readback_required\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_operation_target_changed": {
+      "recipe": "model_effects_activity_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1356,
+          "sourceEvidence": "    ) -> Result<(), String> {\n        if expected.browsers.get(&browser.id) != Some(browser) {\n            return Err(\"browser_session_operation_target_changed\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_replacement_unobserved": {
+      "recipe": "model_effects_native_registration",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 962,
+          "sourceEvidence": "            .filter(|(_, observed)| *observed)\n            .map(|(intent, _)| intent.clone())\n            .ok_or(\"remote_view_native_replacement_unobserved\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_target_changed": {
+      "recipe": "model_effects_native_registration",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 933,
+          "sourceEvidence": "            || expected.sessions.get(&target.session.id) != Some(&target.session)\n        {\n            return Err(\"remote_view_native_target_changed\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_session_assignment_stale": {
+      "recipe": "model_effects_session_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1573,
+          "sourceEvidence": "            .get(&desktop.desktop_id)\n            .filter(|assignment| assignment.generation == desktop.generation)\n            .ok_or_else(|| \"remote_view_session_assignment_stale\".to_string())?"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_session_observation_scope_only": {
+      "recipe": "model_effects_session_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 797,
+          "sourceEvidence": "        }\n        if self.retained_observation.is_some() {\n            return Err(\"remote_view_session_observation_scope_only\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_session_observation_target_changed": {
+      "recipe": "model_effects_session_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 810,
+          "sourceEvidence": "                != Some(browser)\n        {\n            return Err(\"remote_view_session_observation_target_changed\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_session_operation_baseline_missing": {
+      "recipe": "model_effects_session_request",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 794,
+          "sourceEvidence": "    fn require_operation(&self) -> Result<(), String> {\n        if self.expected.is_none() {\n            return Err(\"remote_view_session_operation_baseline_missing\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_tab_view_desktop_missing": {
+      "recipe": "model_effects_view_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1946,
+          "sourceEvidence": "        .desktop\n        .as_ref()\n        .ok_or(\"remote_view_tab_view_desktop_missing\")?;"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_tab_view_unpublished": {
+      "recipe": "model_effects_view_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+          "line": 1983,
+          "sourceEvidence": ") -> Result<RemoteViewApplicationViewIssuance, String> {\n    if view.issuance.is_none() {\n        return Err(\"remote_view_tab_view_unpublished\".into());"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    }
+  },
+  "exclusions": [
+    {
+      "code": "browser_retired",
+      "source": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+      "sourceEvidence": "BrowserActivityAdmissionConflict::BrowserRetired => \"browser_retired\",",
+      "reason": "Nested BrowserActivityAdmissionConflict cause token only; the actual public wrapper is browser_session_activity_admission_conflict and retains original uncertain effects."
+    }
+  ],
+  "enforcedProducerSourceFamilies": [
+    {
+      "path": "crates/agent-browser-service-model/src/browser_attachment.rs",
+      "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/browser_host_reconnect.rs",
+      "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/browser_recovery.rs",
+      "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/remote_view_session_effects.rs",
+      "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    }
+  ]
+}
