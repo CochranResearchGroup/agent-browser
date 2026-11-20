@@ -156,3 +156,24 @@ The existing benchmark now pairs addressed `browser_continue` with exact-target 
 Former/current continuation median service-bracket upper bounds were492.42/231.15ms and p95 upper bounds494.47/242.29ms. Direct URL-read median upper bounds were398.35/138.67ms. Actual-operation intervals all start at zero; service delivery, uncertainty and host-load differences preclude a precise speedup ratio. Cold opening is reported separately. Both runs passed original-request no-dispatch replay and exact retained task/browser/tab/target identity. Owned residue lists were empty; fresh OS readback found both measured Chrome PIDs absent and no benchmark-owned user-data process.
 
 Five separate selected-phase runs on the earlier pinned `beaec2731` candidate qualified routing, state read, CDP, persistence and cold startup-lock samples. Their aggregate is `/home/ecochran76/.local/state/agent-browser/validation/spec749/latency-capacity-phases/aggregate.json`. They are phase localization with sampling overhead, not a controlled before/after result or evidence for later code.
+
+## Startup ownership repair, ticket 768
+
+The shared TDD RED run on source `1046932d0` executed the existing connection regression `aged_startup_marker_cannot_reclaim_a_live_owner`. The old implementation replaced a marker held by a live process because its fixture mtime was old. The selected test failed. Its raw synthetic receipt remains outside Git at `/home/ecochran76/.local/state/agent-browser/validation/spec749/tdd-red-1046932d0/03.log`.
+
+Current writers use a permanent `runtime-host.startup.v2.lock` inode with the standard library exclusive file lock. The guard retains its non-inherited file descriptor until startup leaves the admission scope. It never unlinks the guard, including after failure or owner exit. Metadata age is not ownership evidence. Lock contention uses an ordinary bounded OS wait; no StableTime client or guest-time ownership expiry is introduced. See the standard library [File::try_lock](https://doc.rust-lang.org/std/fs/struct.File.html#method.try_lock) and [File::unlock](https://doc.rust-lang.org/std/fs/struct.File.html#method.unlock) contracts.
+
+A legacy `runtime-host.startup.lock` is inspected only when present. Its old timestamp is format only. Positive kernel absence of its recorded PID permits current startup while retaining the original bytes. A currently live PID or unqualified marker/observation defers cold startup with an explicit owner diagnostic. A live PID is not asserted to prove the exact historical process identity. Fresh namespaces require no speculative cohort census, and verified compatible warm reuse precedes both guard admission and legacy inspection. Uncontrolled mixed-generation cold writers remain unsupported: older binaries ignore the kernel lock and can apply their own unsafe age-based policy.
+
+The four new diagnostics distinguish actual kernel guard I/O, current lock contention, a currently live legacy PID, and unqualified legacy evidence:
+
+- `runtime_host_startup_guard_unavailable`
+- `runtime_host_startup_guard_busy`
+- `runtime_host_legacy_startup_owner_live`
+- `runtime_host_legacy_startup_owner_unqualified`
+
+Existing installation diagnosis and the selected-runtime preserve plan provide recourse. Start with `agent-browser --json install doctor` and `agent-browser install workstation --dry-run --runtime-replacement-policy preserve --json`; inspect and continue the original installation transaction under its existing authority. These diagnostics do not authorize deleting a marker, terminating a foreign process, replacing a browser, or replaying an uncertain operation. Independent compatible warm work remains available.
+
+The accepted improvement budget is functional: healthy exact warm continuation must complete while unrelated current-protocol startup admission remains held. The repair adds no default time-client dependency. The controlled `afb1b8692` pair above establishes that functional improvement, while its overlapping operation intervals establish no precise speedup ratio or numeric SLA.
+
+The existing warm-reuse unit now holds a real kernel lock. Focused ownership checks exercise contention through release on the same persistent inode despite past/future fixture mtimes, positive dead-owner admission with unchanged legacy bytes, and release of v2 admission after an unqualified legacy inspection. The existing benchmark uses an owned `/usr/bin/flock` process running the current Node executable with a fixed readiness/release handshake. It snapshots completion before release and verifies that the guard inode remains. Its isolated exclusion/release helper check passed; this is not full browser acceptance. The earlier legacy-marker receipts remain historical evidence for their exact source and script. A current-protocol candidate requires its own pinned browser run. The coordinator owns the combined Rust GREEN run and final runtime acceptance.

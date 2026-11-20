@@ -7,7 +7,8 @@
  */
 import assert from 'node:assert/strict';
 import {createHash, randomUUID} from 'node:crypto';
-import {readFileSync, readdirSync, realpathSync, existsSync, writeFileSync, unlinkSync, mkdirSync} from 'node:fs';
+import {spawn} from 'node:child_process';
+import {readFileSync, readdirSync, realpathSync, existsSync, statSync, mkdirSync} from 'node:fs';
 import {join, isAbsolute} from 'node:path';
 import {createSmokeContext, createMcpStdioClient, runCli, parseJsonOutput} from './smoke-utils.js';
 
@@ -148,22 +149,48 @@ try{
  const directUrl=()=>direct('location.href');
  verify(await agent());verifyCdp(await cdp());
  verifyContinuation(await continueTask());verifyCdp(await directUrl(),url);
- const startupLock=join(context.socketDir,'runtime-host.startup.lock');
+ const startupLock=join(context.socketDir,'runtime-host.startup.v2.lock');
  async function heldStartupLockProbe(run,verifyResult){
-  const token=`latency-probe-${randomUUID()}`;
-  writeFileSync(startupLock,token,{flag:'wx',mode:0o600});
-  let completed=false,completedBeforeStartupLockRelease=false;
-  const outcome=run().then(value=>{completed=true;return {value};},error=>({error}));
-  // Incidental OS coordination only, not trusted elapsed-time evidence.
-  try{await new Promise(resolve=>setTimeout(resolve,1000));completedBeforeStartupLockRelease=completed;}
-  finally{assert.equal(readFileSync(startupLock,'utf8'),token);unlinkSync(startupLock);}
+  // This Linux-only harness uses a real, owned kernel-lock holder. Merely
+  // creating the permanent file cannot contend with the v2 protocol.
+  const holder=spawn('/usr/bin/flock',['--exclusive','--no-fork',startupLock,process.execPath,'-e',
+   'process.stdout.write("held\\n");process.stdin.resume();process.stdin.once("end",()=>process.exit(0));'],
+   {env:environment,stdio:['pipe','pipe','pipe']});
+  let holderTerminated=false;holder.once('exit',()=>{holderTerminated=true;});holder.once('error',()=>{holderTerminated=true;});
+  holder.stdin.on('error',()=>{});holder.stderr.resume();
+  const exited=new Promise(resolve=>{holder.once('error',error=>resolve({error}));holder.once('exit',(code,signal)=>resolve({code,signal}));});
+  const ready=new Promise((resolve,reject)=>{
+   let output='';const timer=setTimeout(()=>finish(new Error('Owned kernel guard helper did not acquire admission')),10000);
+   const onData=chunk=>{output+=String(chunk);if(output.length>64)finish(new Error('Unexpected kernel guard helper output'));else if(output.includes('\n'))finish(output==='held\n'?null:new Error('Unexpected kernel guard helper readiness'));};
+   const onError=()=>finish(new Error('Owned kernel guard helper could not start'));
+   const onExit=()=>finish(new Error('Owned kernel guard helper exited before acquisition'));
+   function finish(error){clearTimeout(timer);holder.stdout.off('data',onData);holder.off('error',onError);holder.off('exit',onExit);error?reject(error):resolve();}
+   holder.stdout.on('data',onData);holder.once('error',onError);holder.once('exit',onExit);
+  });
+  async function waitForExit(){let timer;try{return await Promise.race([exited,new Promise(resolve=>{timer=setTimeout(()=>resolve(null),5000);})]);}finally{clearTimeout(timer);}}
+  let completed=false,completedBeforeStartupLockRelease=false,outcome,identity;
+  try{
+   await ready;
+   const before=statSync(startupLock,{bigint:true});identity={device:String(before.dev),inode:String(before.ino)};
+   outcome=run().then(value=>{completed=true;return {value};},error=>({error}));
+   // Incidental OS coordination only, not trusted elapsed-time evidence.
+   await new Promise(resolve=>setTimeout(resolve,1000));
+   assert(!holderTerminated,'Owned kernel guard holder exited before completion snapshot');
+   completedBeforeStartupLockRelease=completed;
+  }finally{
+   holder.stdin.end();
+   if(!await waitForExit()){holder.kill('SIGTERM');if(!await waitForExit()){holder.kill('SIGKILL');if(!await waitForExit())throw new Error('Owned kernel guard helper did not exit');}}
+  }
+  const after=statSync(startupLock,{bigint:true});
+  assert.deepEqual({device:String(after.dev),inode:String(after.ino)},identity,'Permanent startup guard inode changed');
   const result=await outcome;if(result.error)throw result.error;verifyResult(result.value);
-  return {completedBeforeStartupLockRelease,observation:'OS coordination check; no latency bound or delivery guarantee'};
+  return {protocol:'kernel_v2',completedBeforeStartupLockRelease,permanentInodePreserved:true,observation:'OS coordination check; no latency bound or delivery guarantee'};
  }
  receipt.heldStartupLockEvaluateProbe={...await heldStartupLockProbe(agent,verify),callPath:'existing task_operations transport; does not call ensure_daemon',causalForWarmStartupLockOptimization:false};
  // Retain the old field for receipt consumers, explicitly scoped to evaluate.
  receipt.warmReuseCompletedBeforeStartupLockRelease=receipt.heldStartupLockEvaluateProbe.completedBeforeStartupLockRelease;
  receipt.heldStartupLockContinuationProbe={...await heldStartupLockProbe(continueTask,verifyContinuation),callPath:'workflow::continue_task -> ensure_transport -> ensure_daemon_inner',causalForWarmStartupLockOptimization:true};
+ receipt.functionalStartupBudget={requirement:'Healthy exact warm continuation completes while unrelated current-protocol kernel admission remains held',met:receipt.heldStartupLockContinuationProbe.completedBeforeStartupLockRelease,numericSlaEstablished:false};
  for(let i=0;i<samples;i++){
   const order=i%2?[['workflow_mcp',agent,verify],['direct_cdp',cdp,verifyCdp]]:[['direct_cdp',cdp,verifyCdp],['workflow_mcp',agent,verify]];
   for(const [name,run,check] of order)await measure(name,run,check);
