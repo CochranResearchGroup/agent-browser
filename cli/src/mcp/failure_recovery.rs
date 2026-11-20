@@ -16,7 +16,8 @@ pub(super) fn parameters_schema() -> Value {
             "requestId":{"type":"string","minLength":1},
             "policy":{"type":"object","additionalProperties":false,"properties":{
                 "maxAttempts":{"type":"integer","minimum":0},
-                "maxNoProgress":{"type":"integer","minimum":1}},"required":["maxAttempts","maxNoProgress"]},
+                "maxNoProgress":{"type":"integer","minimum":1},
+                "maxDurationMs":{"type":"integer","minimum":1}},"required":["maxAttempts","maxNoProgress"]},
             "remedy":{"type":"object","properties":{"tool":{"type":"string"},
                 "arguments":{"type":"object"},"executable":{"type":"boolean"}},"required":["tool","arguments"]}},
         "required":["operation"],"oneOf":[
@@ -252,9 +253,7 @@ fn invoke(
     if call["arguments"]["requestId"].is_null() {
         call["arguments"]["requestId"] = json!(request);
     }
-    let reply = super::task_operations::with_context(Some(&call), || {
-        super::call_service_mcp_tool(Some(&call), session, configured)
-    });
+    let reply = super::call_service_mcp_tool(Some(&call), session, configured);
     match reply {
         Ok(reply) => {
             let payload = reply["content"]
@@ -479,6 +478,16 @@ pub(super) fn call(
             let (policy,_,_) = policy.map_err(issue)?;
             let attempt = params["attemptId"].as_str().map(str::to_owned)
                 .unwrap_or_else(||uuid::Uuid::new_v4().to_string());
+            let budget_start = if policy.max_duration_ms.is_some() {
+                Some(crate::connection::stable_time::native_now().map_err(|cause| issue(format!("failure_recovery_time_unqualified: {cause}; inspect/history remain available")))?)
+            } else { None };
+            let within_budget = || -> Result<(), String> {
+                if let (Some(start),Some(limit)) = (&budget_start,policy.max_duration_ms) {
+                    let now=crate::connection::stable_time::native_now()?;
+                    start.fresh_at(&now,limit).map_err(|cause|format!("failure_recovery_time_budget_unqualified: {cause}; inspect the retained attempt and update the optional live budget before a new recovery intent"))?;
+                }
+                Ok(())
+            };
             let current_plan = plan(&failure);
             let observed = invoke(&current_plan["inspect"],task,&format!("recovery-{attempt}-inspect"),session,configured);
             let before = diagnostic(&observed.data);
@@ -498,7 +507,8 @@ pub(super) fn call(
             if operation=="run" { result["attemptLogging"]=journal(&record,task,&attempt,"in_flight",None); }
             result["inspection"]=observed.summary;
             let mut last_data = observed.data;
-            if operation == "run" && observed.success {
+            let time_admission = within_budget();
+            if operation == "run" && observed.success && time_admission.is_ok() {
                 let supplied = params.get("remedy");
                 let derived = current_plan["remediation"].as_array().and_then(|steps|
                     steps.iter().filter_map(|step|step.get("call")).find(|step|supported(step,task)));
@@ -508,7 +518,13 @@ pub(super) fn call(
                     if remedy.success { last_data=remedy.data; }
                 } else { result["nextAction"]=current_plan["remediation"].clone(); }
             }
-            let verified = invoke(&current_plan["verification"],task,&format!("recovery-{attempt}-verify"),session,configured);
+            let verification_admission = within_budget();
+            let verified = if verification_admission.is_ok() {
+                invoke(&current_plan["verification"],task,&format!("recovery-{attempt}-verify"),session,configured)
+            } else {
+                Observation{data:Value::Null,success:false,summary:json!({"status":"time_budget_unqualified","cause":verification_admission.err(),"inspectionRemainsAvailable":true})}
+            };
+            if let Err(cause)=time_admission { result["timeBudget"]=json!({"status":"unqualified","cause":cause,"inspectionRemainsAvailable":true}); }
             result["verification"]=verified.summary;
             let ready = prerequisite(record["code"].as_str().unwrap_or_default(),&last_data)
                 && verified.success;

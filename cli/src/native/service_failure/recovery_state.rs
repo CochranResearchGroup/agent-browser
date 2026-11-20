@@ -15,19 +15,23 @@ const SCHEMA: &str = "agent-browser.failure-recovery.v1";
 pub(crate) struct Policy {
     pub max_attempts: u64,
     pub max_no_progress: u64,
+    /// Optional qualified-service interval for dispatching recovery steps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_duration_ms: Option<u64>,
 }
 impl Default for Policy {
     fn default() -> Self {
         Self {
             max_attempts: 3,
             max_no_progress: 2,
+            max_duration_ms: None,
         }
     }
 }
 impl Policy {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if self.max_no_progress == 0 {
-            return Err("failure_recovery_policy_invalid: maxNoProgress must be positive; maxAttempts=0 disables automatic recovery".into());
+        if self.max_no_progress == 0 || self.max_duration_ms == Some(0) {
+            return Err("failure_recovery_policy_invalid: maxNoProgress and any maxDurationMs must be positive; maxAttempts=0 disables automatic recovery".into());
         }
         Ok(())
     }
@@ -340,6 +344,7 @@ mod tests {
         let initial = Policy {
             max_attempts: 1,
             max_no_progress: 1,
+            max_duration_ms: None,
         };
         configure(
             Some("original-task"),
@@ -402,6 +407,7 @@ mod tests {
         let extended = Policy {
             max_attempts: 2,
             max_no_progress: 2,
+            max_duration_ms: None,
         };
         configure(
             Some("original-task"),

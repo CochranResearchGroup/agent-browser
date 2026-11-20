@@ -49,7 +49,12 @@ Configure budgets live with `params:{"operation":"configure","scope":"task",
 "actor":"AGENT","reason":"REVIEWED REPAIR","policy":{"maxAttempts":5,
 "maxNoProgress":3}}`. Use `scope:"defaults"` for defaults. Defaults are three
 attempts and two consecutive checks without progress; zero `maxAttempts` disables
-automatic recovery. Inspection and history remain available after exhaustion.
+automatic recovery. Optional positive `maxDurationMs` checks supported StableTime
+observation bounds before subsequent remedy and verification dispatch. It does not
+promise delivery or completion by a deadline. Without it, ordinary recovery reads
+add no timing gate. An unqualified client, service bound or elapsed interval pauses
+only these budgeted steps; inspect, history and escalation remain available.
+Inspection and history remain available after exhaustion.
 Updates preserve prior attempts and require no restart or recompile. Configuration
 and actor labels do not grant new permissions or authenticate the caller.
 

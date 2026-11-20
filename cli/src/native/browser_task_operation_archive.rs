@@ -4,9 +4,7 @@
 use super::{
     load_optional_document, save_document, BrowserSessionSqliteStore, SESSION_STATE_DOCUMENT,
 };
-use agent_browser_service_model::{
-    BrowserSessionState, BrowserTaskOperation,
-};
+use agent_browser_service_model::{BrowserSessionState, BrowserTaskOperation};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

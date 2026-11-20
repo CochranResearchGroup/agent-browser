@@ -231,18 +231,21 @@ pub fn run_mcp_command(
                     serde_json::to_string_pretty(&value).unwrap_or_default()
                 );
             }
-            if value["success"] == false { 1 } else { 0 }
+            if value["success"] == false {
+                1
+            } else {
+                0
+            }
         }
         Err(err) => {
             let mut response = json!({"success":false,"error":err});
             crate::native::service_failure::attach_public_failure(
-                &mut response, &json!({"action":"mcp_cli"}), "mcp_cli");
+                &mut response,
+                &json!({"action":"mcp_cli"}),
+                "mcp_cli",
+            );
             if json_output {
-                println!(
-                    "{}",
-                    serde_json::to_string(&response)
-                    .unwrap_or_default()
-                );
+                println!("{}", serde_json::to_string(&response).unwrap_or_default());
             } else {
                 eprintln!("{}", err);
             }
@@ -253,10 +256,11 @@ pub fn run_mcp_command(
 
 fn cli_public_tool_response(params: &Value, configured: &ServiceState) -> Result<Value, String> {
     match call_service_mcp_tool(Some(params), "default", configured) {
-        Ok(reply) => reply["content"].as_array()
-            .and_then(|blocks|blocks.iter().find_map(|block|block["text"].as_str()))
-            .and_then(|text|serde_json::from_str(text).ok())
-            .ok_or_else(||"mcp_cli_tool_response_invalid".into()),
+        Ok(reply) => reply["content"]
+            .as_array()
+            .and_then(|blocks| blocks.iter().find_map(|block| block["text"].as_str()))
+            .and_then(|text| serde_json::from_str(text).ok())
+            .ok_or_else(|| "mcp_cli_tool_response_invalid".into()),
         Err(error) => Ok(json!({"success":false,
             "error":error.data.as_ref().and_then(|data|data["message"].as_str()).unwrap_or(error.message),
             "failure":error.data.as_ref().and_then(|data|data.get("failure")),
@@ -358,15 +362,21 @@ fn mcp_command_response_with_config(
             )
         }
         Some("task-operation") => {
-            if !(4..=5).contains(&args.len()) || args[2].trim().is_empty() || args[3].trim().is_empty()
-                || (args.len()==5 && args[4]!="reconcile") {
+            if !(4..=5).contains(&args.len())
+                || args[2].trim().is_empty()
+                || args[3].trim().is_empty()
+                || (args.len() == 5 && args[4] != "reconcile")
+            {
                 return Err(
                     "Usage: agent-browser --json mcp task-operation <task-id> <request-id> [reconcile]".into(),
                 );
             }
-            if args.len()==5 {
-                return cli_public_tool_response(&json!({"name":"browser_command","arguments":{
-                    "taskId":args[2],"action":"task_operation","params":{"operation":"reconcile","requestId":args[3]}}}),configured_service_state);
+            if args.len() == 5 {
+                return cli_public_tool_response(
+                    &json!({"name":"browser_command","arguments":{
+                    "taskId":args[2],"action":"task_operation","params":{"operation":"reconcile","requestId":args[3]}}}),
+                    configured_service_state,
+                );
             }
             Ok(json!({"success":true,"data":task_operations::lookup(&args[2], &args[3])?}))
         }

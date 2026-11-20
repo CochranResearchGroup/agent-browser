@@ -7442,6 +7442,7 @@ Commands:
   task-operation TASK REQUEST [reconcile] Read original; reconcile only owner-proven no-effect refusal
   failure-recovery JSON Inspect/packet/history/run/reconcile; live configure maxAttempts/maxNoProgress with actor/reason
   Recovery default budgets: 3 attempts, 2 without progress; 0 attempts disables automation; history survives extension
+  Optional maxDurationMs qualifies dispatch intervals with StableTime; inspect/history stay available
   Recovery never replays original input; record_resume verifies exact owner ACK, not website/task completion
   Teaching evidence: client teaching-evidence / teaching-evidence-http; recheck Saved provenance before Speech ranges
   Teaching drafts: inspect_guide / client inspectTeachingDraft; inert until reviewed
