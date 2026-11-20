@@ -1,0 +1,1948 @@
+{
+  "schemaVersion": "agent-browser.public-error-recovery-registry.v1",
+  "qualificationScope": {
+    "ticket": 764,
+    "sourceBaseline": "86975768564a541a64385a6ab6d8059078ec9fcd",
+    "meaning": "Known actual browser/element/action/connection and typed CDP compatibility failure producers only. Arbitrary website results, exception substrings, unrelated prose and unreviewed dynamic fields remain unknown. Codes describe a cause family, never no-effect authority.",
+    "effectAuthority": "All normalized compatibility failures remain effect_uncertain, inspect_before_retry, reuseAllowed=false. Existing opaque exact-original owner proof is required for no-effect settlement; no message classification replaces it.",
+    "transparentWrappers": {
+      "source": "cli/src/mcp/workflow.rs",
+      "allowed": [
+        "workflow_transport_failed",
+        "workflow_transport_start_failed",
+        "workflow_cli_failed"
+      ],
+      "maximumDepth": 4,
+      "meaning": "Only source-defined transparent workflow wrappers expose a nested known owner message. Unknown wrappers and arbitrary exception contents are never searched for substrings."
+    }
+  },
+  "recipes": {
+    "legacy_selector_observation": {
+      "rationale": "Selectors and snapshot refs bind a particular observed page/frame; a missing/ambiguous/stale target requires current observation rather than repeating input.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read a new snapshot of the SAME currently owned CDP task and select an actual unique current element/ref, including the intended frame. Native-only tasks use their supported native_capture instead of forcing CDP. Check the exact original operation outcome before choosing new explicit input; do not guess selectors, click peer tabs, bypass policy or treat a changed DOM as no-effect proof.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "taskId": "$taskId",
+              "action": "snapshot",
+              "params": {}
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_element_state": {
+      "rationale": "Visibility, interception and element-kind guards require fresh actual layout and supported controls; partial focus/fill can already have effects.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "requestId": "$requestId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Observe the same current page/frame with the supported snapshot or Native capture. Resolve the actual visibility/overlay/control-kind prerequisite through the ordinary authorized workflow, and inspect original focus/fill/click outcome. Choose a correct current control only after fresh observation; never retype/reclick or execute JavaScript to bypass a guard from this message alone.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "taskId": "$taskId",
+              "action": "snapshot",
+              "params": {}
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_evaluation_exception": {
+      "rationale": "An owned evaluation wrapper identifies a page exception; its private message may describe anything and cannot classify control, timeout or no-effect authority.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "requestId": "$requestId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact original evaluate request and current same-task page state. Correct the actual caller script under its existing evaluation/site policy only after accounting for effects already executed before the exception; an exception or a missing result never proves that evaluation did nothing. Continue independent reads or use a resumable packet when the original outcome cannot be established; do not log script, page body or credentials.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_navigation_observation": {
+      "rationale": "Navigation and lifecycle/network-idle waits can fail after the page changed; absence of an acknowledgement is not failed-dispatch proof.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "requestId": "$requestId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Use browser_continue on the SAME retained task to read actual current URL/target, and inspect original navigation outcome. A page already at the intended location must not navigate again merely to obtain an acknowledgement. For legitimate additional waits choose explicit ordinary bounded wait parameters supported by the original owner; if transport/identity is lost, inspect/reconnect that original before any new navigation.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "call": {
+            "tool": "browser_continue",
+            "arguments": {
+              "taskId": "$taskId"
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_wait_observation": {
+      "rationale": "An ordinary wait timeout is a caller wait outcome, not a job lifetime, freshness verdict or indication that prior work was cancelled.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "requestId": "$requestId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect current original task/page and original operation. If the prerequisite remains valid, the caller can explicitly select a supported new read/wait with an appropriate existing runtime wait budget, after observing current state; it must not repeat the underlying click/fill/navigation. The wait budget is not reliable age/expiry evidence and cannot relax identity, policy or owner input freshness.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "call": {
+            "tool": "browser_continue",
+            "arguments": {
+              "taskId": "$taskId"
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_cdp_owner": {
+      "rationale": "Typed CDP transport/protocol/response failures identify the command boundary but can follow actual dispatch or partial effects.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "requestId": "$requestId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read the exact original operation and browser_reconnect status. If the same original process/target continuity is proven, use the existing same-task reconnect operation to restore transport, then observe the current page before new explicit work. Inspect actual method/owner details for protocol or serialization defects; do not replay CDP input, attach another browser or infer rollback from a closed channel or invalid JSON.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "call": {
+            "tool": "browser_reconnect",
+            "arguments": {
+              "taskId": "$taskId",
+              "operation": "reconnect"
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_daemon_transport": {
+      "rationale": "Socket connect/read/write/response failures must preserve original request identity across facade loss; an incomplete reply never proves no dispatch.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "requestId": "$requestId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the retained original request and same-task reconnect status, then reconnect only after original process/target continuity is proven. Repair diagnosed user-scoped socket/authentication/installation configuration under existing owner custody when required. Read the original outcome before new intent; never resend a mutation after read/write loss, silently autolaunch a replacement, delete state or treat a parser error as successful completion.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "call": {
+            "tool": "browser_reconnect",
+            "arguments": {
+              "taskId": "$taskId",
+              "operation": "reconnect"
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_argument_correction": {
+      "rationale": "Known caller argument and endpoint shapes require correcting that actual request contract; syntax provenance does not settle a compound action.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--help"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Compare the named field/endpoint/options with the current public command contract and actual original mode. Supply supported required fields, valid configured CDP endpoint or compatible explicit launch options; preserve chosen profile/build and current policy. Correct a date value only for the intended writable date control. Inspect original outcome first; correcting arguments never authorizes a new target, private payload replay, build fallback or mixed-task state reset.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_original_page": {
+      "rationale": "A missing browser/page/frame observation can describe an ended or stale original, not permission to replace it.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read original same-task reconnect status and task briefing. Recover only through supported continuity proof or explicit original-owner mode/retirement procedures; an intentionally closed/ended original is not reopened automatically. If the original has no recoverable physical target, keep its outcome/history and return a resumable packet rather than guessing a browser, default profile or peer page.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "call": {
+            "tool": "browser_continue",
+            "arguments": {
+              "taskId": "$taskId"
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_installation": {
+      "rationale": "An explicit Chrome lookup/launch failure needs current installation/configuration diagnosis and original launch-custody reconciliation.",
+      "requiredActor": "existing_installation_and_original_profile_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Read install doctor and the original launch/ownership result. The authorized installation owner can repair the reviewed executable/cache/path or use the documented install command, preserving the explicitly selected browser build/profile. Reconcile partial launch before another attempt, and use documented preserving-runtime continuity if a process configuration replacement is actually required; do not select another build or kill unknown browser processes.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_native_window": {
+      "rationale": "Native window observation is separate from CDP task/process identity; a missing window cannot authorize a foreign display or physical close.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect current same-task mode, process/display assignment and actual Native window state through the existing owner/provider. Repair only the diagnosed original route/window binding under current permission, or use the supported same-task handoff/explicit mode-conversion workflow when appropriate. Retain uncertain focus/close outcomes; never borrow another window/display or launch another browser to satisfy a missing-window diagnostic.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_close_intent": {
+      "rationale": "The final-tab guard is distinct from deliberate task/browser completion; choosing a safe continuation requires actual caller intent and current ownership.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Preserve the last original tab while inspecting current task/browser ownership. If the intended work is task completion, use the existing browser_close interface on that exact task under current close authority; otherwise explicitly choose the supported tab/workflow operation appropriate to the intended work. Do not close a peer tab or invent another browser just to bypass this guard, and reconcile any original close uncertainty first.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_retention_mode": {
+      "rationale": "Leave-open retention applies to a launched managed profile; incompatible current ownership needs a supported explicit workflow rather than silent adoption.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the actual current original profile/mode and retained owner. Use the existing supported retention or explicit mode-conversion procedure only for that exact task under its current authority; a fresh task must select an appropriate existing/managed profile explicitly. Preserve original history and do not convert or relaunch a running task merely because retention was requested.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_transport_configuration": {
+      "rationale": "Socket/authentication/process-identity setup needs current private transport custody; a client configuration failure is not proof that the browser/provider is down.",
+      "requiredActor": "existing_installation_and_transport_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original socket/authentication/process-identity configuration and current installed executable. Repair only the diagnosed private directory, permission, entropy or original identity-file publication under existing installation custody. Preserve existing tokens and live owner identities; never print credentials, rewrite an immutable process identity, remove another lane socket or infer no dispatch from a setup/read failure.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_startup_reconcile": {
+      "rationale": "A daemon startup exit or wait can leave an exact child/competing owner published; startup failure does not prove no browser or task effect.",
+      "requiredActor": "existing_installation_and_original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect install doctor and the original daemon/launch custody and retained task. Resolve the diagnosed executable/configuration/startup prerequisite under existing installation authority. Reconnect the same original only after exact current owner continuity is proven; if no task was created, a new explicit original launch intent still requires checking prior startup/child outcome. Never start a duplicate owner or delete locks/processes from an absent reply.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "legacy_admission_wait": {
+      "rationale": "A startup admission wait protects current owner publication; it is an ordinary wait, not authority to remove another lane or change task identity.",
+      "requiredActor": "original_task_owner",
+      "evidenceRequirement": "Exact original task/request and owner outcome, current process/target/mode and fresh permitted observation. The error pattern is cause provenance only, not current evidence, permission or physical-effect proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read the original task/mode and current owner startup state. Let the actual admitted owner finish, or use its supported custody/reconnect procedure after fresh process/identity evidence if it exited. Warm existing tasks remain independently inspectable. Do not bypass the startup lock, infer stale ownership from elapsed guest time, kill foreign work or relaunch the original command blindly.",
+          "precondition": "Use only existing authority for the exact original task/profile and current mode. Retain original request/outcome; uncertain input must never be replayed or declared no-effect from this message.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "Current original owner/target and permitted observation support the explicitly selected continuation; the original request remains failed/uncertain unless separately settled by actual owner evidence, and it is never silently replayed.",
+      "maximumAutomaticAttempts": 1
+    }
+  },
+  "codes": {
+    "browser_action_reference_stale": {
+      "recipe": "legacy_selector_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_action_selector_not_found": {
+      "recipe": "legacy_selector_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_action_selector_ambiguous": {
+      "recipe": "legacy_selector_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_action_element_geometry_unavailable": {
+      "recipe": "legacy_selector_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_action_frame_unavailable": {
+      "recipe": "legacy_selector_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_action_element_not_visible": {
+      "recipe": "legacy_element_state",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_element_intercepted": {
+      "recipe": "legacy_element_state",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_element_kind_invalid": {
+      "recipe": "legacy_element_state",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_fill_unverified": {
+      "recipe": "legacy_element_state",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_evaluation_exception": {
+      "recipe": "legacy_evaluation_exception",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_navigation_failed": {
+      "recipe": "legacy_navigation_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_navigation_wait_timeout": {
+      "recipe": "legacy_navigation_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_wait_timeout": {
+      "recipe": "legacy_wait_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_cdp_protocol_failed": {
+      "recipe": "legacy_cdp_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_cdp_timeout": {
+      "recipe": "legacy_cdp_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_cdp_serialization_failed": {
+      "recipe": "legacy_cdp_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_cdp_transport_lost": {
+      "recipe": "legacy_cdp_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_cdp_response_invalid": {
+      "recipe": "legacy_cdp_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_cdp_connect_failed": {
+      "recipe": "legacy_cdp_owner",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_action_transport_connect_failed": {
+      "recipe": "legacy_daemon_transport",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_transport_outcome_uncertain": {
+      "recipe": "legacy_daemon_transport",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_transport_response_invalid": {
+      "recipe": "legacy_daemon_transport",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_cdp_endpoint_invalid": {
+      "recipe": "legacy_argument_correction",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_action_tab_index_invalid": {
+      "recipe": "legacy_argument_correction",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_action_launch_options_invalid": {
+      "recipe": "legacy_argument_correction",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_action_evaluate_arguments_invalid": {
+      "recipe": "legacy_argument_correction",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_action_argument_missing": {
+      "recipe": "legacy_argument_correction",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_action_argument_invalid": {
+      "recipe": "legacy_argument_correction",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_action_value_invalid": {
+      "recipe": "legacy_argument_correction",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_action_page_unavailable": {
+      "recipe": "legacy_original_page",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_action_target_observation_unavailable": {
+      "recipe": "legacy_original_page",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_action_launch_failed": {
+      "recipe": "legacy_installation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_executable_unavailable": {
+      "recipe": "legacy_installation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_action_transport_configuration_failed": {
+      "recipe": "legacy_transport_configuration",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_transport_start_failed": {
+      "recipe": "legacy_startup_reconcile",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_runtime_admission_wait": {
+      "recipe": "legacy_admission_wait",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_native_window_unavailable": {
+      "recipe": "legacy_native_window",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_action_last_tab_close_requires_intent": {
+      "recipe": "legacy_close_intent",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_action_retention_context_invalid": {
+      "recipe": "legacy_retention_mode",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+          "owningFunction": "classify_browser_compatibility_failure"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    }
+  },
+  "enforcedProducerCodePrefixes": [
+    "browser_action_"
+  ],
+  "legacyProducerChecks": [
+    {
+      "code": "browser_action_reference_stale",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/element.rs",
+          "sourceEvidence": "\"Unknown ref: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_reference_stale\""
+      },
+      "positiveExample": {
+        "message": "Unknown ref: e3",
+        "expectedCode": "browser_action_reference_stale"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Unknown ref: e3\""
+      }
+    },
+    {
+      "code": "browser_action_selector_not_found",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/element.rs",
+          "sourceEvidence": "\"Element not found: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_selector_not_found\""
+      },
+      "positiveExample": {
+        "message": "Element not found: #button",
+        "expectedCode": "browser_action_selector_not_found"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Element not found: #button\""
+      }
+    },
+    {
+      "code": "browser_action_selector_ambiguous",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Element matched multiple results. Use a more specific selector.\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_selector_ambiguous\""
+      },
+      "positiveExample": {
+        "message": "Element matched multiple results. Use a more specific selector.",
+        "expectedCode": "browser_action_selector_ambiguous"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Element matched multiple results. Use a more specific selector.\""
+      }
+    },
+    {
+      "code": "browser_action_element_geometry_unavailable",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/element.rs",
+          "sourceEvidence": "\"Could not get bounding box for: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_element_geometry_unavailable\""
+      },
+      "positiveExample": {
+        "message": "Could not get bounding box for: #input",
+        "expectedCode": "browser_action_element_geometry_unavailable"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Could not get bounding box for: #input\""
+      }
+    },
+    {
+      "code": "browser_action_frame_unavailable",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser_frame.rs",
+          "sourceEvidence": "\"Frame not found\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_frame_unavailable\""
+      },
+      "positiveExample": {
+        "message": "Ref does not point to an iframe element",
+        "expectedCode": "browser_action_frame_unavailable"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Ref does not point to an iframe element\""
+      }
+    },
+    {
+      "code": "browser_action_element_not_visible",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Element exists but is not visible. Wait for it to become visible or scroll it into view.\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_element_not_visible\""
+      },
+      "positiveExample": {
+        "message": "Element exists but is not visible. Wait for it to become visible or scroll it into view.",
+        "expectedCode": "browser_action_element_not_visible"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Element exists but is not visible. Wait for it to become visible or scroll it into view.\""
+      }
+    },
+    {
+      "code": "browser_action_element_intercepted",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Another element is covering the target element. Try scrolling or closing overlays.\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_element_intercepted\""
+      },
+      "positiveExample": {
+        "message": "Another element is covering the target element. Try scrolling or closing overlays.",
+        "expectedCode": "browser_action_element_intercepted"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Another element is covering the target element. Try scrolling or closing overlays.\""
+      }
+    },
+    {
+      "code": "browser_action_element_kind_invalid",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/interaction.rs",
+          "sourceEvidence": "Element '{}' does not have an href attribute. --new-tab only works on links."
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_element_kind_invalid\""
+      },
+      "positiveExample": {
+        "message": "Element '#link' does not have an href attribute. --new-tab only works on links.",
+        "expectedCode": "browser_action_element_kind_invalid"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Element '#link' does not have an href attribute. --new-tab only works on links.\""
+      }
+    },
+    {
+      "code": "browser_action_fill_unverified",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/interaction.rs",
+          "sourceEvidence": "\"Could not focus or fill the input\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_fill_unverified\""
+      },
+      "positiveExample": {
+        "message": "Could not focus or fill the input",
+        "expectedCode": "browser_action_fill_unverified"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Could not focus or fill the input\""
+      }
+    },
+    {
+      "code": "browser_action_evaluation_exception",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Evaluation error: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_evaluation_exception\""
+      },
+      "positiveExample": {
+        "message": "workflow_cli_failed: Evaluation error: Error: cancelled before dispatch",
+        "expectedCode": "browser_action_evaluation_exception"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"workflow_cli_failed: Evaluation error: Error: cancelled before dispatch\""
+      }
+    },
+    {
+      "code": "browser_action_navigation_failed",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Navigation failed: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_navigation_failed\""
+      },
+      "positiveExample": {
+        "message": "Navigation failed: net::ERR_NAME_NOT_RESOLVED",
+        "expectedCode": "browser_action_navigation_failed"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Navigation failed: net::ERR_NAME_NOT_RESOLVED\""
+      }
+    },
+    {
+      "code": "browser_action_navigation_wait_timeout",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Timeout waiting for {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_navigation_wait_timeout\""
+      },
+      "positiveExample": {
+        "message": "Timeout waiting for Page.loadEventFired",
+        "expectedCode": "browser_action_navigation_wait_timeout"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Timeout waiting for Page.loadEventFired\""
+      }
+    },
+    {
+      "code": "browser_action_wait_timeout",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser_wait.rs",
+          "sourceEvidence": "\"Wait timed out after {}ms\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_wait_timeout\""
+      },
+      "positiveExample": {
+        "message": "Wait timed out after 1000ms",
+        "expectedCode": "browser_action_wait_timeout"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Wait timed out after 1000ms\""
+      }
+    },
+    {
+      "code": "browser_action_cdp_protocol_failed",
+      "producerChecks": [
+        {
+          "path": "crates/agent-browser-cdp/src/client.rs",
+          "sourceEvidence": "\"CDP error ({method}): {message}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_cdp_protocol_failed\""
+      },
+      "positiveExample": {
+        "message": "CDP error (Runtime.evaluate): Element not found: #button",
+        "expectedCode": "browser_action_cdp_protocol_failed"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"CDP error (Runtime.evaluate): Element not found: #button\""
+      }
+    },
+    {
+      "code": "browser_action_cdp_timeout",
+      "producerChecks": [
+        {
+          "path": "crates/agent-browser-cdp/src/client.rs",
+          "sourceEvidence": "\"CDP command timed out: {method}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_cdp_timeout\""
+      },
+      "positiveExample": {
+        "message": "CDP command timed out: Input.dispatchMouseEvent",
+        "expectedCode": "browser_action_cdp_timeout"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"CDP command timed out: Input.dispatchMouseEvent\""
+      }
+    },
+    {
+      "code": "browser_action_cdp_serialization_failed",
+      "producerChecks": [
+        {
+          "path": "crates/agent-browser-cdp/src/client.rs",
+          "sourceEvidence": "\"Failed to serialize CDP command: {message}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_cdp_serialization_failed\""
+      },
+      "positiveExample": {
+        "message": "Failed to serialize CDP command: invalid payload",
+        "expectedCode": "browser_action_cdp_serialization_failed"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Failed to serialize CDP command: invalid payload\""
+      }
+    },
+    {
+      "code": "browser_action_cdp_transport_lost",
+      "producerChecks": [
+        {
+          "path": "crates/agent-browser-cdp/src/client.rs",
+          "sourceEvidence": "\"CDP response channel closed\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_cdp_transport_lost\""
+      },
+      "positiveExample": {
+        "message": "CDP response channel closed",
+        "expectedCode": "browser_action_cdp_transport_lost"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"CDP response channel closed\""
+      }
+    },
+    {
+      "code": "browser_action_cdp_response_invalid",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Failed to deserialize CDP response for Runtime.evaluate: {error}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_cdp_response_invalid\""
+      },
+      "positiveExample": {
+        "message": "Failed to deserialize CDP response for Runtime.evaluate: missing result",
+        "expectedCode": "browser_action_cdp_response_invalid"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Failed to deserialize CDP response for Runtime.evaluate: missing result\""
+      }
+    },
+    {
+      "code": "browser_action_cdp_connect_failed",
+      "producerChecks": [
+        {
+          "path": "crates/agent-browser-cdp/src/client.rs",
+          "sourceEvidence": "\"CDP WebSocket connect failed: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_cdp_connect_failed\""
+      },
+      "positiveExample": {
+        "message": "CDP WebSocket connect failed: refused",
+        "expectedCode": "browser_action_cdp_connect_failed"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"CDP WebSocket connect failed: refused\""
+      }
+    },
+    {
+      "code": "browser_action_transport_connect_failed",
+      "producerChecks": [
+        {
+          "path": "cli/src/connection.rs",
+          "sourceEvidence": "\"Failed to connect: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_transport_connect_failed\""
+      },
+      "positiveExample": {
+        "message": "Failed to connect: connection refused",
+        "expectedCode": "browser_action_transport_connect_failed"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Failed to connect: connection refused\""
+      }
+    },
+    {
+      "code": "browser_action_transport_outcome_uncertain",
+      "producerChecks": [
+        {
+          "path": "cli/src/connection.rs",
+          "sourceEvidence": "\"Failed to read: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_transport_outcome_uncertain\""
+      },
+      "positiveExample": {
+        "message": "Failed to read: connection reset",
+        "expectedCode": "browser_action_transport_outcome_uncertain"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Failed to read: connection reset\""
+      }
+    },
+    {
+      "code": "browser_action_transport_response_invalid",
+      "producerChecks": [
+        {
+          "path": "cli/src/connection.rs",
+          "sourceEvidence": "\"Invalid response: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_transport_response_invalid\""
+      },
+      "positiveExample": {
+        "message": "Invalid response: expected value",
+        "expectedCode": "browser_action_transport_response_invalid"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Invalid response: expected value\""
+      }
+    },
+    {
+      "code": "browser_action_cdp_endpoint_invalid",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Invalid CDP URL: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_cdp_endpoint_invalid\""
+      },
+      "positiveExample": {
+        "message": "Invalid CDP URL: relative URL without a base",
+        "expectedCode": "browser_action_cdp_endpoint_invalid"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Invalid CDP URL: relative URL without a base\""
+      }
+    },
+    {
+      "code": "browser_action_tab_index_invalid",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Tab index {index} out of range\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_tab_index_invalid\""
+      },
+      "positiveExample": {
+        "message": "Tab index 12 out of range",
+        "expectedCode": "browser_action_tab_index_invalid"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Tab index 12 out of range\""
+      }
+    },
+    {
+      "code": "browser_action_launch_options_invalid",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Cannot use storage_state with profile\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_launch_options_invalid\""
+      },
+      "positiveExample": {
+        "message": "Profiles are not supported with Lightpanda",
+        "expectedCode": "browser_action_launch_options_invalid"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Profiles are not supported with Lightpanda\""
+      }
+    },
+    {
+      "code": "browser_action_evaluate_arguments_invalid",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/service_probe.rs",
+          "sourceEvidence": "\"evaluate requires positive timeoutMs\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_evaluate_arguments_invalid\""
+      },
+      "positiveExample": {
+        "message": "evaluate requires positive timeoutMs",
+        "expectedCode": "browser_action_evaluate_arguments_invalid"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"evaluate requires positive timeoutMs\""
+      }
+    },
+    {
+      "code": "browser_action_argument_missing",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser_input.rs",
+          "sourceEvidence": "\"Missing 'key' parameter\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_argument_missing\""
+      },
+      "positiveExample": {
+        "message": "Missing 'selector' parameter",
+        "expectedCode": "browser_action_argument_missing"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Missing 'selector' parameter\""
+      }
+    },
+    {
+      "code": "browser_action_argument_invalid",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser_locator.rs",
+          "sourceEvidence": "\"Unknown subaction: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_argument_invalid\""
+      },
+      "positiveExample": {
+        "message": "Unknown subaction: unreviewed",
+        "expectedCode": "browser_action_argument_invalid"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Unknown subaction: unreviewed\""
+      }
+    },
+    {
+      "code": "browser_action_value_invalid",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/interaction.rs",
+          "sourceEvidence": "Invalid date value; expected YYYY-MM-DD"
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_value_invalid\""
+      },
+      "positiveExample": {
+        "message": "Invalid date value; expected YYYY-MM-DD",
+        "expectedCode": "browser_action_value_invalid"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Invalid date value; expected YYYY-MM-DD\""
+      }
+    },
+    {
+      "code": "browser_action_page_unavailable",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"No active page\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_page_unavailable\""
+      },
+      "positiveExample": {
+        "message": "Browser not launched",
+        "expectedCode": "browser_action_page_unavailable"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Browser not launched\""
+      }
+    },
+    {
+      "code": "browser_action_target_observation_unavailable",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Event stream closed\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_target_observation_unavailable\""
+      },
+      "positiveExample": {
+        "message": "Event stream closed",
+        "expectedCode": "browser_action_target_observation_unavailable"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Event stream closed\""
+      }
+    },
+    {
+      "code": "browser_action_launch_failed",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/actions.rs",
+          "sourceEvidence": "\"Auto-launch failed: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_launch_failed\""
+      },
+      "positiveExample": {
+        "message": "Auto-launch failed: original owner refused",
+        "expectedCode": "browser_action_launch_failed"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Auto-launch failed: original owner refused\""
+      }
+    },
+    {
+      "code": "browser_action_executable_unavailable",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/cdp/chrome.rs",
+          "sourceEvidence": "Chrome not found. Checked:\\n"
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_executable_unavailable\""
+      },
+      "positiveExample": {
+        "message": "Chrome not found. Checked:\n  configured original cache",
+        "expectedCode": "browser_action_executable_unavailable"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Chrome not found. Checked:\\n  configured original cache\""
+      }
+    },
+    {
+      "code": "browser_action_transport_configuration_failed",
+      "producerChecks": [
+        {
+          "path": "cli/src/connection.rs",
+          "sourceEvidence": "\"Failed to read daemon auth token: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_transport_configuration_failed\""
+      },
+      "positiveExample": {
+        "message": "Failed to read daemon auth token: permission denied",
+        "expectedCode": "browser_action_transport_configuration_failed"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Failed to read daemon auth token: permission denied\""
+      }
+    },
+    {
+      "code": "browser_action_transport_start_failed",
+      "producerChecks": [
+        {
+          "path": "cli/src/connection.rs",
+          "sourceEvidence": "\"Failed to start daemon: {}\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_transport_start_failed\""
+      },
+      "positiveExample": {
+        "message": "Failed to start daemon: missing executable",
+        "expectedCode": "browser_action_transport_start_failed"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Failed to start daemon: missing executable\""
+      }
+    },
+    {
+      "code": "browser_action_runtime_admission_wait",
+      "producerChecks": [
+        {
+          "path": "cli/src/connection.rs",
+          "sourceEvidence": "\"Timed out waiting for runtime-host startup admission\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_runtime_admission_wait\""
+      },
+      "positiveExample": {
+        "message": "Timed out waiting for runtime-host startup admission",
+        "expectedCode": "browser_action_runtime_admission_wait"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Timed out waiting for runtime-host startup admission\""
+      }
+    },
+    {
+      "code": "browser_action_native_window_unavailable",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"No managed X11 window found for browser close\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_native_window_unavailable\""
+      },
+      "positiveExample": {
+        "message": "No managed X11 window found for browser close",
+        "expectedCode": "browser_action_native_window_unavailable"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"No managed X11 window found for browser close\""
+      }
+    },
+    {
+      "code": "browser_action_last_tab_close_requires_intent",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Cannot close the last tab\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_last_tab_close_requires_intent\""
+      },
+      "positiveExample": {
+        "message": "Cannot close the last tab",
+        "expectedCode": "browser_action_last_tab_close_requires_intent"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Cannot close the last tab\""
+      }
+    },
+    {
+      "code": "browser_action_retention_context_invalid",
+      "producerChecks": [
+        {
+          "path": "cli/src/native/browser.rs",
+          "sourceEvidence": "\"Can only leave open a launched managed runtime profile\""
+        }
+      ],
+      "classifierCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "classify_browser_compatibility_failure",
+        "sourceEvidence": "\"browser_action_retention_context_invalid\""
+      },
+      "positiveExample": {
+        "message": "Can only leave open a launched managed runtime profile",
+        "expectedCode": "browser_action_retention_context_invalid"
+      },
+      "testCheck": {
+        "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+        "owningFunction": "browser_compatibility_recognition_preserves_original_uncertainty",
+        "sourceEvidence": "\"Can only leave open a launched managed runtime profile\""
+      }
+    }
+  ],
+  "legacyNegativeChecks": [
+    {
+      "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "owningFunction": "browser_compatibility_recognition_rejects_website_and_unknown_patterns",
+      "sourceEvidence": "\"page says Element not found: #button\"",
+      "expectedCode": "service_operation_failed"
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "owningFunction": "browser_compatibility_recognition_rejects_website_and_unknown_patterns",
+      "sourceEvidence": "\"unknown_wrapper: Element not found: #button\"",
+      "expectedCode": "service_operation_failed"
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "owningFunction": "browser_compatibility_recognition_rejects_website_and_unknown_patterns",
+      "sourceEvidence": "\"arbitrary provider timeout text\"",
+      "expectedCode": "service_operation_failed"
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "owningFunction": "browser_compatibility_recognition_rejects_website_and_unknown_patterns",
+      "sourceEvidence": "\"arbitrary provider cancelled before dispatch\"",
+      "expectedCode": "service_operation_failed"
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "owningFunction": "browser_compatibility_recognition_rejects_website_and_unknown_patterns",
+      "sourceEvidence": "\"Missing 'unreviewedField' parameter\"",
+      "expectedCode": "service_operation_failed"
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "owningFunction": "browser_compatibility_recognition_rejects_website_and_unknown_patterns",
+      "sourceEvidence": "\"CDP error (not a method): timeout\"",
+      "expectedCode": "service_operation_failed"
+    }
+  ]
+}

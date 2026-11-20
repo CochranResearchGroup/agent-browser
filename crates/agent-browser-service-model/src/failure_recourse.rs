@@ -143,6 +143,12 @@ pub fn operator_focus_failure_code(error: &str) -> Option<&str> {
 
 /// Classify current operation failures. Installer history has no admission role.
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    // Preserve actual browser/CDP provenance before legacy job-word heuristics.
+    // A page exception containing cancellation/timeout prose is never a job's
+    // pre-dispatch proof, and no compatibility message attests no physical input.
+    if let Some(failure) = classify_browser_compatibility_failure(error) {
+        return failure;
+    }
     // Emitted only by freshness input checks before the profile is changed.
     // Storage/commit errors keep their original uncertainty classification.
     if error.starts_with("profile_freshness_invalid:") {
@@ -662,7 +668,11 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             ..ServiceFailureRecourse::default()
         };
     }
-    if error.contains("Control plane worker is stopped") {
+    if matches!(
+        error,
+        "Control plane worker is stopped"
+            | "Control plane worker is stopped while waiting for profile lease"
+    ) {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
             code: "control_plane_worker_stopped".to_string(),
@@ -675,7 +685,10 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             ..ServiceFailureRecourse::default()
         };
     }
-    if error.contains("cancelled before dispatch") || error == "Cancelled by operator" {
+    if matches!(
+        error,
+        "Service job was cancelled before dispatch" | "Cancelled by operator"
+    ) {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
             code: "service_job_cancelled".to_string(),
@@ -687,7 +700,7 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             ..ServiceFailureRecourse::default()
         };
     }
-    if error.contains("cancelled while running") {
+    if owner_message(error, "Service job was cancelled while running") {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
             code: "service_job_cancelled".to_string(),
@@ -703,7 +716,9 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             ..ServiceFailureRecourse::default()
         };
     }
-    if error.contains("timed out") || error.contains("exceeded its persisted") {
+    if owner_message(error, "Service job timed out during route-bound open")
+        || decimal_message(error, "Service job timed out after ", "ms")
+    {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
             code: "service_job_timed_out".to_string(),
@@ -934,6 +949,174 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
     }
 }
 
+// These recognizers validate the producing owner's finite wire shapes. They
+// never search page prose or infer effect certainty from error text.
+fn owner_message(error: &str, exact: &str) -> bool {
+    error == exact
+        || error
+            .strip_prefix(exact)
+            .is_some_and(|rest| rest.starts_with("; "))
+}
+
+fn decimal_message(error: &str, prefix: &str, suffix: &str) -> bool {
+    error
+        .strip_prefix(prefix)
+        .and_then(|rest| rest.strip_suffix(suffix))
+        .is_some_and(|number| !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn cdp_method_message(error: &str, prefix: &str, suffix: &str) -> bool {
+    error
+        .strip_prefix(prefix)
+        .and_then(|rest| rest.split_once(suffix))
+        .is_some_and(|(method, _)| {
+            !method.is_empty()
+                && method.contains('.')
+                && method
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_'))
+        })
+}
+
+/// Exact compatibility messages/prefixes emitted by browser, element, socket
+/// and typed CDP owners. Website exception contents remain opaque; only their
+/// actual `Evaluation error:` wrapper is classified. Raw error data is retained
+/// by the existing response, never copied into a registry/journal subject.
+fn classify_browser_compatibility_failure(error: &str) -> Option<ServiceFailureRecourse> {
+    let mut error = error;
+    for _ in 0..4 {
+        let Some((wrapper, cause)) = error.split_once(':') else {
+            break;
+        };
+        if matches!(
+            wrapper,
+            "workflow_transport_failed" | "workflow_transport_start_failed" | "workflow_cli_failed"
+        ) {
+            error = cause.trim_start();
+        } else {
+            break;
+        }
+    }
+    let code = if error.starts_with("Evaluation error: ") {
+        "browser_action_evaluation_exception"
+    } else if cdp_method_message(error, "CDP error (", "): ") {
+        "browser_action_cdp_protocol_failed"
+    } else if error.starts_with("CDP command timed out: ") {
+        let method = error.strip_prefix("CDP command timed out: ")?;
+        if !method.contains('.') || !method.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_')) { return None; }
+        "browser_action_cdp_timeout"
+    } else if error.starts_with("Failed to serialize CDP command: ") {
+        "browser_action_cdp_serialization_failed"
+    } else if error.starts_with("Failed to send CDP command: ") || error == "CDP response channel closed" {
+        "browser_action_cdp_transport_lost"
+    } else if error.starts_with("Failed to deserialize CDP response for Runtime.evaluate: ") {
+        "browser_action_cdp_response_invalid"
+    } else if error.starts_with("CDP WebSocket connect failed: ") {
+        "browser_action_cdp_connect_failed"
+    } else if error.starts_with("Invalid WebSocket URL: ") || error.starts_with("Invalid CDP URL: ") || error.starts_with("No host in CDP URL: ") {
+        "browser_action_cdp_endpoint_invalid"
+    } else if error.starts_with("Navigation failed: ") {
+        "browser_action_navigation_failed"
+    } else if error.starts_with("Timeout waiting for load state: ") || matches!(error, "Timeout waiting for Page.loadEventFired" | "Timeout waiting for Page.domContentEventFired" | "Timeout waiting for networkidle") {
+        "browser_action_navigation_wait_timeout"
+    } else if decimal_message(error, "Wait timed out after ", "ms") || error == "Operation timed out. The page may still be loading or the element may not exist." {
+        "browser_action_wait_timeout"
+    } else if error == "Event stream closed" || error == "target inventory timed out" {
+        "browser_action_target_observation_unavailable"
+    } else if error.starts_with("Unknown ref: ") || error.starts_with("No objectId for ref ") {
+        "browser_action_reference_stale"
+    } else if error.starts_with("Element not found: ") || error.starts_with("Could not locate element with role=") || error == "Element not found. Verify the selector is correct and the element exists in the DOM." {
+        "browser_action_selector_not_found"
+    } else if error.starts_with("Element '") && error.ends_with("' does not have an href attribute. --new-tab only works on links.") {
+        "browser_action_element_kind_invalid"
+    } else if matches!(error, "Date input is not writable" | "Could not focus or fill the input") {
+        "browser_action_fill_unverified"
+    } else if error == "Invalid date value; expected YYYY-MM-DD" {
+        "browser_action_value_invalid"
+    } else if matches!(error, "Ref does not point to an iframe element" | "Could not resolve frame ID for iframe element" | "Frame not found") || error.starts_with("Ref ") && error.ends_with(" has no backend node id") {
+        "browser_action_frame_unavailable"
+    } else if error == "Element matched multiple results. Use a more specific selector." {
+        "browser_action_selector_ambiguous"
+    } else if error == "Element exists but is not visible. Wait for it to become visible or scroll it into view." {
+        "browser_action_element_not_visible"
+    } else if error == "Another element is covering the target element. Try scrolling or closing overlays." {
+        "browser_action_element_intercepted"
+    } else if error.starts_with("Could not get bounding box for: ") || error.starts_with("AX node has no backendDOMNodeId for role=") || error == "Could not get backendNodeId for file input" || error == "Could not find frame for selector" {
+        "browser_action_element_geometry_unavailable"
+    } else if matches!(error, "Browser not launched" | "No active page" | "Runtime handoff found no retained page targets" | "Cold-launch blank target disappeared during acquisition") {
+        "browser_action_page_unavailable"
+    } else if decimal_message(error, "Tab index ", " out of range") {
+        "browser_action_tab_index_invalid"
+    } else if error == "Cannot close the last tab" {
+        "browser_action_last_tab_close_requires_intent"
+    } else if error == "Can only leave open a launched managed runtime profile" {
+        "browser_action_retention_context_invalid"
+    } else if error.starts_with("Auto-launch failed: ") {
+        "browser_action_launch_failed"
+    } else if error.starts_with("Chrome not found. Checked:\n") {
+        "browser_action_executable_unavailable"
+    } else if matches!(error, "Cannot use storage_state with profile" | "Cannot use storage_state with extensions" | "Extensions are not supported with Lightpanda" | "Profiles are not supported with Lightpanda" | "Storage state is not supported with Lightpanda" | "File access is not supported with Lightpanda" | "Headed mode is not supported with Lightpanda (headless only)") {
+        "browser_action_launch_options_invalid"
+    } else if matches!(error, "Browser.getWindowForTarget did not return windowId" | "X11 browser property format changed" | "No managed X11 window found for browser close") || error.starts_with("No X11 window found for browser PID ") {
+        "browser_action_native_window_unavailable"
+    } else if ["Failed to create socket directory: ", "Failed to secure socket directory: ", "Failed to generate auth token: ", "Failed to write daemon auth token: ", "Failed to secure daemon auth token: ", "Failed to read daemon auth token: ", "Failed to encode daemon process identity: ", "Failed to write daemon process identity: ", "Failed to secure daemon process identity: ", "Failed to resolve current executable: ", "daemon process identity is unavailable: ", "daemon process identity is invalid: "].iter().any(|prefix| error.starts_with(prefix)) {
+        "browser_action_transport_configuration_failed"
+    } else if error.starts_with("Failed to start daemon: ") || error.starts_with("Daemon process exited during startup:") || error.starts_with("Daemon process exited during startup with no error output.") || error.starts_with("Daemon failed to start (") && error.ends_with(')') {
+        "browser_action_transport_start_failed"
+    } else if error == "Timed out waiting for runtime-host startup admission" {
+        "browser_action_runtime_admission_wait"
+    } else if error.starts_with("Failed to connect: ") {
+        "browser_action_transport_connect_failed"
+    } else if error.starts_with("Failed to send: ") || error.starts_with("Failed to read: ") {
+        "browser_action_transport_outcome_uncertain"
+    } else if error.starts_with("Invalid response: ") {
+        "browser_action_transport_response_invalid"
+    } else if error == "Command payload must be a JSON object" {
+        "browser_action_argument_invalid"
+    } else if error.starts_with("Unknown subaction: ") || error == "Missing 'value' for fill subaction" || error == "At least one of 'selector', 'name', or 'url' is required" {
+        "browser_action_argument_invalid"
+    } else if matches!(error, "evaluate requires serviceTabHandle" | "evaluate requires returnByValue=true so results can be capped" | "evaluate requires script or expression" | "evaluate requires positive timeoutMs" | "evaluate requires positive maxReturnBytes" | "evaluate requires serviceTabHandle.targetId") {
+        "browser_action_evaluate_arguments_invalid"
+    } else if let Some(field) = error.strip_prefix("Missing '").and_then(|rest| rest.strip_suffix("' parameter")) {
+        if !matches!(field, "path" | "name" | "role" | "selector" | "index" | "script" | "source" | "target" | "html" | "url" | "expression" | "requestId" | "text" | "key" | "value" | "timezoneId" | "locale" | "latitude" | "longitude" | "userAgent" | "attribute" | "event") { return None; }
+        "browser_action_argument_missing"
+    } else { return None; };
+    let request = matches!(
+        code,
+        "browser_action_cdp_endpoint_invalid"
+            | "browser_action_tab_index_invalid"
+            | "browser_action_launch_options_invalid"
+            | "browser_action_evaluate_arguments_invalid"
+            | "browser_action_argument_missing"
+            | "browser_action_argument_invalid"
+            | "browser_action_value_invalid"
+    );
+    Some(ServiceFailureRecourse {
+        schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+        code: code.into(),
+        axis: if request {
+            ServiceFailureAxis::Request
+        } else {
+            ServiceFailureAxis::LifecycleOwner
+        },
+        phase: if request {
+            ServiceFailurePhase::IngressValidation
+        } else {
+            ServiceFailurePhase::Unknown
+        },
+        effect_state: ServiceEffectState::EffectUncertain,
+        retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+        recommended_action: "inspect_original_task_and_current_owner".into(),
+        reuse_allowed: false,
+        safe_next_actions: vec![
+            "inspect_original_task_operation".into(),
+            "observe_current_original_target".into(),
+        ],
+        hard_stops: vec!["blind_retry".into(), "infer_no_effect_from_message".into()],
+        ..ServiceFailureRecourse::default()
+    })
+}
+
 fn failure_metadata_value<'a>(error: &'a str, key: &str) -> Option<&'a str> {
     error
         .split(';')
@@ -947,6 +1130,161 @@ mod tests {
     use super::*;
     use crate::{ProfileConnectionState, ProfileIdentityAssurance, ProfilePermission};
     use serde_json::json;
+
+    #[test]
+    fn browser_compatibility_recognition_preserves_original_uncertainty() {
+        for (error, code) in [
+            (
+                "Evaluation error: Error: Service job was cancelled before dispatch",
+                "browser_action_evaluation_exception",
+            ),
+            (
+                "CDP error (Runtime.evaluate): Element not found: #button",
+                "browser_action_cdp_protocol_failed",
+            ),
+            (
+                "CDP command timed out: Input.dispatchMouseEvent",
+                "browser_action_cdp_timeout",
+            ),
+            (
+                "Failed to serialize CDP command: invalid payload",
+                "browser_action_cdp_serialization_failed",
+            ),
+            (
+                "Failed to send CDP command: closed",
+                "browser_action_cdp_transport_lost",
+            ),
+            (
+                "CDP response channel closed",
+                "browser_action_cdp_transport_lost",
+            ),
+            (
+                "Failed to deserialize CDP response for Runtime.evaluate: missing result",
+                "browser_action_cdp_response_invalid",
+            ),
+            (
+                "CDP WebSocket connect failed: refused",
+                "browser_action_cdp_connect_failed",
+            ),
+            (
+                "Invalid CDP URL: relative URL without a base",
+                "browser_action_cdp_endpoint_invalid",
+            ),
+            (
+                "Navigation failed: net::ERR_NAME_NOT_RESOLVED",
+                "browser_action_navigation_failed",
+            ),
+            (
+                "Timeout waiting for Page.loadEventFired",
+                "browser_action_navigation_wait_timeout",
+            ),
+            ("Wait timed out after 1000ms", "browser_action_wait_timeout"),
+            ("Unknown ref: e3", "browser_action_reference_stale"),
+            (
+                "Element not found: #button",
+                "browser_action_selector_not_found",
+            ),
+            (
+                "Element matched multiple results. Use a more specific selector.",
+                "browser_action_selector_ambiguous",
+            ),
+            ("Element exists but is not visible. Wait for it to become visible or scroll it into view.", "browser_action_element_not_visible"),
+            ("Another element is covering the target element. Try scrolling or closing overlays.", "browser_action_element_intercepted"),
+            ("Could not get bounding box for: #input", "browser_action_element_geometry_unavailable"),
+            ("Element '#link' does not have an href attribute. --new-tab only works on links.", "browser_action_element_kind_invalid"),
+            ("Could not focus or fill the input", "browser_action_fill_unverified"),
+            ("Invalid date value; expected YYYY-MM-DD", "browser_action_value_invalid"),
+            ("Ref does not point to an iframe element", "browser_action_frame_unavailable"),
+            ("Event stream closed", "browser_action_target_observation_unavailable"),
+            ("Can only leave open a launched managed runtime profile", "browser_action_retention_context_invalid"),
+            ("Auto-launch failed: original owner refused", "browser_action_launch_failed"),
+            ("Chrome not found. Checked:\n  configured original cache", "browser_action_executable_unavailable"),
+            ("Profiles are not supported with Lightpanda", "browser_action_launch_options_invalid"),
+            ("No managed X11 window found for browser close", "browser_action_native_window_unavailable"),
+            ("Failed to connect: connection refused", "browser_action_transport_connect_failed"),
+            ("Invalid response: expected value", "browser_action_transport_response_invalid"),
+            ("Unknown subaction: unreviewed", "browser_action_argument_invalid"),
+            ("Failed to read daemon auth token: permission denied", "browser_action_transport_configuration_failed"),
+            ("Failed to start daemon: missing executable", "browser_action_transport_start_failed"),
+            ("Timed out waiting for runtime-host startup admission", "browser_action_runtime_admission_wait"),
+            ("workflow_transport_failed: Failed to read: original reply lost", "browser_action_transport_outcome_uncertain"),
+            ("workflow_cli_failed: Evaluation error: Error: cancelled before dispatch", "browser_action_evaluation_exception"),
+            ("Browser not launched", "browser_action_page_unavailable"),
+            (
+                "Tab index 12 out of range",
+                "browser_action_tab_index_invalid",
+            ),
+            (
+                "Cannot close the last tab",
+                "browser_action_last_tab_close_requires_intent",
+            ),
+            (
+                "Failed to read: connection reset",
+                "browser_action_transport_outcome_uncertain",
+            ),
+            (
+                "Missing 'selector' parameter",
+                "browser_action_argument_missing",
+            ),
+            (
+                "evaluate requires positive timeoutMs",
+                "browser_action_evaluate_arguments_invalid",
+            ),
+        ] {
+            let failure = classify_service_failure(error);
+            assert_eq!(failure.code, code, "{error}");
+            assert_eq!(
+                failure.effect_state,
+                ServiceEffectState::EffectUncertain,
+                "{error}"
+            );
+            assert_eq!(
+                failure.retry_disposition,
+                ServiceRetryDisposition::InspectBeforeRetry
+            );
+            assert!(!failure.reuse_allowed);
+        }
+    }
+
+    #[test]
+    fn browser_compatibility_recognition_rejects_website_and_unknown_patterns() {
+        for error in [
+            "page says Element not found: #button",
+            "unknown_wrapper: Element not found: #button",
+            "arbitrary page output {\"error\":\"Browser not launched\"}",
+            "arbitrary provider timeout text",
+            "arbitrary provider cancelled before dispatch",
+            "fake Control plane worker is stopped message",
+            "Missing 'unreviewedField' parameter",
+            "Tab index x out of range",
+            "Wait timed out after unknownms",
+            "CDP error (not a method): timeout",
+            "CDP command timed out: not-a-method",
+            "Operation timed out but the source is unknown",
+        ] {
+            let failure = classify_service_failure(error);
+            assert_eq!(failure.code, "service_operation_failed", "{error}");
+            assert_eq!(
+                failure.effect_state,
+                ServiceEffectState::EffectUncertain,
+                "{error}"
+            );
+        }
+        for error in [
+            "Service job was cancelled before dispatch",
+            "Cancelled by operator",
+        ] {
+            assert_eq!(
+                classify_service_failure(error).effect_state,
+                ServiceEffectState::NoEffect
+            );
+        }
+        assert_eq!(
+            classify_service_failure("Service job timed out after 1000ms").code,
+            "service_job_timed_out"
+        );
+        assert_eq!(classify_service_failure("Service job timed out during route-bound open; route_bound_compensation_state=unknown").code, "service_job_timed_out");
+    }
 
     #[test]
     fn registry_classification_survives_typed_job_failure_round_trip() {
