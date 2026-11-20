@@ -132,6 +132,41 @@
       "source": "packages/client/src/login-playbook.js",
       "export": "createOwnerLoginPlaybook",
       "kind": "client_export"
+    },
+    "dashboard:dashboard-read-coordinator#fetchCoordinatedDashboardRead": {
+      "source": "packages/dashboard/src/lib/dashboard-read-coordinator.ts",
+      "export": "fetchCoordinatedDashboardRead",
+      "kind": "dashboard_export"
+    },
+    "dashboard:dashboard-auth-status#fetchDashboardAuthStatus": {
+      "source": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+      "export": "fetchDashboardAuthStatus",
+      "kind": "dashboard_export"
+    },
+    "dashboard:guacamole-connection-sharing#resolveGuacamoleViewerFrame": {
+      "source": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "export": "resolveGuacamoleViewerFrame",
+      "kind": "dashboard_export"
+    },
+    "dashboard:foreign-cdp-control#readForeignCdpControlStatus": {
+      "source": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+      "export": "readForeignCdpControlStatus",
+      "kind": "dashboard_export"
+    },
+    "dashboard:manual-browser-launch#inspectManualBrowserLaunch": {
+      "source": "packages/dashboard/src/lib/manual-browser-launch.ts",
+      "export": "inspectManualBrowserLaunch",
+      "kind": "dashboard_export"
+    },
+    "dashboard:manual-browser-launch#loadManualBrowserCatalog": {
+      "source": "packages/dashboard/src/lib/manual-browser-launch.ts",
+      "export": "loadManualBrowserCatalog",
+      "kind": "dashboard_export"
+    },
+    "dashboard:dashboard-read-coordinator#startCompletionDrivenDashboardPoll": {
+      "source": "packages/dashboard/src/lib/dashboard-read-coordinator.ts",
+      "export": "startCompletionDrivenDashboardPoll",
+      "kind": "dashboard_export"
     }
   },
   "recipes": {
@@ -1287,6 +1322,284 @@
         "precondition": "Read already returned error fields against this source qualification. This is not a file/tool availability claim and does not require a source checkout."
       },
       "resumeCondition": "The same owner responds under the original grant and original outcome is reconciled before resuming.",
+      "maximumAutomaticAttempts": 1
+    },
+    "dashboardCallerContract": {
+      "rationale": "Correct the exact field named by the original Error/TypeError in the advertised owning function: base URL/profile ID, browser ID, lease expiry, attempts/timeout/retry delay or session name. Re-run the same pure builder/parser before dispatch. Do not replace an uncertain browser operation ID or change account/task scope.",
+      "requiredActor": "dashboard_caller",
+      "evidenceRequirement": "Exact current caller/source scope and preserved owner failure/occurrence; no omitted record or elapsed local wait proves no-effect or permission.",
+      "inspect": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "kind": "source_reference",
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "precondition": "Read the already returned local error and its exact source/function/message. This is not an installed-source or file/tool availability claim."
+      },
+      "remediation": [
+        {
+          "instruction": "Correct the exact field named by the original Error/TypeError in the advertised owning function: base URL/profile ID, browser ID, lease expiry, attempts/timeout/retry delay or session name. Re-run the same pure builder/parser before dispatch. Do not replace an uncertain browser operation ID or change account/task scope.",
+          "precondition": "Use only the original configured session/owner and existing authorization. Preserve unresolved operations and original IDs; no automatic replay, arbitrary shell, new viewer or permission grant is authorized.",
+          "interface": "caller_argument_correction"
+        }
+      ],
+      "verification": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "kind": "source_reference",
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "precondition": "Read the already returned local error and its exact source/function/message. This is not an installed-source or file/tool availability claim."
+      },
+      "resumeCondition": "The same-scope local contract passes and any prior owner effect is reconciled.",
+      "maximumAutomaticAttempts": 1
+    },
+    "dashboardAuthenticationContinuation": {
+      "rationale": "Read the actual dashboard-auth status. For an actual sign-in redirect or 401/403, reopen the existing authenticated public workspace URL and use its configured sign-in flow. Restore the same configured auth transport for a request failure; do not mislabel a helper/network failure as a provider outage.",
+      "requiredActor": "existing_dashboard_session_actor",
+      "evidenceRequirement": "Exact current caller/source scope and preserved owner failure/occurrence; no omitted record or elapsed local wait proves no-effect or permission.",
+      "inspect": {
+        "interface": "dashboard:dashboard-auth-status#fetchDashboardAuthStatus",
+        "arguments": [],
+        "precondition": "Use the existing same-origin authenticated dashboard document and its default fetch. The read can report 401/403; it never signs in or changes authorization."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the actual dashboard-auth status. For an actual sign-in redirect or 401/403, reopen the existing authenticated public workspace URL and use its configured sign-in flow. Restore the same configured auth transport for a request failure; do not mislabel a helper/network failure as a provider outage.",
+          "precondition": "Use only the original configured session/owner and existing authorization. Preserve unresolved operations and original IDs; no automatic replay, arbitrary shell, new viewer or permission grant is authorized.",
+          "interface": "dashboard:dashboard-auth-status#fetchDashboardAuthStatus"
+        }
+      ],
+      "verification": {
+        "interface": "dashboard:dashboard-auth-status#fetchDashboardAuthStatus",
+        "arguments": [],
+        "precondition": "Use the existing same-origin authenticated dashboard document and its default fetch. The read can report 401/403; it never signs in or changes authorization."
+      },
+      "resumeCondition": "Current same-origin status is authorized; a successful HTTP read alone does not expand browser authority.",
+      "maximumAutomaticAttempts": 1
+    },
+    "dashboardNativeInventoryObservation": {
+      "rationale": "Refresh browsers using the existing dashboard inventory read. Parse the new owner response using nativeBrowserWindows; preserve schema/identity/duplicate checks. If still invalid or unavailable, keep managed tasks independently inspectable and retain the source/code packet for the inventory owner. Do not select a different desktop by guess or treat inventory as managed-tab custody.",
+      "requiredActor": "existing_authenticated_dashboard_reader",
+      "evidenceRequirement": "Exact current caller/source scope and preserved owner failure/occurrence; no omitted record or elapsed local wait proves no-effect or permission.",
+      "inspect": {
+        "interface": "dashboard:dashboard-read-coordinator#fetchCoordinatedDashboardRead",
+        "arguments": [
+          "/api/v1/desktops/browser-windows?include_hidden=true",
+          {
+            "revalidate": true
+          }
+        ],
+        "precondition": "Use the existing authenticated same-origin dashboard document. This is an actual read-only exported function; no new authentication, desktop or task authority is granted."
+      },
+      "remediation": [
+        {
+          "instruction": "Refresh browsers using the existing dashboard inventory read. Parse the new owner response using nativeBrowserWindows; preserve schema/identity/duplicate checks. If still invalid or unavailable, keep managed tasks independently inspectable and retain the source/code packet for the inventory owner. Do not select a different desktop by guess or treat inventory as managed-tab custody.",
+          "precondition": "Use only the original configured session/owner and existing authorization. Preserve unresolved operations and original IDs; no automatic replay, arbitrary shell, new viewer or permission grant is authorized.",
+          "interface": "dashboard:dashboard-read-coordinator#fetchCoordinatedDashboardRead"
+        }
+      ],
+      "verification": {
+        "interface": "dashboard:dashboard-read-coordinator#fetchCoordinatedDashboardRead",
+        "arguments": [
+          "/api/v1/desktops/browser-windows?include_hidden=true",
+          {
+            "revalidate": true
+          }
+        ],
+        "precondition": "Use the existing authenticated same-origin dashboard document. This is an actual read-only exported function; no new authentication, desktop or task authority is granted."
+      },
+      "resumeCondition": "The actual fresh owner response validates the original native desktop/window identity; unavailable inventory never implies input permission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "dashboardGuacamoleObservation": {
+      "rationale": "Inspect current Service/Remote View readiness and the retained original route/handoff identity. Reopen the same durable handoff URL if the viewer needs reconnection; only a verified ready handoff is user-visible. A missing primary identity/sharing profile/key/authentication or secure attempt ID requires repair by the existing provider/configuration owner, then retry the original viewer resolution under its actual unchanged guards. Terminal recovery must use recoverGuacamolePrimary only after exact owner terminal proof; local timeout never establishes that proof. Never send raw provider routes/keys as operator links or create another unrestricted primary.",
+      "requiredActor": "existing_authenticated_viewer_or_provider_configuration_owner",
+      "evidenceRequirement": "Exact current caller/source scope and preserved owner failure/occurrence; no omitted record or elapsed local wait proves no-effect or permission.",
+      "inspect": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "diagnostics",
+          "operation": "service_status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect current Service/Remote View readiness and the retained original route/handoff identity. Reopen the same durable handoff URL if the viewer needs reconnection; only a verified ready handoff is user-visible. A missing primary identity/sharing profile/key/authentication or secure attempt ID requires repair by the existing provider/configuration owner, then retry the original viewer resolution under its actual unchanged guards. Terminal recovery must use recoverGuacamolePrimary only after exact owner terminal proof; local timeout never establishes that proof. Never send raw provider routes/keys as operator links or create another unrestricted primary.",
+          "precondition": "Use only the original configured session/owner and existing authorization. Preserve unresolved operations and original IDs; no automatic replay, arbitrary shell, new viewer or permission grant is authorized.",
+          "interface": "dashboard:guacamole-connection-sharing#resolveGuacamoleViewerFrame"
+        }
+      ],
+      "verification": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "diagnostics",
+          "operation": "service_status"
+        }
+      },
+      "resumeCondition": "Current provider owner verifies the same original binding and the actual viewer resolution guard passes; uncertain owner state remains non-replayable.",
+      "maximumAutomaticAttempts": 1
+    },
+    "dashboardForeignCdpObservation": {
+      "rationale": "Read the existing foreign-CDP control status for the same target and capture again only as a scoped read. Missing image bytes are a malformed read response, not evidence of input success. Preserve original owner failure/plan/occurrence; an uncertain input requires original owner reconciliation before any new input. Borrow lifecycle/authorization remains owner-controlled.",
+      "requiredActor": "existing_scoped_dashboard_cdp_reader",
+      "evidenceRequirement": "Exact current caller/source scope and preserved owner failure/occurrence; no omitted record or elapsed local wait proves no-effect or permission.",
+      "inspect": {
+        "interface": "dashboard:foreign-cdp-control#readForeignCdpControlStatus",
+        "arguments": [
+          {
+            "port": "$port",
+            "targetId": "$targetId"
+          }
+        ],
+        "precondition": "Use the exact caller-retained original foreign CDP port/target in the existing authenticated dashboard. No Borrow grant or lifecycle custody is implied."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the existing foreign-CDP control status for the same target and capture again only as a scoped read. Missing image bytes are a malformed read response, not evidence of input success. Preserve original owner failure/plan/occurrence; an uncertain input requires original owner reconciliation before any new input. Borrow lifecycle/authorization remains owner-controlled.",
+          "precondition": "Use only the original configured session/owner and existing authorization. Preserve unresolved operations and original IDs; no automatic replay, arbitrary shell, new viewer or permission grant is authorized.",
+          "interface": "dashboard:foreign-cdp-control#readForeignCdpControlStatus"
+        }
+      ],
+      "verification": {
+        "interface": "dashboard:foreign-cdp-control#readForeignCdpControlStatus",
+        "arguments": [
+          {
+            "port": "$port",
+            "targetId": "$targetId"
+          }
+        ],
+        "precondition": "Use the exact caller-retained original foreign CDP port/target in the existing authenticated dashboard. No Borrow grant or lifecycle custody is implied."
+      },
+      "resumeCondition": "The exact target read validates; no missing screenshot authorizes input or a new Borrow grant.",
+      "maximumAutomaticAttempts": 1
+    },
+    "dashboardAccessPlanObservation": {
+      "rationale": "Re-read the exact original access plan through the existing Service helper. Honor its reason, supported action and manual-seeding instructions; a manual-seeding plan continues through requestServiceManualSeedingAcquire under its existing authority, then re-read the plan. Correct a missing/malformed plan only from the owner response, never invent an action or bypass an unavailable plan.",
+      "requiredActor": "existing_scoped_access_plan_caller",
+      "evidenceRequirement": "Exact current caller/source scope and preserved owner failure/occurrence; no omitted record or elapsed local wait proves no-effect or permission.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "targetServiceId": "$targetServiceId",
+          "readinessProfileId": "$profileId"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Re-read the exact original access plan through the existing Service helper. Honor its reason, supported action and manual-seeding instructions; a manual-seeding plan continues through requestServiceManualSeedingAcquire under its existing authority, then re-read the plan. Correct a missing/malformed plan only from the owner response, never invent an action or bypass an unavailable plan.",
+          "precondition": "Use only the original configured session/owner and existing authorization. Preserve unresolved operations and original IDs; no automatic replay, arbitrary shell, new viewer or permission grant is authorized.",
+          "interface": "@agent-browser/client/service-observability#getServiceAccessPlan"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$baseUrl",
+          "targetServiceId": "$targetServiceId",
+          "readinessProfileId": "$profileId"
+        }
+      },
+      "resumeCondition": "The current same-scope owner plan explicitly offers the intended supported launch action.",
+      "maximumAutomaticAttempts": 1
+    },
+    "dashboardManualOriginalReadback": {
+      "rationale": "Inspect the exact original manual browser launch by operation ID after a lost or malformed acknowledgement. Never generate a replacement ID or launch again while the outcome is unknown. A proven refused_no_effect result remains failed; review current choices for a separately explicit new intent.",
+      "requiredActor": "original_manual_browser_launch_caller",
+      "evidenceRequirement": "Exact current caller/source scope and preserved owner failure/occurrence; no omitted record or elapsed local wait proves no-effect or permission.",
+      "inspect": {
+        "interface": "dashboard:manual-browser-launch#inspectManualBrowserLaunch",
+        "arguments": [
+          "$operationId"
+        ],
+        "precondition": "Use the exact original operation ID retained before dispatch in the same authenticated dashboard. This read does not repeat openManualBrowser."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact original manual browser launch by operation ID after a lost or malformed acknowledgement. Never generate a replacement ID or launch again while the outcome is unknown. A proven refused_no_effect result remains failed; review current choices for a separately explicit new intent.",
+          "precondition": "Use only the original configured session/owner and existing authorization. Preserve unresolved operations and original IDs; no automatic replay, arbitrary shell, new viewer or permission grant is authorized.",
+          "interface": "dashboard:manual-browser-launch#inspectManualBrowserLaunch"
+        }
+      ],
+      "verification": {
+        "interface": "dashboard:manual-browser-launch#inspectManualBrowserLaunch",
+        "arguments": [
+          "$operationId"
+        ],
+        "precondition": "Use the exact original operation ID retained before dispatch in the same authenticated dashboard. This read does not repeat openManualBrowser."
+      },
+      "resumeCondition": "The original owner launch result is verified; unresolved original operations cannot be replayed.",
+      "maximumAutomaticAttempts": 1
+    },
+    "dashboardManualChoices": {
+      "rationale": "Reload the existing browser choices and review the owner-supported profile/build options. Preserve profile custody and active task constraints; catalog availability never authorizes a launch by itself.",
+      "requiredActor": "existing_authenticated_dashboard_reader",
+      "evidenceRequirement": "Exact current caller/source scope and preserved owner failure/occurrence; no omitted record or elapsed local wait proves no-effect or permission.",
+      "inspect": {
+        "interface": "dashboard:manual-browser-launch#loadManualBrowserCatalog",
+        "arguments": [],
+        "precondition": "Use existing same-origin dashboard session and its current catalog read; no launch is performed."
+      },
+      "remediation": [
+        {
+          "instruction": "Reload the existing browser choices and review the owner-supported profile/build options. Preserve profile custody and active task constraints; catalog availability never authorizes a launch by itself.",
+          "precondition": "Use only the original configured session/owner and existing authorization. Preserve unresolved operations and original IDs; no automatic replay, arbitrary shell, new viewer or permission grant is authorized.",
+          "interface": "dashboard:manual-browser-launch#loadManualBrowserCatalog"
+        }
+      ],
+      "verification": {
+        "interface": "dashboard:manual-browser-launch#loadManualBrowserCatalog",
+        "arguments": [],
+        "precondition": "Use existing same-origin dashboard session and its current catalog read; no launch is performed."
+      },
+      "resumeCondition": "The current owner catalog is valid and a separate explicit launch intent matches its allowed choices.",
+      "maximumAutomaticAttempts": 1
+    },
+    "dashboardDocumentVisible": {
+      "rationale": "Intentional read suspension while the dashboard document is hidden; no browser/task effect was attempted by this read guard.",
+      "requiredActor": "existing_dashboard_document_viewer",
+      "evidenceRequirement": "Exact current caller/source scope and preserved owner failure/occurrence; no omitted record or elapsed local wait proves no-effect or permission.",
+      "inspect": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "kind": "source_reference",
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "precondition": "Read the already returned local error and its exact source/function/message. This is not an installed-source or file/tool availability claim."
+      },
+      "remediation": [
+        {
+          "instruction": "Return the existing dashboard document to the foreground. Its existing visibilitychange listener resumes completion-driven read polling; request a fresh explicit read after it becomes visible. Keep browser/input authority unchanged and do not infer human interference from document visibility.",
+          "precondition": "The same existing dashboard document is visible. This read pause is not proof of a failed browser operation or permission to repeat input.",
+          "interface": "dashboard:dashboard-read-coordinator#startCompletionDrivenDashboardPoll"
+        }
+      ],
+      "verification": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "kind": "source_reference",
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "precondition": "Read the already returned local error and its exact source/function/message. This is not an installed-source or file/tool availability claim."
+      },
+      "resumeCondition": "The same document is actually visible and its original read can run under existing authority.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -6208,6 +6521,434 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
+    },
+    "dashboard_argument_invalid": {
+      "recipe": "dashboardCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+          "owningFunction": "serviceProfileAllocationLookupUrl"
+        },
+        {
+          "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+          "owningFunction": "serviceProfileAllocationLookupUrl"
+        },
+        {
+          "path": "packages/dashboard/src/lib/service-browser-row-actions.ts",
+          "owningFunction": "browserRowCloseRoute"
+        },
+        {
+          "path": "packages/dashboard/src/lib/service-profile-leases.ts",
+          "owningFunction": "profileLeaseExpiryToIso"
+        },
+        {
+          "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+          "owningFunction": "fetchDashboardAuthStatus"
+        },
+        {
+          "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+          "owningFunction": "fetchDashboardAuthStatus"
+        },
+        {
+          "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+          "owningFunction": "fetchDashboardAuthStatus"
+        },
+        {
+          "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+          "owningFunction": "createLauncherSessionArgsFromAccessPlan"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "dashboard_auth_status_unavailable": {
+      "recipe": "dashboardAuthenticationContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+          "owningFunction": "fetchDashboardAuthStatus"
+        },
+        {
+          "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+          "owningFunction": "fetchDashboardAuthStatus"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_auth_redirect": {
+      "recipe": "dashboardAuthenticationContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+          "owningFunction": "fetchDashboardAuthStatus"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_access_plan_unavailable": {
+      "recipe": "dashboardAccessPlanObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+          "owningFunction": "createLauncherServiceRequestFromAccessPlan"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_access_plan_seeding_required": {
+      "recipe": "dashboardAccessPlanObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+          "owningFunction": "createLauncherServiceRequestFromAccessPlan"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_access_plan_action_unsupported": {
+      "recipe": "dashboardAccessPlanObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+          "owningFunction": "createLauncherServiceRequestFromAccessPlan"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "dashboard_access_plan_response_invalid": {
+      "recipe": "dashboardAccessPlanObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+          "owningFunction": "requiredRecord"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "native_inventory_invalid": {
+      "recipe": "dashboardNativeInventoryObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+          "owningFunction": "nativeBrowserWindows"
+        },
+        {
+          "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+          "owningFunction": "nativeBrowserWindows"
+        },
+        {
+          "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+          "owningFunction": "nativeBrowserWindows"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "native_inventory_duplicate": {
+      "recipe": "dashboardNativeInventoryObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+          "owningFunction": "nativeBrowserWindows"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_guacamole_secure_identity_unavailable": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "newShareAttemptId"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_guacamole_origin_unavailable": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "guacamoleSharingRoot"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_guacamole_binding_incomplete": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "recoverGuacamolePrimary"
+        },
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "resolveGuacamoleViewerFrame"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_guacamole_recovered_identity_unverified": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "recoverGuacamolePrimary"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "dashboard_guacamole_primary_identity_unverified": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "resolveGuacamoleViewerFrame"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "dashboard_guacamole_authentication_unavailable": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "resolveGuacamoleViewerFrame"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_guacamole_sharing_profile_unavailable": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "resolveGuacamoleViewerFrame"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_guacamole_sharing_key_unavailable": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "resolveGuacamoleViewerFrame"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_guacamole_attempt_identity_unavailable": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "resolveGuacamoleViewerFrame"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "dashboard_guacamole_wait_budget_exhausted": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "resolveGuacamoleViewerFrame"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "foreign_cdp_capture_invalid": {
+      "recipe": "dashboardForeignCdpObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+          "owningFunction": "fetchForeignCdpScreenshot"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_profile_allocation_failed": {
+      "recipe": "serviceClientTransportReadback",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "guacamole_response_invalid": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "guacamole_owner_request_failed": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "guacamole_recovery_owner_unverified": {
+      "recipe": "dashboardGuacamoleObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "foreign_cdp_request_failed": {
+      "recipe": "dashboardForeignCdpObservation",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_choices_unconfirmed": {
+      "recipe": "dashboardManualChoices",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "manual_browser_launch_refused_no_effect": {
+      "recipe": "dashboardManualOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "manual_browser_launch_unconfirmed_inspect_original": {
+      "recipe": "dashboardManualOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_library_request_unconfirmed": {
+      "recipe": "serviceClientTransportReadback",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "siteguides_request_unconfirmed": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "teaching_confirmation_unconfirmed": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts",
+          "owningFunction": "dashboardResponseFailureError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "dashboard_read_paused": {
+      "recipe": "dashboardDocumentVisible",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/dashboard-read-coordinator.ts",
+          "owningFunction": "DashboardReadPausedError"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
     }
   },
   "externalToolContract": "docs/dev/contracts/client-external-owner-tools.v1.json"

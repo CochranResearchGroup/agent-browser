@@ -1,3 +1,4 @@
+import {dashboardLocalFailure} from "./response-failure.ts";
 export type BrowserRowActionTitleOptions = {
   available: boolean;
   supported: boolean;
@@ -22,7 +23,7 @@ export function browserRowCloseRoute(
 ): BrowserRowCloseRoute {
   const stableBrowserId = browserId.trim();
   if (!stableBrowserId) {
-    throw new Error("Browser row close route requires a stable browser ID.");
+    throw dashboardLocalFailure(new Error("Browser row close route requires a stable browser ID."),"dashboard_argument_invalid","packages/dashboard/src/lib/service-browser-row-actions.ts","browserRowCloseRoute");
   }
   const stableSessionName = preferredSessionName?.trim()
     || (stableBrowserId.startsWith("session:")

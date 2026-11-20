@@ -602,3 +602,7 @@ assert.throws(
 );
 
 console.log('Dashboard launcher eligibility smoke passed');
+
+const rejectedOwnerFailure={code:'browser_profile_owner_denied',occurrenceId:'owner-plan-occurrence',recourse:{recoveryRegistry:{recipe:'owner_scope'}}};
+assert.throws(()=>createLauncherServiceRequestFromAccessPlan({decision:{serviceRequest:{available:false,reason:'Owner route unavailable',failure:rejectedOwnerFailure}}}),error=>error.failure===rejectedOwnerFailure&&error.occurrenceId===rejectedOwnerFailure.occurrenceId&&error.clientRecovery.coverage==='registered'&&error.clientRecovery.ownerRecoveryAvailable===true);
+assert.throws(()=>createLauncherServiceRequestFromAccessPlan({decision:{}}),error=>error.code==='dashboard_access_plan_response_invalid'&&error.clientRecovery.coverage==='registered'&&/Missing access plan service request/.test(error.message));

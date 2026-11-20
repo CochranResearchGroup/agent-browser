@@ -1,3 +1,4 @@
+import {dashboardResponseFailureError,dashboardLocalFailure} from "./response-failure.ts";
 import { compactWorkspaceViewportReadinessComponents } from "./workspace-viewport-state.ts";
 
 export type LauncherEligibilityStatus = "eligible" | "needs-operator-action" | "blocked";
@@ -336,15 +337,15 @@ export function createLauncherServiceRequestFromAccessPlan(
   const decision = requiredRecord(accessPlan, "decision", "access plan decision");
   const serviceRequest = requiredRecord(decision, "serviceRequest", "access plan service request");
   if ((serviceRequest as Record<string, unknown>).available === false) {
-    throw new Error(stringField(serviceRequest, "reason") || "Access plan service request is not available.");
+    throw dashboardLocalFailure(Object.assign(new Error(stringField(serviceRequest, "reason") || "Access plan service request is not available."),dashboardResponseFailureError({...serviceRequest,success:false},"dashboard_access_plan_unavailable")),"dashboard_access_plan_unavailable","packages/dashboard/src/lib/launcher-eligibility.ts","createLauncherServiceRequestFromAccessPlan");
   }
   if (!options.allowManualAction && launcherAccessPlanRequiresManualSeeding(accessPlan, decision, serviceRequest)) {
-    throw new Error(stringField(serviceRequest, "reason") || "Access plan requires manual profile seeding before launch.");
+    throw dashboardLocalFailure(Object.assign(new Error(stringField(serviceRequest, "reason") || "Access plan requires manual profile seeding before launch."),dashboardResponseFailureError({...serviceRequest,success:false},"dashboard_access_plan_seeding_required")),"dashboard_access_plan_seeding_required","packages/dashboard/src/lib/launcher-eligibility.ts","createLauncherServiceRequestFromAccessPlan");
   }
   const plannedRequest = requiredRecord(serviceRequest, "request", "access plan service request payload");
   const plannedAction = stringField(plannedRequest, "action");
   if (plannedAction !== "tab_new" && plannedAction !== "cdp_free_launch") {
-    throw new Error(`Access plan service request action ${plannedAction || "unknown"} is not launchable.`);
+    throw dashboardLocalFailure(new Error(`Access plan service request action ${plannedAction || "unknown"} is not launchable.`),"dashboard_access_plan_action_unsupported","packages/dashboard/src/lib/launcher-eligibility.ts","createLauncherServiceRequestFromAccessPlan");
   }
 
   const { action: _plannedAction, params: plannedParams, ...plannedFields } = plannedRequest;
@@ -411,7 +412,7 @@ export function createLauncherSessionArgsFromAccessPlan(
 ): string[] {
   const sessionName = options.sessionName.trim();
   if (!sessionName) {
-    throw new Error("A session name is required for workspace launch.");
+    throw dashboardLocalFailure(new Error("A session name is required for workspace launch."),"dashboard_argument_invalid","packages/dashboard/src/lib/launcher-eligibility.ts","createLauncherSessionArgsFromAccessPlan");
   }
   const request = createLauncherServiceRequestFromAccessPlan(accessPlan, options);
   const params = plainRecordOrEmpty(request.params);
@@ -1180,7 +1181,7 @@ function unknownField(source: unknown, key: string): unknown {
 
 function requiredRecord(source: unknown, key: string, label: string): Record<string, unknown> {
   const value = recordField(source, key);
-  if (!value) throw new Error(`Missing ${label}.`);
+  if (!value) throw dashboardLocalFailure(new Error(`Missing ${label}.`),"dashboard_access_plan_response_invalid","packages/dashboard/src/lib/launcher-eligibility.ts","requiredRecord");
   return value;
 }
 

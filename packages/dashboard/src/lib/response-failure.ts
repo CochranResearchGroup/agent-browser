@@ -24,5 +24,10 @@ export function dashboardResponseFailureError(payload: unknown, fallback: string
     failure: envelope?.failure ?? envelope?.data?.failure ?? envelope?.error?.data?.failure ?? null,
     occurrenceId: metadata?.observationId ?? null,
     ...Object.fromEntries(["recoveryPlan","executableNextAction","recoveryRegistry","uncertainty","requestId"].map(key=>[key,envelope?.[key]??envelope?.data?.[key]??envelope?.error?.data?.[key]]).filter(([,value])=>value!==undefined)),
-  }),{source:"packages/dashboard/src/lib/response-failure.ts",owningFunction:"dashboardResponseFailureError"},"client_dashboard_owner_failure");
+  }),{source:"packages/dashboard/src/lib/response-failure.ts",owningFunction:"dashboardResponseFailureError"},/^[a-z][a-z0-9_]{0,127}$/.test(fallback)?fallback:"client_dashboard_owner_failure");
+}
+
+/** Preserve the original local class/message; this never changes owner policy. */
+export function dashboardLocalFailure<T extends Error>(error:T,code:string,source:string,owningFunction:string):T {
+  return withClientErrorRecovery(error,{source,owningFunction},code);
 }

@@ -1,4 +1,4 @@
-import { responseFailureMetadata } from "./response-failure.ts";
+import { dashboardResponseFailureError, dashboardLocalFailure, responseFailureMetadata } from "./response-failure.ts";
 
 export type ForeignCdpScreenshotFormat = "jpeg" | "png";
 
@@ -93,7 +93,7 @@ export async function fetchForeignCdpScreenshot({
   const resolvedFormat: ForeignCdpScreenshotFormat = payload.format === "jpeg" ? "jpeg" : format;
   const dataUrl = payload.dataUrl
     || (payload.data ? `data:image/${resolvedFormat};base64,${payload.data}` : null);
-  if (!dataUrl) throw new Error("Foreign CDP capture did not include image data.");
+  if (!dataUrl) throw dashboardLocalFailure(new Error("Foreign CDP capture did not include image data."),"foreign_cdp_capture_invalid","packages/dashboard/src/lib/foreign-cdp-control.ts","fetchForeignCdpScreenshot");
   return {
     dataUrl,
     format: resolvedFormat,
@@ -223,11 +223,7 @@ export async function dispatchForeignCdpInput({
 
 /** Preserve owner recourse on errors exposed by dashboard control adapters. */
 function foreignCdpFailure(payload: unknown, fallback: string): Error {
-  const envelope = payload as {failure?: unknown; data?: {failure?: unknown}};
-  const metadata = responseFailureMetadata(payload);
-  return Object.assign(new Error(metadata?.code ?? fallback), {
-    code: metadata?.code ?? "foreign_cdp_request_failed",
-    failure: envelope.failure ?? envelope.data?.failure ?? null,
-    occurrenceId: metadata?.observationId ?? null,
-  });
+  const error = dashboardResponseFailureError(payload, "foreign_cdp_request_failed");
+  if (!responseFailureMetadata(payload)) error.message = fallback;
+  return error;
 }

@@ -1,3 +1,4 @@
+import {dashboardLocalFailure} from "./response-failure.ts";
 export type NativeBrowserWindow = {
   key: string;
   desktopId: string;
@@ -19,19 +20,19 @@ export function nativeBrowserWindows(value: unknown): { windows: NativeBrowserWi
     || !Number.isFinite(source.observationAgeMs) || source.observationAgeMs < 0
     || typeof source.observedAtMs !== "number" || !Number.isSafeInteger(source.observedAtMs) || source.observedAtMs < 0
     || typeof source.unverifiedDesktopCount !== "number" || !Number.isSafeInteger(source.unverifiedDesktopCount)
-    || source.unverifiedDesktopCount < 0) throw new Error("native_inventory_invalid");
+    || source.unverifiedDesktopCount < 0) throw dashboardLocalFailure(new Error("native_inventory_invalid"),"native_inventory_invalid","packages/dashboard/src/lib/native-window-inventory.ts","nativeBrowserWindows");
   const windows: NativeBrowserWindow[] = [];
   const seen = new Set<string>();
   for (const desktop of source.desktops) {
     if (!desktop || typeof desktop.desktopId !== "string" || !/^[a-f0-9-]{36}$/i.test(desktop.desktopId)
       || !Number.isSafeInteger(desktop.slot) || desktop.slot <= 0
       || !Number.isSafeInteger(desktop.generation) || desktop.generation <= 0
-      || typeof desktop.displayName !== "string" || !Array.isArray(desktop.windows)) throw new Error("native_inventory_invalid");
+      || typeof desktop.displayName !== "string" || !Array.isArray(desktop.windows)) throw dashboardLocalFailure(new Error("native_inventory_invalid"),"native_inventory_invalid","packages/dashboard/src/lib/native-window-inventory.ts","nativeBrowserWindows");
     for (const window of desktop.windows) {
       if (!window || !Number.isSafeInteger(window.id) || window.id <= 0 || typeof window.title !== "string"
-        || typeof window.class !== "string" || (window.pid !== null && (!Number.isSafeInteger(window.pid) || window.pid <= 0))) throw new Error("native_inventory_invalid");
+        || typeof window.class !== "string" || (window.pid !== null && (!Number.isSafeInteger(window.pid) || window.pid <= 0))) throw dashboardLocalFailure(new Error("native_inventory_invalid"),"native_inventory_invalid","packages/dashboard/src/lib/native-window-inventory.ts","nativeBrowserWindows");
       const key = `${desktop.desktopId}:${desktop.generation}:${window.id}`;
-      if (seen.has(key)) throw new Error("native_inventory_duplicate");
+      if (seen.has(key)) throw dashboardLocalFailure(new Error("native_inventory_duplicate"),"native_inventory_duplicate","packages/dashboard/src/lib/native-window-inventory.ts","nativeBrowserWindows");
       seen.add(key);
       windows.push({ key, desktopId: desktop.desktopId, slot: desktop.slot, generation: desktop.generation,
         displayName: desktop.displayName, application: typeof desktop.application === "string" ? desktop.application : null,

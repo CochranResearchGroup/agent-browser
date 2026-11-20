@@ -1,3 +1,4 @@
+import {dashboardLocalFailure} from "./response-failure.ts";
 export type DashboardAuthStatusFetchOptions = {
   attempts?: number;
   timeoutMs?: number;
@@ -20,16 +21,16 @@ export async function fetchDashboardAuthStatus(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   if (!Number.isInteger(attempts) || attempts < 1) {
-    throw new Error("Dashboard authentication status attempts must be a positive integer");
+    throw dashboardLocalFailure(new Error("Dashboard authentication status attempts must be a positive integer"),"dashboard_argument_invalid","packages/dashboard/src/lib/dashboard-auth-status.ts","fetchDashboardAuthStatus");
   }
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    throw new Error("Dashboard authentication status timeout must be positive");
+    throw dashboardLocalFailure(new Error("Dashboard authentication status timeout must be positive"),"dashboard_argument_invalid","packages/dashboard/src/lib/dashboard-auth-status.ts","fetchDashboardAuthStatus");
   }
   if (!Number.isFinite(retryDelayMs) || retryDelayMs < 0) {
-    throw new Error("Dashboard authentication status retry delay cannot be negative");
+    throw dashboardLocalFailure(new Error("Dashboard authentication status retry delay cannot be negative"),"dashboard_argument_invalid","packages/dashboard/src/lib/dashboard-auth-status.ts","fetchDashboardAuthStatus");
   }
 
-  let lastError: unknown = new Error("Dashboard authentication status request failed");
+  let lastError: unknown = dashboardLocalFailure(new Error("Dashboard authentication status request failed"),"dashboard_auth_status_unavailable","packages/dashboard/src/lib/dashboard-auth-status.ts","fetchDashboardAuthStatus");
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
@@ -42,10 +43,10 @@ export async function fetchDashboardAuthStatus(
       });
       if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)
         || response.headers.get("content-type")?.includes("text/html")) {
-        throw new Error("Workspace sign-in redirect: reopen this workspace through its authenticated public URL.");
+        throw dashboardLocalFailure(new Error("Workspace sign-in redirect: reopen this workspace through its authenticated public URL."),"dashboard_auth_redirect","packages/dashboard/src/lib/dashboard-auth-status.ts","fetchDashboardAuthStatus");
       }
       if (response.ok || response.status === 401 || response.status === 403) return response;
-      lastError = new Error(`Dashboard authentication status returned HTTP ${response.status}`);
+      lastError = dashboardLocalFailure(new Error(`Dashboard authentication status returned HTTP ${response.status}`),"dashboard_auth_status_unavailable","packages/dashboard/src/lib/dashboard-auth-status.ts","fetchDashboardAuthStatus");
     } catch (error) {
       lastError = error;
     } finally {
@@ -56,5 +57,5 @@ export async function fetchDashboardAuthStatus(
     }
   }
 
-  throw lastError;
+  throw dashboardLocalFailure(lastError as Error,"dashboard_auth_status_unavailable","packages/dashboard/src/lib/dashboard-auth-status.ts","fetchDashboardAuthStatus");
 }

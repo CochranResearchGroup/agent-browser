@@ -1,6 +1,6 @@
 {
   "schemaVersion": "agent-browser.client-error-qualification.v1",
-  "scope": "Finite exported-package JavaScript failure candidate partition plus reviewed caller normalizations, routine result boundaries and dashboard owner-response normalization. Arbitrary future/foreign owner codes remain visible unknown with separate original-context recourse; no exhaustive dashboard UI/component claim.",
+  "scope": "Finite exported-package JavaScript failure candidate partition plus reviewed caller normalizations/routine results and all explicit dashboard src/lib throw/reject/error-construction boundaries. Arbitrary future/foreign owner codes remain visible unknown with separate original-context recourse; visual components/routes/hooks are not silently included.",
   "checks": [
     {
       "path": "packages/client/src/native-saved-login.js",
@@ -10790,7 +10790,7 @@
     "registeredFailureOccurrences": 404,
     "positiveOrHistoricalAnnotations": 13,
     "nestedOrCaughtDiagnostics": 19,
-    "publicClientCodes": 376,
+    "publicClientCodes": 408,
     "runtimeArtifactContainsAuditCatalog": false,
     "reviewRequirement": "Exact source-anchor and aggregate candidate-count validation is required before ticket acceptance. A source audit row alone does not prove runtime acceptance or availability of an external owner interface."
   },
@@ -10828,5 +10828,1048 @@
       "classification": "owner_nested_refusal_cannot_be_accepted_as_recovery_or_sharing_success",
       "normalizationBoundary": "dashboardResponseFailureError"
     }
-  ]
+  ],
+  "dashboardLocalChecks": [
+    {
+      "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+      "owningFunction": "serviceProfileAllocationLookupUrl",
+      "factory": "TypeError",
+      "expression": "\"serviceProfileAllocationLookupUrl requires a service base URL\"",
+      "originalExpression": "new TypeError(\"serviceProfileAllocationLookupUrl requires a service base URL\")",
+      "code": "dashboard_argument_invalid",
+      "recipe": "dashboardCallerContract",
+      "checkedFields": [
+        "serviceBaseUrl"
+      ],
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+      "owningFunction": "serviceProfileAllocationLookupUrl",
+      "factory": "TypeError",
+      "expression": "\"serviceProfileAllocationLookupUrl requires a profile ID\"",
+      "originalExpression": "new TypeError(\"serviceProfileAllocationLookupUrl requires a profile ID\")",
+      "code": "dashboard_argument_invalid",
+      "recipe": "dashboardCallerContract",
+      "checkedFields": [
+        "profileId"
+      ],
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/service-browser-row-actions.ts",
+      "owningFunction": "browserRowCloseRoute",
+      "factory": "Error",
+      "expression": "\"Browser row close route requires a stable browser ID.\"",
+      "originalExpression": "new Error(\"Browser row close route requires a stable browser ID.\")",
+      "code": "dashboard_argument_invalid",
+      "recipe": "dashboardCallerContract",
+      "checkedFields": [
+        "browserId"
+      ],
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/service-profile-leases.ts",
+      "owningFunction": "profileLeaseExpiryToIso",
+      "factory": "TypeError",
+      "expression": "\"Enter a valid lease expiry time\"",
+      "originalExpression": "new TypeError(\"Enter a valid lease expiry time\")",
+      "code": "dashboard_argument_invalid",
+      "recipe": "dashboardCallerContract",
+      "checkedFields": [
+        "expiry"
+      ],
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+      "owningFunction": "fetchDashboardAuthStatus",
+      "factory": "Error",
+      "expression": "\"Dashboard authentication status attempts must be a positive integer\"",
+      "originalExpression": "new Error(\"Dashboard authentication status attempts must be a positive integer\")",
+      "code": "dashboard_argument_invalid",
+      "recipe": "dashboardCallerContract",
+      "checkedFields": [
+        "attempts"
+      ],
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+      "owningFunction": "fetchDashboardAuthStatus",
+      "factory": "Error",
+      "expression": "\"Dashboard authentication status timeout must be positive\"",
+      "originalExpression": "new Error(\"Dashboard authentication status timeout must be positive\")",
+      "code": "dashboard_argument_invalid",
+      "recipe": "dashboardCallerContract",
+      "checkedFields": [
+        "timeoutMs"
+      ],
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+      "owningFunction": "fetchDashboardAuthStatus",
+      "factory": "Error",
+      "expression": "\"Dashboard authentication status retry delay cannot be negative\"",
+      "originalExpression": "new Error(\"Dashboard authentication status retry delay cannot be negative\")",
+      "code": "dashboard_argument_invalid",
+      "recipe": "dashboardCallerContract",
+      "checkedFields": [
+        "retryDelayMs"
+      ],
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+      "owningFunction": "fetchDashboardAuthStatus",
+      "factory": "Error",
+      "expression": "\"Dashboard authentication status request failed\"",
+      "originalExpression": "new Error(\"Dashboard authentication status request failed\")",
+      "code": "dashboard_auth_status_unavailable",
+      "recipe": "dashboardAuthenticationContinuation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+      "owningFunction": "fetchDashboardAuthStatus",
+      "factory": "Error",
+      "expression": "\"Workspace sign-in redirect: reopen this workspace through its authenticated public URL.\"",
+      "originalExpression": "new Error(\"Workspace sign-in redirect: reopen this workspace through its authenticated public URL.\")",
+      "code": "dashboard_auth_redirect",
+      "recipe": "dashboardAuthenticationContinuation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+      "owningFunction": "fetchDashboardAuthStatus",
+      "factory": "Error",
+      "expression": "`Dashboard authentication status returned HTTP ${response.status}`",
+      "originalExpression": "new Error(`Dashboard authentication status returned HTTP ${response.status}`)",
+      "code": "dashboard_auth_status_unavailable",
+      "recipe": "dashboardAuthenticationContinuation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+      "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+      "factory": "Error",
+      "expression": "stringField(serviceRequest, \"reason\") || \"Access plan service request is not available.\"",
+      "originalExpression": "new Error(stringField(serviceRequest, \"reason\") || \"Access plan service request is not available.\")",
+      "code": "dashboard_access_plan_unavailable",
+      "recipe": "dashboardAccessPlanObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+      "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+      "factory": "Error",
+      "expression": "stringField(serviceRequest, \"reason\") || \"Access plan requires manual profile seeding before launch.\"",
+      "originalExpression": "new Error(stringField(serviceRequest, \"reason\") || \"Access plan requires manual profile seeding before launch.\")",
+      "code": "dashboard_access_plan_seeding_required",
+      "recipe": "dashboardAccessPlanObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+      "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+      "factory": "Error",
+      "expression": "`Access plan service request action ${plannedAction || \"unknown\"} is not launchable.`",
+      "originalExpression": "new Error(`Access plan service request action ${plannedAction || \"unknown\"} is not launchable.`)",
+      "code": "dashboard_access_plan_action_unsupported",
+      "recipe": "dashboardAccessPlanObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+      "owningFunction": "createLauncherSessionArgsFromAccessPlan",
+      "factory": "Error",
+      "expression": "\"A session name is required for workspace launch.\"",
+      "originalExpression": "new Error(\"A session name is required for workspace launch.\")",
+      "code": "dashboard_argument_invalid",
+      "recipe": "dashboardCallerContract",
+      "checkedFields": [
+        "sessionName"
+      ],
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+      "owningFunction": "requiredRecord",
+      "factory": "Error",
+      "expression": "`Missing ${label}.`",
+      "originalExpression": "new Error(`Missing ${label}.`)",
+      "code": "dashboard_access_plan_response_invalid",
+      "recipe": "dashboardAccessPlanObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+      "owningFunction": "nativeBrowserWindows",
+      "factory": "Error",
+      "expression": "\"native_inventory_invalid\"",
+      "originalExpression": "new Error(\"native_inventory_invalid\")",
+      "code": "native_inventory_invalid",
+      "recipe": "dashboardNativeInventoryObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+      "owningFunction": "nativeBrowserWindows",
+      "factory": "Error",
+      "expression": "\"native_inventory_invalid\"",
+      "originalExpression": "new Error(\"native_inventory_invalid\")",
+      "code": "native_inventory_invalid",
+      "recipe": "dashboardNativeInventoryObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+      "owningFunction": "nativeBrowserWindows",
+      "factory": "Error",
+      "expression": "\"native_inventory_invalid\"",
+      "originalExpression": "new Error(\"native_inventory_invalid\")",
+      "code": "native_inventory_invalid",
+      "recipe": "dashboardNativeInventoryObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+      "owningFunction": "nativeBrowserWindows",
+      "factory": "Error",
+      "expression": "\"native_inventory_duplicate\"",
+      "originalExpression": "new Error(\"native_inventory_duplicate\")",
+      "code": "native_inventory_duplicate",
+      "recipe": "dashboardNativeInventoryObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "newShareAttemptId",
+      "factory": "Error",
+      "expression": "\"Guacamole connection-sharing attempt identity cannot be generated securely\"",
+      "originalExpression": "new Error(\"Guacamole connection-sharing attempt identity cannot be generated securely\")",
+      "code": "dashboard_guacamole_secure_identity_unavailable",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "guacamoleSharingRoot",
+      "factory": "Error",
+      "expression": "\"Guacamole connection-sharing origin is unavailable\"",
+      "originalExpression": "new Error(\"Guacamole connection-sharing origin is unavailable\")",
+      "code": "dashboard_guacamole_origin_unavailable",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "recoverGuacamolePrimary",
+      "factory": "Error",
+      "expression": "\"Guacamole primary binding is incomplete\"",
+      "originalExpression": "new Error(\"Guacamole primary binding is incomplete\")",
+      "code": "dashboard_guacamole_binding_incomplete",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "recoverGuacamolePrimary",
+      "factory": "Error",
+      "expression": "\"Guacamole recovered primary identity is unavailable\"",
+      "originalExpression": "new Error(\"Guacamole recovered primary identity is unavailable\")",
+      "code": "dashboard_guacamole_recovered_identity_unverified",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "resolveGuacamoleViewerFrame",
+      "factory": "Error",
+      "expression": "\"Guacamole primary binding is incomplete\"",
+      "originalExpression": "new Error(\"Guacamole primary binding is incomplete\")",
+      "code": "dashboard_guacamole_binding_incomplete",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "resolveGuacamoleViewerFrame",
+      "factory": "Error",
+      "expression": "\"Guacamole backend primary identity is unavailable\"",
+      "originalExpression": "new Error(\"Guacamole backend primary identity is unavailable\")",
+      "code": "dashboard_guacamole_primary_identity_unverified",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "resolveGuacamoleViewerFrame",
+      "factory": "Error",
+      "expression": "\"Guacamole header authentication returned no token\"",
+      "originalExpression": "new Error(\"Guacamole header authentication returned no token\")",
+      "code": "dashboard_guacamole_authentication_unavailable",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "resolveGuacamoleViewerFrame",
+      "factory": "Error",
+      "expression": "\"Guacamole simultaneous-view sharing profile is unavailable\"",
+      "originalExpression": "new Error(\"Guacamole simultaneous-view sharing profile is unavailable\")",
+      "code": "dashboard_guacamole_sharing_profile_unavailable",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "resolveGuacamoleViewerFrame",
+      "factory": "Error",
+      "expression": "\"Guacamole connection-sharing returned no usable key\"",
+      "originalExpression": "new Error(\"Guacamole connection-sharing returned no usable key\")",
+      "code": "dashboard_guacamole_sharing_key_unavailable",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "resolveGuacamoleViewerFrame",
+      "factory": "Error",
+      "expression": "\"Guacamole connection-sharing attempt identity is unavailable\"",
+      "originalExpression": "new Error(\"Guacamole connection-sharing attempt identity is unavailable\")",
+      "code": "dashboard_guacamole_attempt_identity_unavailable",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "owningFunction": "resolveGuacamoleViewerFrame",
+      "factory": "Error",
+      "expression": "\"Guacamole backend primary sharing timed out\"",
+      "originalExpression": "new Error(\"Guacamole backend primary sharing timed out\")",
+      "code": "dashboard_guacamole_wait_budget_exhausted",
+      "recipe": "dashboardGuacamoleObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    },
+    {
+      "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+      "owningFunction": "fetchForeignCdpScreenshot",
+      "factory": "Error",
+      "expression": "\"Foreign CDP capture did not include image data.\"",
+      "originalExpression": "new Error(\"Foreign CDP capture did not include image data.\")",
+      "code": "foreign_cdp_capture_invalid",
+      "recipe": "dashboardForeignCdpObservation",
+      "classification": "original_local_error_preserved_separate_registered_recourse"
+    }
+  ],
+  "dashboardBoundaryInventory": {
+    "scope": "All explicit throw/reject and Error/TypeError/RangeError/DOMException/DashboardReadPausedError/ManualBrowserLaunchRefusal construction under dashboard src/lib only. Visual components/routes/hooks are not silently included.",
+    "modulePaths": [
+      "packages/dashboard/src/lib/dashboard-api.ts",
+      "packages/dashboard/src/lib/dashboard-auth-status.ts",
+      "packages/dashboard/src/lib/dashboard-read-coordinator.ts",
+      "packages/dashboard/src/lib/exec.ts",
+      "packages/dashboard/src/lib/failure-observation.ts",
+      "packages/dashboard/src/lib/foreign-cdp-control.ts",
+      "packages/dashboard/src/lib/foundation-stress-receipt.test.ts",
+      "packages/dashboard/src/lib/foundation-stress-receipt.ts",
+      "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+      "packages/dashboard/src/lib/inspection-review.ts",
+      "packages/dashboard/src/lib/launcher-eligibility.ts",
+      "packages/dashboard/src/lib/managed-workspace.ts",
+      "packages/dashboard/src/lib/manual-browser-launch.ts",
+      "packages/dashboard/src/lib/native-rail.ts",
+      "packages/dashboard/src/lib/native-task-focus.ts",
+      "packages/dashboard/src/lib/native-window-inventory.ts",
+      "packages/dashboard/src/lib/response-failure.ts",
+      "packages/dashboard/src/lib/runtime-health-summary.ts",
+      "packages/dashboard/src/lib/selected-workspace-chat-packet.ts",
+      "packages/dashboard/src/lib/selected-workspace-console.ts",
+      "packages/dashboard/src/lib/selected-workspace-context.ts",
+      "packages/dashboard/src/lib/service-browser-row-actions.ts",
+      "packages/dashboard/src/lib/service-incident-summary.ts",
+      "packages/dashboard/src/lib/service-incidents.ts",
+      "packages/dashboard/src/lib/service-profile-allocation.ts",
+      "packages/dashboard/src/lib/service-profile-leases.ts",
+      "packages/dashboard/src/lib/service-trace.ts",
+      "packages/dashboard/src/lib/service-view-streams.ts",
+      "packages/dashboard/src/lib/service-workspaces.ts",
+      "packages/dashboard/src/lib/shiki-theme.ts",
+      "packages/dashboard/src/lib/subsystem-health.ts",
+      "packages/dashboard/src/lib/tab-description.ts",
+      "packages/dashboard/src/lib/utils.ts",
+      "packages/dashboard/src/lib/workspace-export-urls.ts",
+      "packages/dashboard/src/lib/workspace-focus-request.ts",
+      "packages/dashboard/src/lib/workspace-profile-library.ts",
+      "packages/dashboard/src/lib/workspace-recovery.ts",
+      "packages/dashboard/src/lib/workspace-siteguides.ts",
+      "packages/dashboard/src/lib/workspace-url-selection.ts",
+      "packages/dashboard/src/lib/workspace-view-connection.ts",
+      "packages/dashboard/src/lib/workspace-view-projection.ts",
+      "packages/dashboard/src/lib/workspace-viewport-controller.ts",
+      "packages/dashboard/src/lib/workspace-viewport-state.ts"
+    ],
+    "candidateCount": 82,
+    "entries": [
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Dashboard authentication status attempts must be a positive integer\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/dashboard-auth-status.ts\",\"fetchDashboardAuthStatus\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Dashboard authentication status attempts must be a positive integer\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Dashboard authentication status timeout must be positive\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/dashboard-auth-status.ts\",\"fetchDashboardAuthStatus\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Dashboard authentication status timeout must be positive\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Dashboard authentication status retry delay cannot be negative\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/dashboard-auth-status.ts\",\"fetchDashboardAuthStatus\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Dashboard authentication status retry delay cannot be negative\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Dashboard authentication status request failed\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Workspace sign-in redirect: reopen this workspace through its authenticated public URL.\"),\"dashboard_auth_redirect\",\"packages/dashboard/src/lib/dashboard-auth-status.ts\",\"fetchDashboardAuthStatus\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Workspace sign-in redirect: reopen this workspace through its authenticated public URL.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "error_constructor",
+        "expression": "new Error(`Dashboard authentication status returned HTTP ${response.status}`)",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-auth-status.ts",
+        "owningFunction": "fetchDashboardAuthStatus",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(lastError as Error,\"dashboard_auth_status_unavailable\",\"packages/dashboard/src/lib/dashboard-auth-status.ts\",\"fetchDashboardAuthStatus\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-read-coordinator.ts",
+        "owningFunction": "module.read",
+        "kind": "throw",
+        "expression": "new DashboardReadPausedError()",
+        "classification": "registered_intentional_read_suspension",
+        "recourse": "dashboard_read_paused; foreground same document and existing visibilitychange read-poll continuation"
+      },
+      {
+        "path": "packages/dashboard/src/lib/dashboard-read-coordinator.ts",
+        "owningFunction": "module.read",
+        "kind": "error_constructor",
+        "expression": "new DashboardReadPausedError()",
+        "classification": "registered_intentional_read_suspension",
+        "recourse": "dashboard_read_paused; foreground same document and existing visibilitychange read-poll continuation"
+      },
+      {
+        "path": "packages/dashboard/src/lib/failure-observation.ts",
+        "owningFunction": "installDashboardFetchFailureInstrumentation",
+        "kind": "throw",
+        "expression": "error",
+        "classification": "preserved_original_error_propagation",
+        "recourse": "Observer reports only allowlisted code/source/occurrence projection, then rethrows original error; logger availability is separate from operation outcome."
+      },
+      {
+        "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+        "owningFunction": "fetchForeignCdpScreenshot",
+        "kind": "throw",
+        "expression": "foreignCdpFailure(payload, `Foreign CDP capture returned HTTP ${response.status}.`)",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+        "owningFunction": "fetchForeignCdpScreenshot",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Foreign CDP capture did not include image data.\"),\"foreign_cdp_capture_invalid\",\"packages/dashboard/src/lib/foreign-cdp-control.ts\",\"fetchForeignCdpScreenshot\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+        "owningFunction": "fetchForeignCdpScreenshot",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Foreign CDP capture did not include image data.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+        "owningFunction": "foreignCdpJsonRequest",
+        "kind": "throw",
+        "expression": "foreignCdpFailure(payload,\n      typeof payload.error === \"string\"\n        ? payload.error\n        : `Foreign CDP control returned HTTP ${response.status}.`,\n    )",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "newShareAttemptId",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole connection-sharing attempt identity cannot be generated securely\"),\"dashboard_guacamole_secure_identity_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"newShareAttemptId\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "newShareAttemptId",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole connection-sharing attempt identity cannot be generated securely\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "guacamoleSharingRoot",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole connection-sharing origin is unavailable\"),\"dashboard_guacamole_origin_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"guacamoleSharingRoot\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "guacamoleSharingRoot",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole connection-sharing origin is unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "readJson",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError({success:false}, \"guacamole_response_invalid\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "readJson",
+        "kind": "throw",
+        "expression": "error",
+        "classification": "preserved_original_error_propagation",
+        "recourse": "Guacamole adapter rethrows its complete typed original owner failure/occurrence/plan; explicit terminal recovery precondition remains required."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "waitForElection",
+        "kind": "reject",
+        "expression": "reject(signal.reason ?? new DOMException(\"Aborted\", \"AbortError\"))",
+        "classification": "explicit_caller_abort_not_owner_failure_or_replay_authority",
+        "recourse": "Honor original signal cancellation; a separately explicit fresh read may use a new live signal. Never replay uncertain input."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "waitForElection",
+        "kind": "error_constructor",
+        "expression": "new DOMException(\"Aborted\", \"AbortError\")",
+        "classification": "explicit_caller_abort_not_owner_failure_or_replay_authority",
+        "recourse": "Honor original signal cancellation; a separately explicit fresh read may use a new live signal. Never replay uncertain input."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "waitForElection",
+        "kind": "reject",
+        "expression": "reject(signal?.reason ?? new DOMException(\"Aborted\", \"AbortError\"))",
+        "classification": "explicit_caller_abort_not_owner_failure_or_replay_authority",
+        "recourse": "Honor original signal cancellation; a separately explicit fresh read may use a new live signal. Never replay uncertain input."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "waitForElection",
+        "kind": "error_constructor",
+        "expression": "new DOMException(\"Aborted\", \"AbortError\")",
+        "classification": "explicit_caller_abort_not_owner_failure_or_replay_authority",
+        "recourse": "Honor original signal cancellation; a separately explicit fresh read may use a new live signal. Never replay uncertain input."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "recoverGuacamolePrimary",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole primary binding is incomplete\"),\"dashboard_guacamole_binding_incomplete\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"recoverGuacamolePrimary\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "recoverGuacamolePrimary",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole primary binding is incomplete\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "recoverGuacamolePrimary",
+        "kind": "throw",
+        "expression": "error",
+        "classification": "preserved_original_error_propagation",
+        "recourse": "Guacamole adapter rethrows its complete typed original owner failure/occurrence/plan; explicit terminal recovery precondition remains required."
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "recoverGuacamolePrimary",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole recovered primary identity is unavailable\"),\"dashboard_guacamole_recovered_identity_unverified\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"recoverGuacamolePrimary\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "recoverGuacamolePrimary",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole recovered primary identity is unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole primary binding is incomplete\"),\"dashboard_guacamole_binding_incomplete\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole primary binding is incomplete\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole backend primary identity is unavailable\"),\"dashboard_guacamole_primary_identity_unverified\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole backend primary identity is unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole header authentication returned no token\"),\"dashboard_guacamole_authentication_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole header authentication returned no token\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole simultaneous-view sharing profile is unavailable\"),\"dashboard_guacamole_sharing_profile_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole simultaneous-view sharing profile is unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole connection-sharing returned no usable key\"),\"dashboard_guacamole_sharing_key_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole connection-sharing returned no usable key\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole connection-sharing attempt identity is unavailable\"),\"dashboard_guacamole_attempt_identity_unavailable\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole connection-sharing attempt identity is unavailable\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Guacamole backend primary sharing timed out\"),\"dashboard_guacamole_wait_budget_exhausted\",\"packages/dashboard/src/lib/guacamole-connection-sharing.ts\",\"resolveGuacamoleViewerFrame\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+        "owningFunction": "resolveGuacamoleViewerFrame",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Guacamole backend primary sharing timed out\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(Object.assign(new Error(stringField(serviceRequest, \"reason\") || \"Access plan service request is not available.\"),dashboardResponseFailureError({...serviceRequest,success:false},\"dashboard_access_plan_unavailable\")),\"dashboard_access_plan_unavailable\",\"packages/dashboard/src/lib/launcher-eligibility.ts\",\"createLauncherServiceRequestFromAccessPlan\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "error_constructor",
+        "expression": "new Error(stringField(serviceRequest, \"reason\") || \"Access plan service request is not available.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(Object.assign(new Error(stringField(serviceRequest, \"reason\") || \"Access plan requires manual profile seeding before launch.\"),dashboardResponseFailureError({...serviceRequest,success:false},\"dashboard_access_plan_seeding_required\")),\"dashboard_access_plan_seeding_required\",\"packages/dashboard/src/lib/launcher-eligibility.ts\",\"createLauncherServiceRequestFromAccessPlan\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "error_constructor",
+        "expression": "new Error(stringField(serviceRequest, \"reason\") || \"Access plan requires manual profile seeding before launch.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(`Access plan service request action ${plannedAction || \"unknown\"} is not launchable.`),\"dashboard_access_plan_action_unsupported\",\"packages/dashboard/src/lib/launcher-eligibility.ts\",\"createLauncherServiceRequestFromAccessPlan\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherServiceRequestFromAccessPlan",
+        "kind": "error_constructor",
+        "expression": "new Error(`Access plan service request action ${plannedAction || \"unknown\"} is not launchable.`)",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherSessionArgsFromAccessPlan",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"A session name is required for workspace launch.\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/launcher-eligibility.ts\",\"createLauncherSessionArgsFromAccessPlan\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "createLauncherSessionArgsFromAccessPlan",
+        "kind": "error_constructor",
+        "expression": "new Error(\"A session name is required for workspace launch.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "requiredRecord",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(`Missing ${label}.`),\"dashboard_access_plan_response_invalid\",\"packages/dashboard/src/lib/launcher-eligibility.ts\",\"requiredRecord\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/launcher-eligibility.ts",
+        "owningFunction": "requiredRecord",
+        "kind": "error_constructor",
+        "expression": "new Error(`Missing ${label}.`)",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+        "owningFunction": "loadManualBrowserCatalog",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(p,'browser_choices_unconfirmed')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+        "owningFunction": "readOpened",
+        "kind": "throw",
+        "expression": "Object.assign(new ManualBrowserLaunchRefusal('No browser was created. Review the choices before trying again.'),dashboardResponseFailureError(p,'manual_browser_launch_refused_no_effect'))",
+        "classification": "typed_owner_proven_no_effect_failure_preserved",
+        "recourse": "manual_browser_launch_refused_no_effect exact original lookup; no automatic new ID/launch"
+      },
+      {
+        "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+        "owningFunction": "readOpened",
+        "kind": "error_constructor",
+        "expression": "new ManualBrowserLaunchRefusal('No browser was created. Review the choices before trying again.')",
+        "classification": "typed_owner_proven_no_effect_failure_preserved",
+        "recourse": "manual_browser_launch_refused_no_effect exact original lookup; no automatic new ID/launch"
+      },
+      {
+        "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+        "owningFunction": "readOpened",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(p,'manual_browser_launch_unconfirmed_inspect_original')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"native_inventory_invalid\"),\"native_inventory_invalid\",\"packages/dashboard/src/lib/native-window-inventory.ts\",\"nativeBrowserWindows\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "error_constructor",
+        "expression": "new Error(\"native_inventory_invalid\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"native_inventory_invalid\"),\"native_inventory_invalid\",\"packages/dashboard/src/lib/native-window-inventory.ts\",\"nativeBrowserWindows\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "error_constructor",
+        "expression": "new Error(\"native_inventory_invalid\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"native_inventory_invalid\"),\"native_inventory_invalid\",\"packages/dashboard/src/lib/native-window-inventory.ts\",\"nativeBrowserWindows\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "error_constructor",
+        "expression": "new Error(\"native_inventory_invalid\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"native_inventory_duplicate\"),\"native_inventory_duplicate\",\"packages/dashboard/src/lib/native-window-inventory.ts\",\"nativeBrowserWindows\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/native-window-inventory.ts",
+        "owningFunction": "nativeBrowserWindows",
+        "kind": "error_constructor",
+        "expression": "new Error(\"native_inventory_duplicate\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/response-failure.ts",
+        "owningFunction": "dashboardResponseFailureError",
+        "kind": "error_constructor",
+        "expression": "new Error(publicMessage ?? metadata?.code ?? fallback)",
+        "classification": "shared_owner_failure_projection_preserves_whole_owner_recourse",
+        "recourse": "dashboardResponseFailureError/dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-browser-row-actions.ts",
+        "owningFunction": "browserRowCloseRoute",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new Error(\"Browser row close route requires a stable browser ID.\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/service-browser-row-actions.ts\",\"browserRowCloseRoute\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-browser-row-actions.ts",
+        "owningFunction": "browserRowCloseRoute",
+        "kind": "error_constructor",
+        "expression": "new Error(\"Browser row close route requires a stable browser ID.\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+        "owningFunction": "serviceProfileAllocationLookupUrl",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new TypeError(\"serviceProfileAllocationLookupUrl requires a service base URL\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/service-profile-allocation.ts\",\"serviceProfileAllocationLookupUrl\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+        "owningFunction": "serviceProfileAllocationLookupUrl",
+        "kind": "error_constructor",
+        "expression": "new TypeError(\"serviceProfileAllocationLookupUrl requires a service base URL\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+        "owningFunction": "serviceProfileAllocationLookupUrl",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new TypeError(\"serviceProfileAllocationLookupUrl requires a profile ID\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/service-profile-allocation.ts\",\"serviceProfileAllocationLookupUrl\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+        "owningFunction": "serviceProfileAllocationLookupUrl",
+        "kind": "error_constructor",
+        "expression": "new TypeError(\"serviceProfileAllocationLookupUrl requires a profile ID\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+        "owningFunction": "profileAllocationFromLookupPayload",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(payload, \"service_profile_allocation_failed\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-leases.ts",
+        "owningFunction": "profileLeaseExpiryToIso",
+        "kind": "throw",
+        "expression": "dashboardLocalFailure(new TypeError(\"Enter a valid lease expiry time\"),\"dashboard_argument_invalid\",\"packages/dashboard/src/lib/service-profile-leases.ts\",\"profileLeaseExpiryToIso\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/service-profile-leases.ts",
+        "owningFunction": "profileLeaseExpiryToIso",
+        "kind": "error_constructor",
+        "expression": "new TypeError(\"Enter a valid lease expiry time\")",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardLocalFailure"
+      },
+      {
+        "path": "packages/dashboard/src/lib/workspace-profile-library.ts",
+        "owningFunction": "request",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(payload, 'profile_library_request_unconfirmed')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/workspace-siteguides.ts",
+        "owningFunction": "module",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(result,'siteguides_request_unconfirmed')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      },
+      {
+        "path": "packages/dashboard/src/lib/workspace-siteguides.ts",
+        "owningFunction": "confirmTeachingReceipt",
+        "kind": "throw",
+        "expression": "dashboardResponseFailureError(result,'teaching_confirmation_unconfirmed')",
+        "classification": "registered_local_or_owner_normalization_boundary",
+        "recourse": "dashboardResponseFailureError"
+      }
+    ]
+  }
 }
