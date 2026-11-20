@@ -15,7 +15,7 @@ const binary=process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD;
 const browser=process.env.AGENT_BROWSER_SMOKE_BROWSER_EXECUTABLE;
 const clockConfig=process.env.AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT;
 for(const [name,value] of Object.entries({binary,browser,clockConfig}))assert(value&&isAbsolute(value)&&existsSync(value),`Pin an existing absolute ${name} path`);
-const samples=Number(process.env.AGENT_BROWSER_LATENCY_SAMPLES??5);
+const samples=Number(process.env.AGENT_BROWSER_LATENCY_SAMPLES??3);
 assert(Number.isSafeInteger(samples)&&samples>=3&&samples<=20,'Use 3 to 20 paired samples');
 const context=createSmokeContext({prefix:'ab-command-latency-',sessionPrefix:'latency'});
 const environment=Object.fromEntries(Object.entries(context.env).filter(([key])=>!key.startsWith('AGENT_BROWSER_')&&!key.startsWith('XDG_')));
@@ -72,14 +72,14 @@ async function time(){
  assert(['qualified_live','qualified_holdover'].includes(result.status)&&result.bound==='finite','Reliable StableTime unavailable');
  return result;
 }
-async function measure(operation,run){
+async function measure(operation,run,verify=()=>{}){
  const before=await time();const value=await run();const after=await time();
  assert.equal(before.epoch,after.epoch,'StableTime epoch changed; discard sample');
  const lower=timestamp(after.estimate.earliest_utc)-timestamp(before.estimate.latest_utc);
  const upper=timestamp(after.estimate.latest_utc)-timestamp(before.estimate.earliest_utc);
  assert(upper>=0n,'StableTime intervals moved backwards; discard sample');
  const sample={operation,lowerMs:Number(lower>0n?lower:0n)/1e6,upperMs:Number(upper)/1e6,intervalAppliesTo:'service-observation span including delivery',operationElapsedIntervalMs:[0,Number(upper)/1e6],before:before.estimate,after:after.estimate};
- receipt.samples.push(sample);return value;
+ receipt.samples.push(sample);verify(value);return value;
 }
 function summarize(operation){
  const rows=receipt.samples.filter(row=>row.operation===operation);
@@ -122,7 +122,7 @@ try{
  let nextId=0;const pending=new Map();
  socket.addEventListener('message',event=>{const value=JSON.parse(event.data);const callback=pending.get(value.id);if(callback){pending.delete(value.id);value.error?callback.reject(new Error('CDP evaluation failed')):callback.resolve(value.result);}});
  const expression='document.body.firstElementChild.textContent';
- const direct=()=>new Promise((resolve,reject)=>{const id=++nextId;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method:'Runtime.evaluate',params:{expression,returnByValue:true,awaitPromise:true,timeout:24750}}));});
+ const direct=(script=expression)=>new Promise((resolve,reject)=>{const id=++nextId;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method:'Runtime.evaluate',params:{expression:script,returnByValue:true,awaitPromise:true,timeout:24750}}));});
  const expected='synthetic latency sample';
  // Public page arguments contain only script. The owned browser's default
  // 25,000ms caller budget maps to the same 24,750ms renderer budget above.
@@ -136,27 +136,43 @@ try{
  assert.equal(replay.replayed,true);
  assert.equal(replay.dispatchAttempted,false);
  receipt.sameRequestReplay={replayed:true,dispatchAttempted:false,selectedPhase:receipt.selectedPhase};
- const agent=async()=>verify(await call(workflow,'browser_command',evaluate()));
- const freshCli=async()=>{const client=createWorkflowClient();try{await initialize(client);return verify(await call(client,'browser_command',evaluate()),'fresh_cli_mcp_facade');}finally{client.close();}};
- const cdp=async()=>{const value=await direct();assert(!value.exceptionDetails);assert.equal(value.result.value,expected);return value;};
- await agent();await cdp();
+ const agent=()=>call(workflow,'browser_command',evaluate());
+ const freshCli=async()=>{const client=createWorkflowClient();try{await initialize(client);return await call(client,'browser_command',evaluate());}finally{client.close();}};
+ const cdp=()=>direct();
+ const verifyCdp=(value,expectedValue=expected)=>{assert(!value.exceptionDetails);assert.equal(value.result.value,expectedValue);assert.deepEqual(browserIdentity(),originalIdentity);};
+ const continueTask=()=>call(workflow,'browser_continue',{taskId:task.taskId});
+ const verifyContinuation=value=>{
+  for(const [key,expectedValue] of Object.entries({taskId:task.taskId,browserId:task.browserId,tabId:task.tabId,targetId:briefing.targetId}))assert.equal(value[key],expectedValue,'Continuation changed retained task identity');
+  assert.equal(value.url,url);assert.equal(value.urlObserved,true);assert.deepEqual(browserIdentity(),originalIdentity);collectPhases(value,'workflow_mcp_continue');
+ };
+ const directUrl=()=>direct('location.href');
+ verify(await agent());verifyCdp(await cdp());
+ verifyContinuation(await continueTask());verifyCdp(await directUrl(),url);
  const startupLock=join(context.socketDir,'runtime-host.startup.lock');
- writeFileSync(startupLock,'latency-probe-owned-startup',{flag:'wx',mode:0o600});
- let completed=false;
- const contendedRead=agent().then(value=>{completed=true;return {value};},error=>({error}));
- // Observe completion before releasing an unrelated startup admission. This
- // bounded coordination check is not an elapsed-time performance assertion.
- await new Promise(resolve=>setTimeout(resolve,1000));
- receipt.warmReuseCompletedBeforeStartupLockRelease=completed;
- assert.equal(readFileSync(startupLock,'utf8'),'latency-probe-owned-startup');
- unlinkSync(startupLock);
- const contendedOutcome=await contendedRead;if(contendedOutcome.error)throw contendedOutcome.error;
- for(let i=0;i<samples;i++){
-  const order=i%2?[['workflow_mcp',agent],['direct_cdp',cdp]]:[['direct_cdp',cdp],['workflow_mcp',agent]];
-  for(const [name,run] of order)await measure(name,run);
-  await measure('fresh_cli_mcp_facade',freshCli);
+ async function heldStartupLockProbe(run,verifyResult){
+  const token=`latency-probe-${randomUUID()}`;
+  writeFileSync(startupLock,token,{flag:'wx',mode:0o600});
+  let completed=false;
+  const outcome=run().then(value=>{completed=true;return {value};},error=>({error}));
+  // Incidental OS coordination only, not trusted elapsed-time evidence.
+  try{await new Promise(resolve=>setTimeout(resolve,1000));}
+  finally{assert.equal(readFileSync(startupLock,'utf8'),token);unlinkSync(startupLock);}
+  const result=await outcome;if(result.error)throw result.error;verifyResult(result.value);
+  return {completedBeforeStartupLockRelease:completed,observation:'OS coordination check; no latency bound or delivery guarantee'};
  }
- receipt.summary=Object.fromEntries(['cold_workflow_open','direct_cdp','workflow_mcp','fresh_cli_mcp_facade','warm_workflow_readiness_probe'].map(name=>[name,summarize(name)]));
+ receipt.heldStartupLockEvaluateProbe={...await heldStartupLockProbe(agent,verify),callPath:'existing task_operations transport; does not call ensure_daemon',causalForWarmStartupLockOptimization:false};
+ // Retain the old field for receipt consumers, explicitly scoped to evaluate.
+ receipt.warmReuseCompletedBeforeStartupLockRelease=receipt.heldStartupLockEvaluateProbe.completedBeforeStartupLockRelease;
+ receipt.heldStartupLockContinuationProbe={...await heldStartupLockProbe(continueTask,verifyContinuation),callPath:'workflow::continue_task -> ensure_transport -> ensure_daemon_inner',causalForWarmStartupLockOptimization:true};
+ for(let i=0;i<samples;i++){
+  const order=i%2?[['workflow_mcp',agent,verify],['direct_cdp',cdp,verifyCdp]]:[['direct_cdp',cdp,verifyCdp],['workflow_mcp',agent,verify]];
+  for(const [name,run,check] of order)await measure(name,run,check);
+  await measure('fresh_cli_mcp_facade',freshCli,value=>verify(value,'fresh_cli_mcp_facade'));
+  const continuationOrder=i%2?[['workflow_mcp_continue',continueTask,verifyContinuation],['direct_cdp_url',directUrl,value=>verifyCdp(value,url)]]:[['direct_cdp_url',directUrl,value=>verifyCdp(value,url)],['workflow_mcp_continue',continueTask,verifyContinuation]];
+  for(const [name,run,check] of continuationOrder)await measure(name,run,check);
+ }
+ receipt.pairedSemantics={evaluate:{expression,returnByValue:true,awaitPromise:true,rendererTimeoutMs:24750},continuation:{expression:'location.href',returnByValue:true,awaitPromise:true,rendererTimeoutMs:24750,retainedTarget:page.id},verification:'Output and browser process identity verified after the trailing service observation on both paired paths; continuation also verifies retained task bindings.'};
+ receipt.summary=Object.fromEntries(['cold_workflow_open','direct_cdp','workflow_mcp','direct_cdp_url','workflow_mcp_continue','fresh_cli_mcp_facade','warm_workflow_readiness_probe'].map(name=>[name,summarize(name)]));
  if(receipt.selectedPhase)assert(receipt.phaseMeasurements.some(sample=>sample.status==='measured'),'Selected phase produced no qualified measurement; inspect response wiring and StableTime availability');
  receipt.measurementCompleted=true;
 }catch(error){receipt.measurementCompleted=false;receipt.error=error.message;process.exitCode=1;}
