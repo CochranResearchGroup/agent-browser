@@ -132,6 +132,7 @@ const allowedActionsBlock = mcpSource.match(/const BROWSER_COMMAND_ALLOWED_ACTIO
 const allowedActions = new Set([...allowedActionsBlock.matchAll(/"([a-z_]+)"/g)].map(match => match[1]));
 const toolSchemas = {
   browser_control: readFileSync('cli/src/mcp/host_control.rs', 'utf8'),
+  browser_reconnect: readFileSync('cli/src/mcp/host_reconnect.rs', 'utf8'),
   browser_policy: readFileSync('cli/src/mcp/host_policy.rs', 'utf8'),
   browser_continue: readFileSync('cli/src/mcp/workflow.rs', 'utf8'),
   browser_handoff: readFileSync('cli/src/mcp/workflow.rs', 'utf8'),

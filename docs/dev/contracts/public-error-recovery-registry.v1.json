@@ -2096,6 +2096,118 @@
       },
       "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
       "maximumAutomaticAttempts": 1
+    },
+    "reconnect_request": {
+      "rationale": "The explicit reconnect request is missing a required field or conflicts with current task/profile/desktop revision.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Exact original task, current continuity revision, current owner attachment and original website outcome; no freshness/permission is inferred from the projection.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read exact task status and advertised reconnect arguments. Correct the named request field and expected revision; changed intent requires its own deliberately selected request ID, never substitution of another task.",
+          "precondition": "Exact retained task and existing acting owner authority are known; unresolved originals are independently reconciled.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "Exact-task status and actual owner readback confirm current continuity and original outcome. Explicit reconnect/rebind/reopen remains separately admitted and never replays website effects.",
+      "maximumAutomaticAttempts": 1
+    },
+    "reconnect_custody": {
+      "rationale": "The retained task cannot prove current process, application attachment, desktop generation or earlier recovery outcome.",
+      "requiredActor": "existing_task_application_and_runtime_owner",
+      "evidenceRequirement": "Exact original task, current continuity revision, current owner attachment and original website outcome; no freshness/permission is inferred from the projection.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect exact-task reconnect status and original operation. Ask the current application/runtime owner to reconcile pending recovery or supply a fresh trusted attachment; missing process evidence never authorizes replacement or replay.",
+          "precondition": "Exact retained task and existing acting owner authority are known; unresolved originals are independently reconciled.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "Exact-task status and actual owner readback confirm current continuity and original outcome. Explicit reconnect/rebind/reopen remains separately admitted and never replays website effects.",
+      "maximumAutomaticAttempts": 1
+    },
+    "reconnect_policy": {
+      "rationale": "Current application loss policy, human control or unresolved website effect does not authorize the requested reopen.",
+      "requiredActor": "existing_application_policy_owner",
+      "evidenceRequirement": "Exact original task, current continuity revision, current owner attachment and original website outcome; no freshness/permission is inferred from the projection.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect exact-task status and original effect. The existing application owner may explicitly configure its supported reopen policy after reconciling originals and current control; independent reads remain available. Never infer permission from a disconnected viewer or absent transport.",
+          "precondition": "Exact retained task and existing acting owner authority are known; unresolved originals are independently reconciled.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "Exact-task status and actual owner readback confirm current continuity and original outcome. Explicit reconnect/rebind/reopen remains separately admitted and never replays website effects.",
+      "maximumAutomaticAttempts": 1
+    },
+    "reconnect_provider": {
+      "rationale": "The current Native assignment or provider transport cannot supply the exact reconnect observation.",
+      "requiredActor": "existing_runtime_and_remote_view_owner",
+      "evidenceRequirement": "Exact original task, current continuity revision, current owner attachment and original website outcome; no freshness/permission is inferred from the projection.",
+      "inspect": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect exact-task status. Have the existing Remote View/runtime owner repair its named configuration or transport, then freshly observe the same task; do not create a replacement browser or replay website effects.",
+          "precondition": "Exact retained task and existing acting owner authority are known; unresolved originals are independently reconciled.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_reconnect",
+        "arguments": {
+          "taskId": "$taskId",
+          "operation": "status"
+        }
+      },
+      "resumeCondition": "Exact-task status and actual owner readback confirm current continuity and original outcome. Explicit reconnect/rebind/reopen remains separately admitted and never replays website effects.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -11438,6 +11550,570 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "stale"
+    },
+    "browser_reconnect_browser_record_missing": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_attachment_scope_changed": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_pending_no_replay": {
+      "recipe": "reconnect_policy",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "browser_reconnect_request_invalid": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_request_id_required": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_borrowed_reopen_requires_app_attachment": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_recovery_target_unavailable": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_reconnect_process_generation_changed": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_revision_exhausted": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_hosted_task_required": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_attachment_observation_mismatch": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_explicit_desktop_required": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_rebind_required_after_reopen": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_native_transport_unavailable": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_reconnect_expected_revision_required": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_required": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_existing_launch_pending": {
+      "recipe": "reconnect_policy",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "browser_reconnect_operation_invalid": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_shared_recovery_target_conflict": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_recovery_placement_unsupported": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_reconnect_attachment_owner_required": {
+      "recipe": "reconnect_policy",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "browser_reconnect_fresh_attachment_required": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_process_absence_unproven": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_attachment_missing": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_native_generation_changed": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_rebind_required": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_tab_missing": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_recovery_identity_changed": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_report_only": {
+      "recipe": "reconnect_policy",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "browser_reconnect_session_id_required": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_operation_required": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_native_target_unverified": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_process_identity_unverified": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_native_not_configured": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_reconnect_binding_missing": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_control_or_pending_effect_blocks_reopen": {
+      "recipe": "reconnect_policy",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "browser_reconnect_desktop_observation_mismatch": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_native_assignment_unavailable": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_reconnect_task_missing": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        },
+        {
+          "path": "cli/src/mcp/host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_loss_policy_invalid": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_native_context_invalid": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_native_observation_unavailable": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_reconnect_task_target_lost": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_profile_missing": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_required_field_invalid": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_managed_rebind_capability_unavailable": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_reconnect_task_ended": {
+      "recipe": "reconnect_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_ordinary_task_operation_unsupported": {
+      "recipe": "reconnect_policy",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "coordination_paused"
+    },
+    "browser_reconnect_task_metadata_unavailable": {
+      "recipe": "reconnect_provider",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_reconnect_response_invalid": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_reconnect_options_invalid": {
+      "recipe": "reconnect_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/mcp/host_reconnect.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -11734,6 +12410,16 @@
     {
       "path": "cli/src/native/controlled_x11_provider.rs",
       "codePattern": "(?:desktop_|browser_native_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/native/browser_host_reconnect.rs",
+      "codePattern": "browser_reconnect_[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/mcp/host_reconnect.rs",
+      "codePattern": "browser_reconnect_[a-z0-9_]+",
       "beforeNamedTestModule": true
     }
   ]

@@ -20,7 +20,15 @@ fn field<'a>(command: &'a Value, key: &str) -> Result<&'a str, String> {
     command[key]
         .as_str()
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| format!("browser_reconnect_{key}_required"))
+        .ok_or_else(|| {
+            match key {
+                "sessionId" => "browser_reconnect_session_id_required",
+                "operation" => "browser_reconnect_operation_required",
+                "requestId" => "browser_reconnect_request_id_required",
+                _ => "browser_reconnect_required_field_invalid",
+            }
+            .to_string()
+        })
 }
 /// Compact projection joins the existing host-task watcher; it does not observe providers.
 pub(crate) fn metadata(state: &BrowserSessionState, id: &str) -> Value {
@@ -693,6 +701,16 @@ fn update_binding(
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+    #[test]
+    fn missing_fields_have_stable_public_codes() {
+        for (field_name, expected) in [
+            ("sessionId", "browser_reconnect_session_id_required"),
+            ("operation", "browser_reconnect_operation_required"),
+            ("requestId", "browser_reconnect_request_id_required"),
+        ] {
+            assert_eq!(field(&Value::Null, field_name).unwrap_err(), expected);
+        }
+    }
     use std::collections::BTreeSet;
     struct Effects {
         live: bool,
