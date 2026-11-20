@@ -248,17 +248,24 @@ function validateComposedOwningCheck(code, check) {
   const composition = check.codeComposition;
   const pairs = {
     lease_authority_: 'crates/agent-browser-lease-authority/src/authority.rs',
+    profile_lease_: 'cli/src/native/service_profile_lease.rs',
+    service_principal_: 'crates/agent-browser-lease-authority/src/principal.rs',
     profile_acquisition_principal_: 'crates/agent-browser-lease-authority/src/principal.rs',
     profile_recovery_principal_: 'crates/agent-browser-lease-authority/src/principal.rs',
     profile_reset_principal_: 'crates/agent-browser-lease-authority/src/principal.rs',
   };
   assert.equal(pairs[composition.prefix], composition.source, 'Unreviewed composed producer source');
-  assert.equal(check.path, 'cli/src/native/service_profile_recovery.rs', 'Unreviewed producer composition wrapper');
+  const leaseWrapper = ['profile_lease_', 'service_principal_'].includes(composition.prefix);
+  assert.equal(check.path, leaseWrapper ? 'cli/src/native/service_profile_lease.rs' : 'cli/src/native/service_profile_recovery.rs', 'Unreviewed producer composition wrapper');
   assert.equal(code, composition.prefix + composition.suffix, 'Composed producer suffix does not match public code');
   assert(/^[a-z][a-z0-9_]*$/.test(composition.suffix), 'Invalid finite producer suffix');
-  const expected = composition.prefix === 'lease_authority_'
-    ? `format!("${composition.prefix}{}", error.as_str())`
-    : `format!("${composition.prefix}{}", error.code.as_str())`;
+  const expected = composition.prefix === 'profile_lease_'
+    ? 'format!("profile_lease_{}:{}", error.code.as_str(), error.message)'
+    : composition.prefix === 'service_principal_'
+      ? 'format!(\n        "service_principal_{}:{}",\n        error.code.as_str(),\n        error.message\n    )'
+      : composition.prefix === 'lease_authority_'
+        ? `format!("${composition.prefix}{}", error.as_str())`
+        : `format!("${composition.prefix}{}", error.code.as_str())`;
   assert.equal(composition.expression, expected, 'Unreviewed producer composition expression');
   assert(readFileSync(check.path, 'utf8').includes(expected), 'Missing producer composition wrapper');
   assert(composition.sourceEvidence.includes(`"${composition.suffix}"`) && /^Self::[A-Za-z0-9_]+\s*=>/.test(composition.sourceEvidence), 'Composition must identify a canonical enum arm');
