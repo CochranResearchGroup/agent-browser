@@ -8,7 +8,13 @@
       "failure_recovery::call and recovery_state persisted attempt accounting",
       "flags::resolve_browser_build_manifest -> effective configuration readiness warnings"
     ],
-    "effectAuthority": "Registry metadata never proves no effect, freshness, permission, or successful completion; preserve the original owner outcome."
+    "effectAuthority": "Registry metadata never proves no effect, freshness, permission, or successful completion; preserve the original owner outcome.",
+    "unqualifiedAuthorityClock": {
+      "source": "cli/src/native/service_trace.rs",
+      "producer": "service_commands::service_now_timestamp uses chrono::Utc::now",
+      "consumer": "cli/src/native/service_profile_recovery.rs validate_plan_preconditions and validate_profile_reset_preconditions",
+      "limitation": "Plan expiry decisions still consume guest UTC and are not qualified by Native StableTime work. Diagnosis/status and original owner reconciliation remain available; registry metadata cannot authorize bypass, extend lease security or claim expired evidence is reliable."
+    }
   },
   "interfaces": {
     "@agent-browser/client/service-observability#getServiceContracts": {
@@ -19,6 +25,31 @@
     "@agent-browser/client/service-observability#getServiceTrace": {
       "source": "packages/client/src/service-observability.js",
       "export": "getServiceTrace",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceProfileDiagnosis": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceProfileDiagnosis",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#planServiceProfileRecovery": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "planServiceProfileRecovery",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceProfileRecoveryStatus": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceProfileRecoveryStatus",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#planServiceProfileReset": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "planServiceProfileReset",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceProfiles": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceProfiles",
       "kind": "client_export"
     }
   },
@@ -762,6 +793,139 @@
         "precondition": "Read through the original authenticated configured service transport, retaining the exact original request/job/profile identity and current permission scope."
       },
       "resumeCondition": "The named original profile, selector and freshness policy agree with the current access plan and all current permissions remain satisfied.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_profile_recovery_owner": {
+      "rationale": "Profile recovery receipts, current lifecycle generation and protected owner custody constrain the existing owner transition; stale plans cannot authorize replacement.",
+      "requiredActor": "authenticated_original_profile_owner",
+      "evidenceRequirement": "Original profile/recovery/claim IDs, current diagnosis and protected owner evidence, exact plan integrity/current generation, original receipt and authenticated capability.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the original diagnosis and retained recovery status first. Generate a fresh reviewed plan for the same profile using planServiceProfileRecovery with its existing authenticated capability; apply only through the existing owner interface after the original effect/receipt and physical occupancy are known. Retain conflicting receipts and uncertain claims; never synthesize a fresh profile, force unlock, reset owner generations or replay a launch.",
+          "precondition": "The caller is the actual authenticated profile owner and holds the original capability; original uncertain effects must be reconciled, not inferred away.",
+          "call": {
+            "interface": "@agent-browser/client/service-observability#planServiceProfileRecovery",
+            "arguments": {
+              "profileId": "$profileId",
+              "profileCapability": "$profileCapability",
+              "expiresAt": "$reviewedExpiresAt",
+              "idempotencyKey": "$idempotencyKey"
+            },
+            "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile."
+          }
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileRecoveryStatus",
+        "arguments": {
+          "recoveryId": "$recoveryId",
+          "profileCapability": "$profileCapability"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile."
+      },
+      "resumeCondition": "Current owner diagnosis and the exact retained recovery receipt prove the intended transition; every new browser operation uses fresh current context and permission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_state_migration_owner": {
+      "rationale": "Service-state migration protects original source, staged bytes, snapshot digests and authoritative current state; mismatch cannot be repaired by bypassing custody.",
+      "requiredActor": "installation_transaction_owner",
+      "evidenceRequirement": "Original installation transaction and migration receipt, source/stage/snapshot paths and digests, schema compatibility, current authoritative state and configured installation identity.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original installation transaction and doctor diagnosis. Restore missing staged/snapshot bytes only from its retained verified artifacts, or prepare a fresh reviewed migration from current authoritative state when CAS/schema changed. Resume through the supported installation transaction owner; preserve the original migration receipt and never downgrade a newer schema, hand-edit digests, delete authoritative state or borrow a different transaction.",
+          "precondition": "The existing installation owner has custody of this exact transaction; no runtime replacement or shutdown effect is implied by diagnosis.",
+          "interface": "installation_owner_storage_repair"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "install",
+          "doctor"
+        ]
+      },
+      "resumeCondition": "The exact retained transaction validates source/staged/snapshot digests and schema against current authoritative state; governed installation effect approval remains separate.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_profile_reset_owner": {
+      "rationale": "Profile reset has destructive scope and authenticated original profile custody; a stale reset plan is never permission to delete or repeat effects.",
+      "requiredActor": "authenticated_original_profile_owner",
+      "evidenceRequirement": "Original profile/recovery/claim IDs, current diagnosis and protected owner evidence, exact plan integrity/current generation, original receipt and authenticated capability.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the current original profile diagnosis and retained reset receipt. If the existing profile owner explicitly authorizes the named reset scope, request a new planServiceProfileReset for that exact original profile and review it before apply. Authentication scope requires the exact targetServiceId; preserve unrelated authentication and runtime state. Never broaden scope, delete data to satisfy admission, replay an uncertain apply, or lower expiry/integrity checks.",
+          "precondition": "The caller is the actual authenticated profile owner and holds the original capability; original uncertain effects must be reconciled, not inferred away.",
+          "call": {
+            "interface": "@agent-browser/client/service-observability#planServiceProfileReset",
+            "arguments": {
+              "id": "$profileId",
+              "profileCapability": "$profileCapability",
+              "scope": "$reviewedScope",
+              "targetServiceId": "$targetServiceId",
+              "expiresAt": "$reviewedExpiresAt",
+              "idempotencyKey": "$idempotencyKey"
+            },
+            "precondition": "Actual authenticated original profile owner explicitly authorizes this exact reset scope; plan generation is not reset application approval."
+          }
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfileDiagnosis",
+        "arguments": {
+          "id": "$profileId"
+        },
+        "precondition": "Original profile ID, capability and recovery ID must come from its authenticated owner response; never derive them from a new default profile."
+      },
+      "resumeCondition": "The exact authorized reset receipt and current owner diagnosis prove the requested scope completed; unknown destructive effects remain unresolved and are never repeated automatically.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_profile_properties": {
+      "rationale": "Profile property edits use an authenticated exact profile and expected original name/kind; a task failure may follow a completed edit.",
+      "requiredActor": "authenticated_existing_profile_operator",
+      "evidenceRequirement": "Original profile ID, current name/kind and original expectedName/expectedKind, authenticated dashboard authority and original mutation response.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfiles",
+        "arguments": {},
+        "precondition": "Read the original authenticated service profile inventory; profile identity comes from the original response, never a guessed name."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the same original profile. Correct the PATCH /api/dashboard/profile-properties JSON to its supported profileId, expectedName, expectedKind, name and promote fields, using current values only after reviewing an actual concurrent change. If the worker failed, inspect whether the property edit already committed before submitting a new explicit intent; do not overwrite another operator edit.",
+          "precondition": "The existing authenticated dashboard operator has authority to edit this exact profile and has reviewed any conflicting current values.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceProfiles",
+        "arguments": {},
+        "precondition": "Read the original authenticated service profile inventory; profile identity comes from the original response, never a guessed name."
+      },
+      "resumeCondition": "The exact intended profile properties are read back or the original rejection is proven pre-effect; an unknown worker result is not replayed.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -2521,6 +2685,1272 @@
       "policySource": "cli/src/flags.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
+    },
+    "operator_focus_authority_scope_conflict": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_browser_not_live": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_display_missing": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_identity_encoding_failed": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_native_assignment_changed": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_native_assignment_unproven": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_native_provider_unavailable": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_native_provider_unconfigured": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_session_missing": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_target_ambiguous": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_target_missing": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "operator_focus_browser_unavailable": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_host.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_session_host.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "operator_presentation_authority_unavailable": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view/open/route_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/remote_view/open/route_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "operator_presentation_focus_failed": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view/open/route_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/remote_view/open/route_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "operator_presentation_identity_changed": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view/open/route_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/remote_view/open/route_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "operator_presentation_identity_mismatch": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view/open/route_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/remote_view/open/route_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "operator_presentation_evidence_missing": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view.rs"
+        }
+      ],
+      "policySource": "cli/src/native/remote_view.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "operator_presentation_not_ready": {
+      "recipe": "service_gateway_handoff",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/remote_view.rs"
+        }
+      ],
+      "policySource": "cli/src/native/remote_view.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_access_plan_incomplete_route_hints": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_acquisition.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_acquisition.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "service_access_plan_request_unavailable": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_acquisition.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_acquisition.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "service_access_plan_reuse_missing_browser_id": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_acquisition.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_acquisition.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "service_access_plan_reuse_missing_session_name": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_acquisition.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_acquisition.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_acquisition_availability_missing": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_acquisition.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_acquisition.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_acquisition_recommended_action_missing": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_acquisition.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_acquisition.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_acquisition_reuse_route_incomplete": {
+      "recipe": "service_request_evidence",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_acquisition.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_acquisition.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "service_profile_diagnosis_encode_failed": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_diagnosis.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_diagnosis.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_profile_diagnosis_profile_missing": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_diagnosis.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_diagnosis.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_profile_diagnosis_serialization_failed": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_navigation_tab_identity_conflict": {
+      "recipe": "service_target_continuity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_lifecycle.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_lifecycle.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_acquisition_authority_time_invalid": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_acquisition_claim_slot_poisoned": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_client_route_forbidden": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_acquisition_daemon_route_mismatch": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_daemon_route_unavailable": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_effect_channel_custody_unproven": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_exact_current_conflict": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_idempotency_replay_without_active_claim": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_initial_owner_postcondition_failed": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_owner_binding_failed": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_physical_occupancy_uncertain": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_principal_mismatch": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_acquisition_profile_identity_unavailable": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_profile_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_protected_holder_reconstruction_required": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_protected_identity_mismatch": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_protected_owner_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_protected_reservation_mismatch": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_retry_missing_browser": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_retry_owner_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_acquisition_retry_session_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_acquisition_retry_missing_browser": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_contract_encode_failed": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_daemon_owner_binding_mismatch": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_daemon_route_mismatch": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_daemon_route_not_empty": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_expiry_invalid": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_recovery_identity_unavailable": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_lifecycle_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_now_invalid": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_recovery_owner_generation_exhausted": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_owner_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_plan_expired": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_recovery_plan_integrity_mismatch": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_plan_invalid": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_plan_stale": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_recovery_postcondition_lifecycle_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_postcondition_mismatch": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_postcondition_owner_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_principal_mismatch": {
+      "recipe": "service_profile_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_recovery_profile_identity_unavailable": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_profile_mismatch": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_profile_missing": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_recovery_receipt_conflict": {
+      "recipe": "service_profile_recovery_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "service_state_effect_guard_requires_durable_path": {
+      "recipe": "service_lock",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_store.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_store.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_prepared_save_missing": {
+      "recipe": "service_lock",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_store.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_store.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_prepared_save_path_missing": {
+      "recipe": "service_lock",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_store.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_store.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_prepared_save_unsupported": {
+      "recipe": "service_lock",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_store.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_store.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_blocked_newer_schema": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_state_migration.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_state_migration.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_contamination_serialize_failed": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_state_migration.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_state_migration.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_json_invalid": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_state_migration.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_state_migration.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_serialize_failed": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_state_migration.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_state_migration.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_authoritative_state_changed": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "service_state_migration_cas_read_failed": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_read_failed": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_record_missing": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_remove_failed": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_snapshot_digest_changed": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "service_state_migration_snapshot_missing": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_stage_missing": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_staged_digest_changed": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "service_state_migration_summary_serialize_failed": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_migration_utf8_invalid": {
+      "recipe": "service_state_migration_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/workstation_install.rs"
+        }
+      ],
+      "policySource": "cli/src/workstation_install.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "profile_reset_plan_integrity_mismatch": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_runtime_custody_ambiguous": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_plan_invalid": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_runtime_lifecycle_missing": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_expiry_invalid": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_profile_mismatch": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_scope_invalid": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_plan_stale": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_reset_runtime_owner_missing": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_profile_missing": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_receipt_conflict": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_runtime_lock_custody_ambiguous": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_target_service_unknown": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_profile_identity_unavailable": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_principal_mismatch": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_target_service_id_required": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_plan_expired": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_reset_stale_lock_cleanup_failed": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_reset_now_invalid": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_reset_contract_encode_failed": {
+      "recipe": "service_profile_reset_owner",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_profile_recovery.rs"
+        }
+      ],
+      "policySource": "cli/src/native/service_profile_recovery.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "profile_properties_request_invalid": {
+      "recipe": "service_profile_properties",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_properties_task_failed": {
+      "recipe": "service_profile_properties",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "backend_http_5xx": {
+      "recipe": "service_gateway_transport",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/stream/dashboard.rs",
+          "owningFunction": "dashboard backend HTTP status telemetry/public failure journal"
+        }
+      ],
+      "policySource": "cli/src/native/stream/dashboard.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -2539,6 +3969,59 @@
       "source": "cli/src/mcp/failure_recovery.rs",
       "sourceEvidence": "\"failure_recovery_outcome\",",
       "reason": "Journal event classification for bounded recovery progress, including ready outcomes; not a refusal producer."
+    },
+    {
+      "code": "tab_close_any",
+      "source": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "sourceEvidence": ".then(|| \"tab_close_any\".into())",
+      "reason": "Named missing permission on an operator close denial; not a failure code or independently callable operation."
+    }
+  ],
+  "enforcedProducerSourceFamilies": [
+    {
+      "path": "cli/src/native/service_profile_recovery.rs",
+      "beforeNamedTestModule": true,
+      "codePattern": "profile_(?:acquisition|recovery|reset)_[a-z0-9_]+"
+    },
+    {
+      "path": "cli/src/native/service_profile_acquisition.rs",
+      "beforeNamedTestModule": true,
+      "codePattern": "(?:profile_acquisition_|service_access_plan_)[a-z0-9_]+"
+    },
+    {
+      "path": "cli/src/native/stream/dashboard_auth/operator_focus.rs",
+      "beforeNamedTestModule": true,
+      "codePattern": "operator_(?:focus|tab_close|controller)_[a-z0-9_]+"
+    },
+    {
+      "path": "cli/src/native/service_state_migration.rs",
+      "beforeNamedTestModule": true,
+      "codePattern": "service_state_migration_[a-z0-9_]+"
+    },
+    {
+      "path": "cli/src/workstation_install.rs",
+      "beforeNamedTestModule": true,
+      "codePattern": "service_state_migration_[a-z0-9_]+"
+    },
+    {
+      "path": "cli/src/native/service_store.rs",
+      "beforeNamedTestModule": true,
+      "codePattern": "service_state_(?:effect_guard|prepared_save)_[a-z0-9_]+"
+    },
+    {
+      "path": "cli/src/native/stream/dashboard.rs",
+      "beforeNamedTestModule": true,
+      "codePattern": "(?:backend_|durable_handoff_|invalid_backend_|invalid_guacamole_|guacamole_viewer_primary_|guacamole_primary_provider_|profile_properties_)[a-z0-9_]+"
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/failure_recourse.rs",
+      "beforeNamedTestModule": true,
+      "codePattern": "(?:download_|service_state_|service_job_|control_queue_|control_plane_worker_|operator_focus_|operator_tab_close_|operator_controller_|profile_child_|service_tab_|tab_close_)[a-z0-9_]+"
+    },
+    {
+      "path": "cli/src/native/service_request.rs",
+      "beforeNamedTestModule": true,
+      "codePattern": "(?:invalid_|missing_|unsupported_|unknown_|blocked_manual_|stale_monitor_|forbidden_cdp_|route_hint_|missing_accountable_)[a-z0-9_]+"
     }
   ]
 }
