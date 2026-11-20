@@ -2,7 +2,7 @@
   "schemaVersion": "agent-browser.public-error-recovery-registry.v1",
   "qualificationScope": {
     "sourceRevision": "9d3958421084820cf0e6a01bc6f0c6ee2e1acf1a",
-    "meaning": "Bounded original-census model-effects partition: all65 assigned literals are actual fallible model emitters. Full four-source gates additionally qualify21 related owner errors and exclude one nested cause token. Projection supplies recourse, not runtime acceptance or permission. Reconnect receipt ceiling continuation remains an explicit source repair dependency.",
+    "meaning": "Bounded original-census model-effects partition: all65 assigned literals are actual fallible model emitters. Full four-source gates additionally qualify21 related owner errors and exclude one nested cause token. Projection supplies recourse, not runtime acceptance or permission. Reconnect receipt capacity is now supplied by the existing live task/default capacity policy, preserving every original receipt.",
     "effectUncertainty": "No listed error establishes zero physical effects or authorizes retry, browser replacement, receipt deletion, policy bypass or archive."
   },
   "recipes": {
@@ -123,7 +123,7 @@
       "maximumAutomaticAttempts": 1
     },
     "model_effects_reconnect_capacity": {
-      "rationale": "The retained reconnect request ledger reached its current hardcoded 128-receipt ceiling.",
+      "rationale": "The retained reconnect request ledger reached the effective live maximumReconnectRequests policy; existing receipts are preserved.",
       "requiredActor": "original_task_and_capacity_policy_owner",
       "evidenceRequirement": "Exact original task/profile/browser and durable request or launch record, current process/desktop generation, actual original outcome and present owner authority. This projection observes none of these facts.",
       "inspect": {
@@ -135,7 +135,7 @@
       },
       "remediation": [
         {
-          "instruction": "Inspect exact-task reconnect status and original receipts; exact completed request replay and independent reads remain available. Preserve every receipt. This source baseline has no supported reconnect-ledger archive or live-limit setter, so further distinct reconnect intents require the bounded live-capacity repair tracked under spec749; do not delete rows or silently create another task.",
+          "instruction": "Inspect browser_command task_operation with operation capacity for the SAME task and retain the full advertised effective policy. Through that existing capacity operation, explicitly submit a policy with positive maximumReconnectRequests raised above the current retained receipt count, preserving the other reviewed policy fields. Task scope changes only this task; defaults scope changes future effective defaults without replacing existing task overrides. Then explicitly continue the original refused reconnect intent with current expectedRevision; exact completed original request replay remains read-only even if the limit was lowered. Never delete receipts, recreate the task or replay uncertain website effects.",
           "precondition": "Bind the exact original task and existing actor authority; inspect any pending or uncertain original before choosing another effect. Do not infer no effect from this error token.",
           "interface": "original_public_request"
         }
@@ -148,7 +148,7 @@
           "params": {}
         }
       },
-      "resumeCondition": "The original owner readback proves matching current custody and the named missing evidence/configuration is repaired; original uncertain effects remain fenced and are never automatically replayed. Where the supported mutation is absent, only independent inspection continues until that bounded repair is implemented.",
+      "resumeCondition": "Capacity readback shows the increased effective same-task maximumReconnectRequests; current reconnect revision and original outcome are inspected, all original receipts remain present, and the explicitly intended reconnect passes its independent custody/permission checks.",
       "maximumAutomaticAttempts": 1
     },
     "model_effects_recovery_state": {
@@ -527,7 +527,7 @@
         {
           "path": "crates/agent-browser-service-model/src/browser_host_reconnect.rs",
           "line": 80,
-          "sourceEvidence": "        }\n        if self.requests.len() >= 128 {\n            return Err(\"browser_reconnect_request_capacity_reached\".into());"
+          "sourceEvidence": "        if self.requests.len() >= maximum_requests {\n            return Err(\"browser_reconnect_request_capacity_reached\".into());"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",

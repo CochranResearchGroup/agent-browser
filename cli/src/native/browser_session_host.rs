@@ -577,6 +577,13 @@ fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
 }
 
 pub(crate) trait BrowserSessionPersistence {
+    fn reconnect_request_limit(&self, _task: &str) -> Result<usize, String> {
+        Ok(
+            super::browser_session_store::task_operation_archive::CapacityPolicy::default()
+                .maximum_reconnect_requests,
+        )
+    }
+
     /// Non-SQL test adapters retain explicit model defaults; the production SQL
     /// owner reads live policy on each retention/popup admission only.
     fn session_admission_limits(
@@ -659,6 +666,10 @@ pub(crate) trait BrowserSessionPersistence {
 }
 
 impl BrowserSessionPersistence for BrowserSessionSqliteStore {
+    fn reconnect_request_limit(&self, task: &str) -> Result<usize, String> {
+        BrowserSessionSqliteStore::reconnect_request_limit(self, task)
+    }
+
     fn session_admission_limits(&self, task: &str) -> Result<(usize, usize, &'static str), String> {
         BrowserSessionSqliteStore::session_admission_limits(self, task)
     }
@@ -1758,6 +1769,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             return Ok(result);
         }
         if action == "browser_session_reconnect" {
+            let task = command["sessionId"]
+                .as_str()
+                .ok_or("browser_reconnect_session_id_required")?;
+            // Metadata-only inspection must remain available if capacity policy
+            // cannot currently be read or validated. Status never admits a request.
+            let request_limit = if command["operation"] == "status" {
+                0
+            } else {
+                self.persistence.reconnect_request_limit(task)?
+            };
             let persistence = &mut self.persistence;
             let persisted = &mut self.persisted_state;
             let result = super::browser_host_reconnect::execute(
@@ -1765,6 +1786,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 &self.catalog,
                 &mut self.effects,
                 command,
+                request_limit,
                 &mut |expected, next, effects| {
                     let intent = effects.pending_launch_intent();
                     let retirement = effects.pending_idle_retirement_ids();

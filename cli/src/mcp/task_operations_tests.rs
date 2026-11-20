@@ -1191,7 +1191,62 @@ fn public_task_capacity_can_change_without_transport_or_losing_pending_history()
         json!({"operation":"capacity","policy":{"initialCapacity":512,"extensionIncrement":128,"maximumCapacity":1024}}),
     );
     assert_eq!(updated["policySource"], "task_override");
+    let small = invoke(
+        json!({"operation":"capacity","policy":{"initialCapacity":512,"extensionIncrement":128,"maximumCapacity":1024,"maximumReconnectRequests":1,"maximumRuntimeLanes":99}}),
+    );
+    assert_eq!(small["reconnectRequestLimit"], 1);
+    assert_eq!(
+        small["runtimeLaneLimit"], 64,
+        "Global lanes do not inherit a task override"
+    );
+    let mut continuity = agent_browser_service_model::BrowserHostedContinuity::default();
+    continuity.record("original", "original-fingerprint", "disconnect", false);
+    let retained = continuity.requests.clone();
+    assert_eq!(
+        continuity
+            .admit(
+                "next",
+                "next-fingerprint",
+                continuity.revision,
+                store.reconnect_request_limit("task").unwrap()
+            )
+            .unwrap_err(),
+        "browser_reconnect_request_capacity_reached"
+    );
+    let grown = invoke(
+        json!({"operation":"capacity","policy":{"initialCapacity":512,"extensionIncrement":128,"maximumCapacity":1024,"maximumReconnectRequests":2}}),
+    );
+    assert_eq!(grown["reconnectRequestLimit"], 2);
+    assert_eq!(
+        continuity.admit(
+            "next",
+            "next-fingerprint",
+            continuity.revision,
+            store.reconnect_request_limit("task").unwrap()
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        continuity.admit("original", "original-fingerprint", 0, 1),
+        Ok(false)
+    );
+    assert_eq!(
+        continuity.requests, retained,
+        "Neither policy changes nor original replay evict receipts"
+    );
+
     assert_eq!(updated["capacity"], 512);
+    for field in ["maximumReconnectRequests", "maximumRuntimeLanes"] {
+        let mut policy =
+            json!({"initialCapacity":512,"extensionIncrement":128,"maximumCapacity":1024});
+        policy[field] = json!(0);
+        let request = json!({"jsonrpc":"2.0","id":751,"method":"tools/call","params":{"name":"browser_command","arguments":{"taskId":"task","action":"task_operation","params":{"operation":"capacity","policy":policy}}}});
+        let refused = handle_jsonrpc_line(&request.to_string(), "unused").unwrap();
+        assert!(refused
+            .to_string()
+            .contains("browser_task_operation_capacity_policy_invalid"));
+        assert_eq!(store.reconnect_request_limit("task").unwrap(), 2);
+    }
     drop(store);
     let reopened = invoke(json!({"operation":"capacity"}));
     assert_eq!(reopened["policy"]["maximumCapacity"], 1024);
@@ -1200,6 +1255,13 @@ fn public_task_capacity_can_change_without_transport_or_losing_pending_history()
     assert!(!directory.join("never-started").exists());
     let defaults = invoke(
         json!({"operation":"capacity","scope":"defaults","policy":{"initialCapacity":128,"extensionIncrement":64,"maximumCapacity":2048}}),
+    );
+    assert_eq!(defaults["runtimeLanePolicySource"], "system_default");
+    assert_eq!(defaults["runtimeLaneLimit"], 64);
+    let policy = BrowserSessionSqliteStore::default_sqlite().unwrap();
+    assert_eq!(
+        policy.runtime_lane_capacity_policy().unwrap(),
+        (64, "system_default")
     );
     assert_eq!(
         defaults["policy"]["initialCapacity"], 512,

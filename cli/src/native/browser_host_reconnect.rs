@@ -220,26 +220,54 @@ pub(crate) fn execute<E, F>(
     catalog: &BrowserProfileCatalog,
     effects: &mut E,
     command: &Value,
+    request_limit: usize,
     publish: &mut F,
 ) -> Result<Value, String>
 where
     E: BrowserSessionEffects,
     F: FnMut(&BrowserSessionState, &BrowserSessionState, &mut E) -> Result<(), String>,
 {
-    execute_with_observer(
+    execute_with_observer_and_capacity(
         state,
         catalog,
         effects,
         command,
+        request_limit,
         publish,
         &mut observe_desktop,
     )
 }
+#[cfg(test)]
 fn execute_with_observer<E, F, O>(
     state: &mut BrowserSessionState,
     catalog: &BrowserProfileCatalog,
     effects: &mut E,
     command: &Value,
+    publish: &mut F,
+    observe: &mut O,
+) -> Result<Value, String>
+where
+    E: BrowserSessionEffects,
+    F: FnMut(&BrowserSessionState, &BrowserSessionState, &mut E) -> Result<(), String>,
+    O: FnMut(u32) -> Result<RemoteViewFixedDesktop, String>,
+{
+    execute_with_observer_and_capacity(
+        state,
+        catalog,
+        effects,
+        command,
+        super::browser_session_store::task_operation_archive::CapacityPolicy::default()
+            .maximum_reconnect_requests,
+        publish,
+        observe,
+    )
+}
+fn execute_with_observer_and_capacity<E, F, O>(
+    state: &mut BrowserSessionState,
+    catalog: &BrowserProfileCatalog,
+    effects: &mut E,
+    command: &Value,
+    request_limit: usize,
     publish: &mut F,
     observe: &mut O,
 ) -> Result<Value, String>
@@ -272,7 +300,7 @@ where
         .ok_or("browser_reconnect_expected_revision_required")?;
     let fingerprint=format!("{:x}",Sha256::digest(serde_json::to_vec(&json!({"taskId":id,"operation":operation,"desktop":command.get("desktop"),"attachment":command.get("attachment"),"lossPolicy":command.get("lossPolicy")})).map_err(|_|"browser_reconnect_request_invalid")?));
     let continuity = state.hosted_continuity.get(id).cloned().unwrap_or_default();
-    if !continuity.admit(request_id, &fingerprint, revision)? {
+    if !continuity.admit(request_id, &fingerprint, revision, request_limit)? {
         return Ok(metadata(state, id));
     }
     let browser = state
@@ -977,6 +1005,88 @@ mod tests {
             generation: 1,
             friendly_route_label: "current".into(),
         })
+    }
+    #[test]
+    fn hosted_reconnect_live_capacity_preserves_receipts_and_original_task() {
+        fixture(|mut state, catalog, _| {
+            use super::super::browser_session_store::task_operation_archive::CapacityPolicy;
+            use super::super::browser_session_store::BrowserSessionSqliteStore;
+            let mut store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+            store.save_session_state(&state).unwrap();
+            let mut policy = CapacityPolicy::default();
+            policy.maximum_reconnect_requests = 1;
+            store
+                .task_operation_capacity("task", "task", Some(policy.clone()))
+                .unwrap();
+            let before = state.clone();
+            let mut e = effects(true);
+            let mut publish =
+                |_: &BrowserSessionState, _: &BrowserSessionState, _: &mut Effects| Ok(());
+            let first = command("disconnect", 0);
+            execute_with_observer_and_capacity(
+                &mut state,
+                &catalog,
+                &mut e,
+                &first,
+                store.reconnect_request_limit("task").unwrap(),
+                &mut publish,
+                &mut observe,
+            )
+            .unwrap();
+            let receipt = state.hosted_continuity["task"].requests.clone();
+            let next = command("disconnect", state.hosted_continuity["task"].revision);
+            let refused = state.clone();
+            assert_eq!(
+                execute_with_observer_and_capacity(
+                    &mut state,
+                    &catalog,
+                    &mut e,
+                    &next,
+                    store.reconnect_request_limit("task").unwrap(),
+                    &mut publish,
+                    &mut observe
+                )
+                .unwrap_err(),
+                "browser_reconnect_request_capacity_reached"
+            );
+            assert_eq!(state, refused);
+            policy.maximum_reconnect_requests = 2;
+            store
+                .task_operation_capacity("task", "task", Some(policy))
+                .unwrap();
+            execute_with_observer_and_capacity(
+                &mut state,
+                &catalog,
+                &mut e,
+                &next,
+                store.reconnect_request_limit("task").unwrap(),
+                &mut publish,
+                &mut observe,
+            )
+            .unwrap();
+            let after = state.clone();
+            execute_with_observer_and_capacity(
+                &mut state,
+                &catalog,
+                &mut e,
+                &first,
+                1,
+                &mut publish,
+                &mut observe,
+            )
+            .unwrap();
+            assert_eq!(
+                state, after,
+                "Original replay remains read-only even after a limit decrease"
+            );
+            for (id, original) in receipt {
+                assert_eq!(state.hosted_continuity["task"].requests[&id], original);
+            }
+            assert_eq!(state.sessions, before.sessions);
+            assert_eq!(state.browsers, before.browsers);
+            assert_eq!(e.recoveries, 0);
+            assert_eq!(e.attachments, 0);
+        });
     }
     #[test]
     fn hosted_reconnect_disconnect_preserves_task_browser_and_takeover() {
