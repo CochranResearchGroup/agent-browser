@@ -476,6 +476,24 @@ mod tests {
         .unwrap_err()
         .contains("scope_conflict"));
         drop(guard);
+        // Runtime custody deliberately seals its directories. Apply the same
+        // exact-owned-tree cleanup used by the existing task-operation fixture.
+        #[cfg(unix)]
+        fn unseal(path: &std::path::Path) {
+            use std::os::unix::fs::PermissionsExt;
+            if !path.is_dir() {
+                return;
+            }
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+            for entry in std::fs::read_dir(path).unwrap() {
+                let entry = entry.unwrap();
+                if entry.file_type().unwrap().is_dir() {
+                    unseal(&entry.path());
+                }
+            }
+        }
+        #[cfg(unix)]
+        unseal(&directory);
         std::fs::remove_dir_all(directory).unwrap();
     }
 }
