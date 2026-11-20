@@ -1023,13 +1023,12 @@ fn existing_daemon_is_ready_with(
     reachable()
 }
 
-pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
-    cache_runtime_lane_config(session, opts);
-    wait_for_runtime_host_publication(session, Duration::from_secs(5));
-    let _startup_lock = acquire_runtime_host_startup_lock(session)?;
-    // Socket connectivity is the sole liveness check — no PID check — so
-    // callers in a different PID namespace (e.g. unshare) can still reuse
-    // an existing daemon they can reach over the socket.
+/// Reuse a reachable compatible owner without joining unrelated startup work.
+/// No compatibility or authentication decision is cached between commands.
+fn reuse_existing_daemon(
+    session: &str,
+    opts: &DaemonOptions,
+) -> Result<Option<DaemonResult>, String> {
     if existing_daemon_is_ready_with(
         crate::runtime_host::admission_enabled(),
         || daemon_ready(session),
@@ -1049,10 +1048,10 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
         let version_matches = daemon_version_matches(session);
         let auth_token_available = daemon_auth_token_available(session);
         if unsafe_claim_any_allows_daemon_reuse(auth_token_available) {
-            return Ok(reachable_daemon_result(session));
+            return Ok(Some(reachable_daemon_result(session)));
         }
         if opts.allow_stale_daemon_handoff && auth_token_available {
-            return Ok(reachable_daemon_result(session));
+            return Ok(Some(reachable_daemon_result(session)));
         }
         if opts.allow_stale_daemon_handoff && !auth_token_available {
             return Err(format!(
@@ -1074,8 +1073,23 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
                     "Cannot refresh stale daemon session '{session}' implicitly. Run `agent-browser --session {session} handoff prepare`. If prepared=true, attach its candidate session and finalize the old owner only after candidate commit. If prepared=false and browserPresent=false, no browser transfer candidate exists: {browserless_recovery}. Retain profile data and unresolved effect custody."
                 ));
         } else {
-            return Ok(reachable_daemon_result(session));
+            return Ok(Some(reachable_daemon_result(session)));
         }
+    }
+    Ok(None)
+}
+
+pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
+    cache_runtime_lane_config(session, opts);
+    wait_for_runtime_host_publication(session, Duration::from_secs(5));
+    if let Some(existing) = reuse_existing_daemon(session, opts)? {
+        return Ok(existing);
+    }
+    // Only new-host demand joins startup admission. Recheck after the lock:
+    // another caller may have published a compatible owner while we waited.
+    let _startup_lock = acquire_runtime_host_startup_lock(session)?;
+    if let Some(existing) = reuse_existing_daemon(session, opts)? {
+        return Ok(existing);
     }
 
     require_runtime_host_admission_for_launch()?;
@@ -1372,6 +1386,48 @@ fn send_command_once(cmd: &Value, session: &str) -> Result<Response, String> {
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn warm_shared_runtime_reuse_does_not_wait_for_another_lanes_startup_lock() {
+        let root = std::env::temp_dir().join(format!("ab-warm-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_SOCKET_DIR",
+            crate::runtime_host::RUNTIME_HOST_ENV,
+            crate::native::service_lease_mode::PROFILE_LEASE_MODE_ENV,
+        ]);
+        guard.set("AGENT_BROWSER_SOCKET_DIR", root.to_str().unwrap());
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        guard.remove(crate::native::service_lease_mode::PROFILE_LEASE_MODE_ENV);
+        let session = "warm-reuse";
+        let _listener = std::os::unix::net::UnixListener::bind(get_socket_path(session)).unwrap();
+        fs::write(get_version_path(session), env!("CARGO_PKG_VERSION")).unwrap();
+        fs::write(get_pid_path(session), std::process::id().to_string()).unwrap();
+        write_daemon_auth_token(session, "fixture-token").unwrap();
+        fs::write(root.join(format!("{session}.stream")), "{}").unwrap();
+        let startup_lock = root.join("runtime-host.startup.lock");
+        fs::write(&startup_lock, "other-lane-starting").unwrap();
+        let (finished, completion) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            let flags = crate::flags::parse_flags(&[]);
+            let result = ensure_daemon(session, &DaemonOptions::from_flags(&flags));
+            finished
+                .send(result.map(|reply| reply.already_running))
+                .unwrap();
+        });
+        // This is a bounded deadlock check, not a performance measurement.
+        let before_release = completion.recv_timeout(Duration::from_secs(1));
+        let preserved_lock = fs::read_to_string(&startup_lock).unwrap();
+        fs::remove_file(startup_lock).unwrap();
+        worker.join().unwrap();
+        fs::remove_dir_all(root).unwrap();
+        assert_eq!(preserved_lock, "other-lane-starting");
+        assert!(
+            matches!(before_release, Ok(Ok(true))),
+            "ready owner reuse waited on unrelated startup admission: {before_release:?}"
+        );
+    }
 
     #[test]
     fn shared_runtime_reuse_does_not_wait_for_legacy_shutdown_grace() {
