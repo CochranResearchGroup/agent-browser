@@ -1541,6 +1541,142 @@
       },
       "resumeCondition": "Continue independent browser work immediately; verify any explicitly requested close through current owner readback. Automatic qualified garbage collection is not implemented for legacy starts.",
       "maximumAutomaticAttempts": 1
+    },
+    "build_request": {
+      "rationale": "The requested build/profile selection does not satisfy its declared caller contract.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Current named profile, original selection operation, executable digest and actual owner receipt; no runtime freshness is inferred by this registry.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "browser_build",
+          "params": {
+            "profileId": "$profileId",
+            "choice": "inspect"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Read the advertised browser_build schema and current profile selection; correct only the named argument. Do not manufacture profile identity or owner confirmation.",
+          "precondition": "Current profile and original operation scope are known and the acting owner has the existing required authority.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "browser_build",
+          "params": {
+            "profileId": "$profileId",
+            "choice": "inspect"
+          }
+        }
+      },
+      "resumeCondition": "The same profile inspection confirms current selection and original custody. Any requested launch remains separately owner-confirmed and identity-checked; do not automatically replay browser effects.",
+      "maximumAutomaticAttempts": 1
+    },
+    "build_changed": {
+      "rationale": "The current executable/profile/selection differs from retained expected identity.",
+      "requiredActor": "profile_selection_owner",
+      "evidenceRequirement": "Current named profile, original selection operation, executable digest and actual owner receipt; no runtime freshness is inferred by this registry.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "browser_build",
+          "params": {
+            "profileId": "$profileId",
+            "choice": "inspect"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect current selection and compatibility. Review migration/login risk; choose a fresh operation ID only for a deliberately changed intent, preserving the original receipt.",
+          "precondition": "Current profile and original operation scope are known and the acting owner has the existing required authority.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "browser_build",
+          "params": {
+            "profileId": "$profileId",
+            "choice": "inspect"
+          }
+        }
+      },
+      "resumeCondition": "The same profile inspection confirms current selection and original custody. Any requested launch remains separately owner-confirmed and identity-checked; do not automatically replay browser effects.",
+      "maximumAutomaticAttempts": 1
+    },
+    "build_custody": {
+      "rationale": "The retained browser, launch or profile-copy custody has not been positively reconciled.",
+      "requiredActor": "existing_profile_operation_owner",
+      "evidenceRequirement": "Current named profile, original selection operation, executable digest and actual owner receipt; no runtime freshness is inferred by this registry.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "browser_build",
+          "params": {
+            "profileId": "$profileId",
+            "choice": "inspect"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect active operation and current owner. Continue the existing mode/copy/launch operation through its supported reconciliation path; do not kill processes, replace directories or repeat an uncertain launch.",
+          "precondition": "Current profile and original operation scope are known and the acting owner has the existing required authority.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "browser_build",
+          "params": {
+            "profileId": "$profileId",
+            "choice": "inspect"
+          }
+        }
+      },
+      "resumeCondition": "The same profile inspection confirms current selection and original custody. Any requested launch remains separately owner-confirmed and identity-checked; do not automatically replay browser effects.",
+      "maximumAutomaticAttempts": 1
+    },
+    "build_storage": {
+      "rationale": "The owner could not read or durably retain the exact build-selection receipt or profile evidence.",
+      "requiredActor": "installation_and_profile_owner",
+      "evidenceRequirement": "Current named profile, original selection operation, executable digest and actual owner receipt; no runtime freshness is inferred by this registry.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "browser_build",
+          "params": {
+            "profileId": "$profileId",
+            "choice": "inspect"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Preserve original operation ID and profile bytes. Have the installation/profile owner repair the reported file or database availability, then inspect the same selection; an unavailable receipt is not permission to recreate an effect.",
+          "precondition": "Current profile and original operation scope are known and the acting owner has the existing required authority.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "browser_build",
+          "params": {
+            "profileId": "$profileId",
+            "choice": "inspect"
+          }
+        }
+      },
+      "resumeCondition": "The same profile inspection confirms current selection and original custody. Any requested launch remains separately owner-confirmed and identity-checked; do not automatically replay browser effects.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -7108,6 +7244,541 @@
       "policySource": "AGENTS.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
+    },
+    "browser_build_absolute_path_required": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_build_unavailable": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_unreadable": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_choice_unsupported": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_build_task_missing": {
+      "recipe": "build_changed",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        },
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_profile_required": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_build_task_profile_conflict": {
+      "recipe": "build_changed",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_profile_missing": {
+      "recipe": "build_changed",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        },
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        },
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_operation_id_invalid": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_build_selection_required": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_build_mode_invalid": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        },
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_build_owner_confirmation_required": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_build_intent_invalid": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_build_store_unavailable": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_changed": {
+      "recipe": "build_changed",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_launcher_unverified": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_selection.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_selection_id_invalid": {
+      "recipe": "build_request",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_build_selection_missing": {
+      "recipe": "build_changed",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_profile_busy": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_profile_directory_unavailable": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_selection_superseded": {
+      "recipe": "build_changed",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_receipt_invalid": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        },
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_selection_mode_conflict": {
+      "recipe": "build_changed",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_process_identity_unavailable": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_process_unverified": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_existing_browser_mismatch": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_loaded_bytes_mismatch": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_loaded_bytes_unverified": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_loaded_mode_unverified": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_launch_pending": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        },
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_browser_missing": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_tab_missing": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_native_pending": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_build_open.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_receipt_unavailable": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_operation_id_conflict": {
+      "recipe": "build_changed",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_receipt_profile_conflict": {
+      "recipe": "build_changed",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_begin_failed": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_profile_changed": {
+      "recipe": "build_changed",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_build_live_profile": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_retirement_pending": {
+      "recipe": "build_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_build_receipt_encode_failed": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_receipt_write_failed": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_commit_failed": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_copy_lineage_unavailable": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_copy_lineage_invalid": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_copy_catalog_missing": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_copy_directory_unavailable": {
+      "recipe": "build_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_profile_build_store.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -7200,5 +7871,10 @@
   "fragments": [
     "docs/dev/contracts/public-error-recovery-client-dashboard.v1.json"
   ],
-  "recipeBudgetScope": "single_recipe_cycle"
+  "recipeBudgetScope": "single_recipe_cycle",
+  "enforcedProducerSources": [
+    "cli/src/native/browser_build_selection.rs",
+    "cli/src/native/browser_build_open.rs",
+    "cli/src/native/browser_profile_build_store.rs"
+  ]
 }

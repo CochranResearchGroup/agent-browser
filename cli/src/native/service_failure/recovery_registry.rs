@@ -41,6 +41,11 @@ fn bind(value: &Value, command: &Value) -> (Value, bool) {
             let replacement = match token.as_str() {
                 "$taskId" => command.get("taskId").or_else(|| command.get("sessionId")),
                 "$requestId" => command.get("requestId").or_else(|| command.get("id")),
+                "$profileId" => command.get("profileId").or_else(|| {
+                    command
+                        .get("params")
+                        .and_then(|params| params.get("profileId"))
+                }),
                 "$sourceProfileId" => command.get("sourceProfileId").or_else(|| {
                     command
                         .get("params")

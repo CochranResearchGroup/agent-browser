@@ -206,6 +206,12 @@ function validateRecoveryCall(call) {
     }
     return;
   }
+  if (call.tool === 'browser_command' && call.arguments.action === 'browser_build') {
+    assert.equal(call.arguments.params.profileId, '$profileId');
+    assert.equal(call.arguments.params.choice, 'inspect');
+    assert(readFileSync('cli/src/mcp/catalog.rs', 'utf8').includes('"select_for_next_launch"'), 'Build inspection schema must remain advertised');
+    return;
+  }
   if (call.tool === 'browser_command' && call.arguments.action === 'profile_duplicate') {
     assert.equal(call.arguments.params.sourceProfileId, '$sourceProfileId');
     assert.equal(call.arguments.params.operationId, '$operationId');
@@ -278,6 +284,10 @@ const producerPattern = new RegExp(`["']((?:${recoveryRegistry.enforcedProducerC
 for (const path of [...rustFiles('cli/src'), ...rustFiles('crates/agent-browser-service-model/src')]) {
   const source = readFileSync(path, 'utf8');
   for (const match of source.matchAll(producerPattern)) discoveredReviewedCodes.add(match[1]);
+}
+for (const path of recoveryRegistry.enforcedProducerSources ?? []) {
+  const source = readFileSync(path, 'utf8');
+  for (const match of source.matchAll(/["'](browser_build_[a-z0-9_]+)(?=[:"'])/g)) discoveredReviewedCodes.add(match[1]);
 }
 validateRecoveryInventory(recoveryRegistry, discoveredReviewedCodes);
 const clientQualification = JSON.parse(readFileSync('docs/dev/contracts/public-client-error-qualification.v1.json', 'utf8'));
