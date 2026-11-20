@@ -261,7 +261,10 @@ fn relinquish(control: &mut Control, id: &str, digest: &str, request: &str) -> R
             return Ok(());
         }
         let mut claims = viewer_claims(control);
-        if claims.remove(viewer).as_ref() != Some(&(id.to_string(), digest.to_string())) {
+        let returning_legacy = claims.is_empty() && control.human && handoff.epoch == control.epoch;
+        if !returning_legacy
+            && claims.remove(viewer).as_ref() != Some(&(id.to_string(), digest.to_string()))
+        {
             return Err("browser_handoff_viewer_claim_missing".into());
         }
         control.epoch = control
