@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "agent-browser.service-model-external-owner-tools.v1",
+  "tools": {
+    "remote_view_pool_inspect": {
+      "arguments": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "poolId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "poolId"
+        ]
+      },
+      "provenance": "Active connected MCP declaration mcp__remote_view__remote_view_pool_inspect; metadata inspected without invocation. Read-only existing Remote View owner API; no runtime availability or grant is inferred.",
+      "owner": "Remote View"
+    },
+    "remote_view_operation_status": {
+      "arguments": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId"
+        ]
+      },
+      "provenance": "Active connected MCP declaration mcp__remote_view__remote_view_operation_status; metadata inspected without invocation. Read-only existing Remote View owner API; no idempotency-key substitution is accepted.",
+      "owner": "Remote View"
+    }
+  },
+  "authority": "Reviewed active readonly MCP declarations. Existing owner grant and actual interface availability are separate; missing scope stays nonexecutable."
+}

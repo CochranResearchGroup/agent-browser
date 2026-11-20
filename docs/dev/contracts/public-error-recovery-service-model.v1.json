@@ -1,0 +1,836 @@
+{
+  "schemaVersion": "agent-browser.public-error-recovery-registry.v1",
+  "qualificationScope": {
+    "sourceBaseline": "9d3958421",
+    "finiteInput": "/tmp/spec749-original-census-unresolved-post449.json",
+    "scope": "35 exact model producer literals plus the actual ServiceStateCodecError unsupported-schema producer. This is source/interface qualification, not installed/provider acceptance.",
+    "publications": [
+      {
+        "source": "crates/agent-browser-service-model/src/service_state.rs",
+        "producer": "ServiceStateCodecError::Display; validate_service_state_invariants; ServiceState::checked_successor",
+        "adapters": [
+          "cli/src/native/service_store.rs parse_service_state_json",
+          "cli/src/native/service_state_migration.rs validate_service_state_invariants",
+          "cli/src/native/service_state_validation.rs validate_service_state_path error.message"
+        ]
+      },
+      {
+        "source": "crates/agent-browser-service-model/src/profile_access.rs",
+        "producer": "mutate_profile_policy -> ProfilePolicyMutationFailure.code",
+        "adapters": [
+          "cli/src/native/service_config.rs mutate_profile_policy_in_repository serializes the complete failure"
+        ]
+      },
+      {
+        "source": "crates/agent-browser-service-model/src/profile_lifecycle.rs",
+        "producer": "register_profile_eviction_authorization returns original plan authorization or exact conflict",
+        "adapters": [
+          "cli/src/native/service_config.rs mutate_profile_policy_in_repository"
+        ]
+      },
+      {
+        "source": "crates/agent-browser-service-model/src/remote_view_retention.rs",
+        "producer": "public model retention/handoff helpers and SQLite retention adapters",
+        "adapters": [
+          "cli/src/native/browser_session_store.rs retain_remote_view_presentation/release_remote_view_presentation"
+        ],
+        "limitation": "Current product call search found SQLite adapters and tests, not a separate public CLI retention mutation. Recipes preserve the existing model/owner operation and never invent one."
+      },
+      {
+        "source": "crates/agent-browser-service-model/src/remote_view_session_pool.rs",
+        "producer": "public prepare_remote_view_session_pool/replenish_remote_view_session_pool model owner interface",
+        "limitation": "Exports are public model contracts. Provider/process transport stays with the original adapter; no new CLI acquisition or automatic provider mutation is claimed."
+      }
+    ],
+    "diagnosticAssertions": [
+      {
+        "path": "cli/src/native/service_state_validation.rs",
+        "literal": "service_state_schema_unsupported:future",
+        "classification": "cfg_test_assertion_of_actual_model_producer_not_an_independent_public_code"
+      }
+    ],
+    "timeAuthority": "Pure model functions consume explicit owner inputs. Registry metadata neither qualifies guest time nor bypasses an owner grace/expiry/lease policy. Missing qualified time pauses only its dependent action."
+  },
+  "externalToolContract": "docs/dev/contracts/service-model-external-owner-tools.v1.json",
+  "interfaces": {
+    "@agent-browser/client/service-observability#getServiceStatus": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceStatus",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceAccessPlan": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceAccessPlan",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/service-observability#getServiceTrace": {
+      "source": "packages/client/src/service-observability.js",
+      "export": "getServiceTrace",
+      "kind": "client_export"
+    }
+  },
+  "recipes": {
+    "service_model_state_integrity": {
+      "rationale": "Run the existing provided-path Service State validator against the original owner-approved bytes; retain its state/parser hashes and exact missing-edge code. Repair a staged candidate only from current authoritative owner records or the original verified backup/migration transaction through its existing repository/installation owner. Never hand-edit the live graph, fabricate missing profile/session/browser/route/principal records, drop capability bindings, delete history or treat validation success as runtime adoption. Independent task/read work may continue only where its existing owner still admits it.",
+      "requiredActor": "original_service_state_repository_owner",
+      "evidenceRequirement": "Exact original identifiers, current authenticated owner evidence, unchanged permission scope and complete retained original result. Missing records or diagnostic clocks do not prove absence, no-effect or replay authority.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "service",
+          "state",
+          "validate",
+          "--path",
+          "$statePath"
+        ],
+        "precondition": "The existing repository/installation owner supplies the exact original absolute statePath from its reviewed configuration or original failure. This template is unbound and nonexecutable until that scope is available. The advertised validator hashes only those supplied bytes and its running parser; it does not start, consult, recover or mutate the default live store."
+      },
+      "remediation": [
+        {
+          "instruction": "Run the existing provided-path Service State validator against the original owner-approved bytes; retain its state/parser hashes and exact missing-edge code. Repair a staged candidate only from current authoritative owner records or the original verified backup/migration transaction through its existing repository/installation owner. Never hand-edit the live graph, fabricate missing profile/session/browser/route/principal records, drop capability bindings, delete history or treat validation success as runtime adoption. Independent task/read work may continue only where its existing owner still admits it.",
+          "precondition": "The existing actor owns this exact scope and preserves peer workloads, original fingerprints, unknown/pending effects and actual owner policy. No automatic mutation or arbitrary shell is authorized.",
+          "interface": "installation_owner_storage_repair"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "service",
+          "state",
+          "validate",
+          "--path",
+          "$statePath"
+        ],
+        "precondition": "The existing repository/installation owner supplies the exact original absolute statePath from its reviewed configuration or original failure. This template is unbound and nonexecutable until that scope is available. The advertised validator hashes only those supplied bytes and its running parser; it does not start, consult, recover or mutate the default live store."
+      },
+      "resumeCondition": "Exact authoritative/candidate bytes pass the supported parser and complete cross-record validation, and any original migration/effect outcome is reconciled before publication.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_model_revision_exhaustion": {
+      "rationale": "Retain the exact exhausted snapshot and original failure, validate its bytes without writes, and use the existing installation/repository owner for a compatible reviewed migration or a resumable defect handoff. The u64 revision fence is a genuine representation limit, not a configurable task budget. Do not wrap/reset/decrement it, reuse an old fence, edit the state JSON or restore a stale backup over unresolved effects. Continue independently admitted read/task work; only writes requiring a successor pause. No currently unsupported larger counter format is claimed available.",
+      "requiredActor": "original_service_state_repository_and_installation_owner",
+      "evidenceRequirement": "Exact original identifiers, current authenticated owner evidence, unchanged permission scope and complete retained original result. Missing records or diagnostic clocks do not prove absence, no-effect or replay authority.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "service",
+          "state",
+          "validate",
+          "--path",
+          "$statePath"
+        ],
+        "precondition": "The existing repository/installation owner supplies the exact original absolute statePath from its reviewed configuration or original failure. This template is unbound and nonexecutable until that scope is available. The advertised validator hashes only those supplied bytes and its running parser; it does not start, consult, recover or mutate the default live store."
+      },
+      "remediation": [
+        {
+          "instruction": "Retain the exact exhausted snapshot and original failure, validate its bytes without writes, and use the existing installation/repository owner for a compatible reviewed migration or a resumable defect handoff. The u64 revision fence is a genuine representation limit, not a configurable task budget. Do not wrap/reset/decrement it, reuse an old fence, edit the state JSON or restore a stale backup over unresolved effects. Continue independently admitted read/task work; only writes requiring a successor pause. No currently unsupported larger counter format is claimed available.",
+          "precondition": "The existing actor owns this exact scope and preserves peer workloads, original fingerprints, unknown/pending effects and actual owner policy. No automatic mutation or arbitrary shell is authorized.",
+          "interface": "installation_owner_storage_repair"
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--json",
+          "service",
+          "state",
+          "validate",
+          "--path",
+          "$statePath"
+        ],
+        "precondition": "The existing repository/installation owner supplies the exact original absolute statePath from its reviewed configuration or original failure. This template is unbound and nonexecutable until that scope is available. The advertised validator hashes only those supplied bytes and its running parser; it does not start, consult, recover or mutate the default live store."
+      },
+      "resumeCondition": "The original owner proves a compatible monotonic successor preserving every original ID/history and pending effect, or keeps this exact resumable packet while independent admitted work continues.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_model_profile_permission": {
+      "rationale": "Read the exact current profile access decision and required PolicyWrite/Drain/Evict permission. The actual authenticated policy owner can use its existing profile-policy operation to grant or exercise only the required scoped authority; a caller subject label or guessed capability cannot supply it. Preserve the existing drain target and revision; resume that original drain or choose a separately reviewed policy intent after it settles. A capacity change never grants permission.",
+      "requiredActor": "original_authenticated_profile_policy_owner",
+      "evidenceRequirement": "Exact original identifiers, current authenticated owner evidence, unchanged permission scope and complete retained original result. Missing records or diagnostic clocks do not prove absence, no-effect or replay authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
+        },
+        "precondition": "Use the original configured authenticated Service endpoint and exact retained original profile/task/operation scope. Resolve missing values only from the original owner/configuration; no guessed identity, new permission or default live filesystem path is implied."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the exact current profile access decision and required PolicyWrite/Drain/Evict permission. The actual authenticated policy owner can use its existing profile-policy operation to grant or exercise only the required scoped authority; a caller subject label or guessed capability cannot supply it. Preserve the existing drain target and revision; resume that original drain or choose a separately reviewed policy intent after it settles. A capacity change never grants permission.",
+          "precondition": "The existing actor owns this exact scope and preserves peer workloads, original fingerprints, unknown/pending effects and actual owner policy. No automatic mutation or arbitrary shell is authorized.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
+        },
+        "precondition": "Use the original configured authenticated Service endpoint and exact retained original profile/task/operation scope. Resolve missing values only from the original owner/configuration; no guessed identity, new permission or default live filesystem path is implied."
+      },
+      "resumeCondition": "Current owner access decision authorizes the exact intended profile/action and original drain/effect state is reconciled.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_model_profile_grace": {
+      "rationale": "Read the original policy/drain/eviction plan. For GracefulOnly or ForceAfterGrace, supply the actual owner-reviewed grace deadline using the supported current policy operation and qualified owner time; do not shorten or extend it from guest time, choose ForceImmediate to evade it, or broaden target scope. Re-read original lifecycle/physical-effect proof before continuing.",
+      "requiredActor": "original_authenticated_profile_lifecycle_owner",
+      "evidenceRequirement": "Exact original identifiers, current authenticated owner evidence, unchanged permission scope and complete retained original result. Missing records or diagnostic clocks do not prove absence, no-effect or replay authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
+        },
+        "precondition": "Use the original configured authenticated Service endpoint and exact retained original profile/task/operation scope. Resolve missing values only from the original owner/configuration; no guessed identity, new permission or default live filesystem path is implied."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the original policy/drain/eviction plan. For GracefulOnly or ForceAfterGrace, supply the actual owner-reviewed grace deadline using the supported current policy operation and qualified owner time; do not shorten or extend it from guest time, choose ForceImmediate to evade it, or broaden target scope. Re-read original lifecycle/physical-effect proof before continuing.",
+          "precondition": "The existing actor owns this exact scope and preserves peer workloads, original fingerprints, unknown/pending effects and actual owner policy. No automatic mutation or arbitrary shell is authorized.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Use the original configured authenticated Service endpoint and exact retained original profile/task/operation scope. Resolve missing values only from the original owner/configuration; no guessed identity, new permission or default live filesystem path is implied."
+      },
+      "resumeCondition": "Current scoped owner authority, explicit original grace policy and actual original effect receipt permit the chosen continuation.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_model_lifecycle_authorization": {
+      "rationale": "Read the original eviction plan, canonical target set, profile policy fence and retained authorization/receipt. Invalid assurance or fields require the existing registered-capability policy owner and corrected exact scope. For an immutable authorization-ID conflict, inspect and continue the original authorization only if its actual owner state permits; do not overwrite its fields/issuance time, invent a new authorization for unknown work or replay a completed physical close. A genuinely different intent needs a separately reviewed fresh plan after original settlement.",
+      "requiredActor": "original_authenticated_profile_lifecycle_owner",
+      "evidenceRequirement": "Exact original identifiers, current authenticated owner evidence, unchanged permission scope and complete retained original result. Missing records or diagnostic clocks do not prove absence, no-effect or replay authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceAccessPlan",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "readinessProfileId": "$profileId",
+          "profileCapability": "$profileCapability"
+        },
+        "precondition": "Use the original configured authenticated Service endpoint and exact retained original profile/task/operation scope. Resolve missing values only from the original owner/configuration; no guessed identity, new permission or default live filesystem path is implied."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the original eviction plan, canonical target set, profile policy fence and retained authorization/receipt. Invalid assurance or fields require the existing registered-capability policy owner and corrected exact scope. For an immutable authorization-ID conflict, inspect and continue the original authorization only if its actual owner state permits; do not overwrite its fields/issuance time, invent a new authorization for unknown work or replay a completed physical close. A genuinely different intent needs a separately reviewed fresh plan after original settlement.",
+          "precondition": "The existing actor owns this exact scope and preserves peer workloads, original fingerprints, unknown/pending effects and actual owner policy. No automatic mutation or arbitrary shell is authorized.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/service-observability#getServiceTrace",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl",
+          "query": {
+            "profile-id": "$profileId",
+            "limit": 50
+          }
+        },
+        "precondition": "Use the original configured authenticated Service endpoint and exact retained original profile/task/operation scope. Resolve missing values only from the original owner/configuration; no guessed identity, new permission or default live filesystem path is implied."
+      },
+      "resumeCondition": "Exact original authorization and current target/policy proof are verified; completed stays completed and uncertain remains non-replayable.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_model_retention_identity": {
+      "rationale": "Read original browser/session/tab and retained Native pool/desktop/generation/assignment evidence. Use the existing original owner retention operation only after those same identities are positively reconciled with the provider; current absence cannot release or replace a retained assignment. For a malformed handoff ID, use the actual opaque ID returned by the existing owner and its durable authenticated /remote-view link, never sanitize a guessed ID or expose raw provider routes/keys. Preserve conflicts and peer references; no new viewer or grant ceremony is introduced.",
+      "requiredActor": "original_browser_retention_and_remote_view_pool_owner",
+      "evidenceRequirement": "Exact original identifiers, current authenticated owner evidence, unchanged permission scope and complete retained original result. Missing records or diagnostic clocks do not prove absence, no-effect or replay authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/service-observability#getServiceStatus",
+        "arguments": {
+          "baseUrl": "$configuredServiceBaseUrl"
+        },
+        "precondition": "Use the original configured authenticated Service endpoint and exact retained original profile/task/operation scope. Resolve missing values only from the original owner/configuration; no guessed identity, new permission or default live filesystem path is implied."
+      },
+      "remediation": [
+        {
+          "instruction": "Read original browser/session/tab and retained Native pool/desktop/generation/assignment evidence. Use the existing original owner retention operation only after those same identities are positively reconciled with the provider; current absence cannot release or replace a retained assignment. For a malformed handoff ID, use the actual opaque ID returned by the existing owner and its durable authenticated /remote-view link, never sanitize a guessed ID or expose raw provider routes/keys. Preserve conflicts and peer references; no new viewer or grant ceremony is introduced.",
+          "precondition": "The existing actor owns this exact scope and preserves peer workloads, original fingerprints, unknown/pending effects and actual owner policy. No automatic mutation or arbitrary shell is authorized.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "remote_view_pool_inspect",
+        "arguments": {
+          "poolId": "$poolId"
+        },
+        "precondition": "Use the actual retained original poolId and existing authenticated Remote View registration/pool read authority. A pool name is not a pool ID. Missing identity stays unbound; this read grants no acquire/release/retire authority."
+      },
+      "resumeCondition": "The same original retention record and provider assignment are verified; no guessed replacement, release or second acquisition is authorized.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_model_pool_original_readback": {
+      "rationale": "Read the exact original provider operation and current original pool. Reconcile the retained acquisition through the same original adapter/request store and original submission identity. If only an idempotency/acquisition key is retained, obtain its real owner operation receipt; never substitute that key as an operation ID or submit another acquisition while outcome is unknown. An unavailable observation cannot qualify a placement target; already admitted independent browser work remains available.",
+      "requiredActor": "original_authenticated_remote_view_acquisition_owner",
+      "evidenceRequirement": "Exact original identifiers, current authenticated owner evidence, unchanged permission scope and complete retained original result. Missing records or diagnostic clocks do not prove absence, no-effect or replay authority.",
+      "inspect": {
+        "tool": "remote_view_operation_status",
+        "arguments": {
+          "operationId": "$operationId"
+        },
+        "precondition": "Use the actual original provider operationId retained in its owner receipt and the existing authenticated owner session. An idempotency key, acquisition request key or task label is not an operation ID and must never be substituted. Missing identity is unbound, not permission to submit again."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the exact original provider operation and current original pool. Reconcile the retained acquisition through the same original adapter/request store and original submission identity. If only an idempotency/acquisition key is retained, obtain its real owner operation receipt; never substitute that key as an operation ID or submit another acquisition while outcome is unknown. An unavailable observation cannot qualify a placement target; already admitted independent browser work remains available.",
+          "precondition": "The existing actor owns this exact scope and preserves peer workloads, original fingerprints, unknown/pending effects and actual owner policy. No automatic mutation or arbitrary shell is authorized.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "remote_view_pool_inspect",
+        "arguments": {
+          "poolId": "$poolId"
+        },
+        "precondition": "Use the actual retained original poolId and existing authenticated Remote View registration/pool read authority. A pool name is not a pool ID. Missing identity stays unbound; this read grants no acquire/release/retire authority."
+      },
+      "resumeCondition": "The owner positively resolves the original acquisition and exact eligible assignment, or retains the unresolved original without replay.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_model_pool_capacity": {
+      "rationale": "Read actual original pool occupancy and declared provider maximum. Wait for or arrange the existing authorized owner release of only an exact no-longer-referenced owned assignment, and verify its actual released state before new admission. The pool owner may adjust real configured provider capacity only through its already supported administration; no new capacity setter is claimed here. Never close peer work, retire an assignment from absence, treat unknown observation as free capacity or bypass registration/generation policy. Existing admitted tasks do not need a new placement.",
+      "requiredActor": "original_authenticated_remote_view_pool_owner",
+      "evidenceRequirement": "Exact original identifiers, current authenticated owner evidence, unchanged permission scope and complete retained original result. Missing records or diagnostic clocks do not prove absence, no-effect or replay authority.",
+      "inspect": {
+        "tool": "remote_view_pool_inspect",
+        "arguments": {
+          "poolId": "$poolId"
+        },
+        "precondition": "Use the actual retained original poolId and existing authenticated Remote View registration/pool read authority. A pool name is not a pool ID. Missing identity stays unbound; this read grants no acquire/release/retire authority."
+      },
+      "remediation": [
+        {
+          "instruction": "Read actual original pool occupancy and declared provider maximum. Wait for or arrange the existing authorized owner release of only an exact no-longer-referenced owned assignment, and verify its actual released state before new admission. The pool owner may adjust real configured provider capacity only through its already supported administration; no new capacity setter is claimed here. Never close peer work, retire an assignment from absence, treat unknown observation as free capacity or bypass registration/generation policy. Existing admitted tasks do not need a new placement.",
+          "precondition": "The existing actor owns this exact scope and preserves peer workloads, original fingerprints, unknown/pending effects and actual owner policy. No automatic mutation or arbitrary shell is authorized.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "remote_view_pool_inspect",
+        "arguments": {
+          "poolId": "$poolId"
+        },
+        "precondition": "Use the actual retained original poolId and existing authenticated Remote View registration/pool read authority. A pool name is not a pool ID. Missing identity stays unbound; this read grants no acquire/release/retire authority."
+      },
+      "resumeCondition": "Current provider inventory proves eligible same-pool capacity under its actual policy; original unresolved acquisition remains protected.",
+      "maximumAutomaticAttempts": 1
+    },
+    "service_model_pool_observation": {
+      "rationale": "A missing or unverified provider assignment is an observation gap, not free capacity and not evidence that another acquisition is safe.",
+      "requiredActor": "original_authenticated_remote_view_pool_reader",
+      "evidenceRequirement": "Exact original identifiers, current authenticated owner evidence, unchanged permission scope and complete retained original result. Missing records or diagnostic clocks do not prove absence, no-effect or replay authority.",
+      "inspect": {
+        "tool": "remote_view_pool_inspect",
+        "arguments": {
+          "poolId": "$poolId"
+        },
+        "precondition": "Use the actual retained original poolId and existing authenticated Remote View registration/pool read authority. A pool name is not a pool ID. Missing identity stays unbound; this read grants no acquire/release/retire authority."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the exact original pool and obtain a fresh positive observation of the same assignment/desktop/generation through the existing owner adapter. Keep unknown candidates ineligible; restore the actual failed observation dependency without declaring an unrelated provider down. Reconcile any real pending acquisition separately using its retained original identity. Do not create a new acquisition, choose an unobserved desktop or infer release from absence. Existing admitted tasks remain independently usable.",
+          "precondition": "The existing actor owns this exact scope and preserves peer workloads, original fingerprints, unknown/pending effects and actual owner policy. No automatic mutation or arbitrary shell is authorized.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "remote_view_pool_inspect",
+        "arguments": {
+          "poolId": "$poolId"
+        },
+        "precondition": "Use the actual retained original poolId and existing authenticated Remote View registration/pool read authority. A pool name is not a pool ID. Missing identity stays unbound; this read grants no acquire/release/retire authority."
+      },
+      "resumeCondition": "Current owner inventory and positive native observation qualify the exact original assignment under existing pool policy, while any pending acquisition remains protected.",
+      "maximumAutomaticAttempts": 1
+    }
+  },
+  "codes": {
+    "service_state_browser_display_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3325,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_browser_profile_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3318,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_browser_session_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3332,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_display_profile_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3422,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_display_route_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3429,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_display_session_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3415,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_principal_capability_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3540,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_principal_profile_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3530,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_revision_exhausted": {
+      "recipe": "service_model_revision_exhaustion",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 42,
+          "owningFunction": "checked_successor"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_route_browser_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3450,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_route_controller_lease_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3471,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_route_display_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3443,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_route_session_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3457,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_route_viewer_lease_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3464,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_seeding_handoff_profile_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3512,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_session_tab_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3360,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_tab_routed_session_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3387,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "service_state_tab_session_missing": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 3380,
+          "owningFunction": "validate_service_state_invariants"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_drain_permission_denied": {
+      "recipe": "service_model_profile_permission",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/profile_access.rs",
+          "line": 765,
+          "owningFunction": "mutate_profile_policy"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_drain_target_conflict": {
+      "recipe": "service_model_profile_permission",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/profile_access.rs",
+          "line": 776,
+          "owningFunction": "mutate_profile_policy"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_evict_permission_denied": {
+      "recipe": "service_model_profile_permission",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/profile_access.rs",
+          "line": 820,
+          "owningFunction": "mutate_profile_policy"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_eviction_grace_deadline_required": {
+      "recipe": "service_model_profile_grace",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/profile_access.rs",
+          "line": 808,
+          "owningFunction": "mutate_profile_policy"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "profile_policy_permission_denied": {
+      "recipe": "service_model_profile_permission",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/profile_access.rs",
+          "line": 723,
+          "owningFunction": "mutate_profile_policy"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "profile_lifecycle_authorization_conflict": {
+      "recipe": "service_model_lifecycle_authorization",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/profile_lifecycle.rs",
+          "line": 113,
+          "owningFunction": "register_profile_eviction_authorization"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "profile_lifecycle_authorization_invalid": {
+      "recipe": "service_model_lifecycle_authorization",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/profile_lifecycle.rs",
+          "line": 89,
+          "owningFunction": "register_profile_eviction_authorization"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_operator_handoff_id_invalid": {
+      "recipe": "service_model_retention_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_retention.rs",
+          "line": 63,
+          "owningFunction": "project_remote_view_operator_handoff"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "remote_view_retention_browser_missing": {
+      "recipe": "service_model_retention_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_retention.rs",
+          "line": 81,
+          "owningFunction": "retain_remote_view_presentation"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "remote_view_retention_conflict": {
+      "recipe": "service_model_retention_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_retention.rs",
+          "line": 144,
+          "owningFunction": "retain_remote_view_presentation"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "remote_view_retention_desktop_missing": {
+      "recipe": "service_model_retention_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_retention.rs",
+          "line": 93,
+          "owningFunction": "retain_remote_view_presentation"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "remote_view_retention_missing": {
+      "recipe": "service_model_retention_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_retention.rs",
+          "line": 179,
+          "owningFunction": "detach_remote_view_presentation"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "remote_view_retention_session_missing": {
+      "recipe": "service_model_retention_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_retention.rs",
+          "line": 85,
+          "owningFunction": "retain_remote_view_presentation"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "remote_view_retention_tab_missing": {
+      "recipe": "service_model_retention_identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_retention.rs",
+          "line": 89,
+          "owningFunction": "retain_remote_view_presentation"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "remote_view_pool_acquisition_readback_required": {
+      "recipe": "service_model_pool_original_readback",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_pool.rs",
+          "line": 98,
+          "owningFunction": "prepare_remote_view_session_pool"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_pool_capacity_exhausted": {
+      "recipe": "service_model_pool_capacity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_pool.rs",
+          "line": 223,
+          "owningFunction": "prepare_remote_view_session_pool"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "remote_view_runtime_assignment_unavailable": {
+      "recipe": "service_model_pool_observation",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_session_pool.rs",
+          "line": 203,
+          "owningFunction": "prepare_remote_view_session_pool"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "service_state_schema_unsupported": {
+      "recipe": "service_model_state_integrity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/service_state.rs",
+          "line": 37,
+          "owningFunction": "ServiceStateCodecError::fmt"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    }
+  }
+}
