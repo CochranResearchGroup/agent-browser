@@ -6812,8 +6812,8 @@
       "recipe": "serviceClientTransportReadback",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/service-profile-allocation.ts",
+          "owningFunction": "profileAllocationFromLookupPayload"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -6824,8 +6824,8 @@
       "recipe": "dashboardGuacamoleObservation",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "readJson"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -6836,8 +6836,8 @@
       "recipe": "dashboardGuacamoleObservation",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "readJson"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -6848,8 +6848,8 @@
       "recipe": "dashboardGuacamoleObservation",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/guacamole-connection-sharing.ts",
+          "owningFunction": "recoverGuacamolePrimary"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -6860,8 +6860,8 @@
       "recipe": "dashboardForeignCdpObservation",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/foreign-cdp-control.ts",
+          "owningFunction": "foreignCdpFailure"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -6872,8 +6872,8 @@
       "recipe": "dashboardManualChoices",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+          "owningFunction": "loadManualBrowserCatalog"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -6884,8 +6884,8 @@
       "recipe": "dashboardManualOriginalReadback",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+          "owningFunction": "readOpened"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -6896,8 +6896,8 @@
       "recipe": "dashboardManualOriginalReadback",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/manual-browser-launch.ts",
+          "owningFunction": "readOpened"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -6908,8 +6908,8 @@
       "recipe": "serviceClientTransportReadback",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/workspace-profile-library.ts",
+          "owningFunction": "request"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -6920,8 +6920,8 @@
       "recipe": "clientTeachingOriginalReadback",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/workspace-siteguides.ts",
+          "owningFunction": "module"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -6932,8 +6932,8 @@
       "recipe": "clientTeachingReviewAuthority",
       "owningChecks": [
         {
-          "path": "packages/dashboard/src/lib/response-failure.ts",
-          "owningFunction": "dashboardResponseFailureError"
+          "path": "packages/dashboard/src/lib/workspace-siteguides.ts",
+          "owningFunction": "confirmTeachingReceipt"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
