@@ -117,7 +117,7 @@ for (const path of recoveryRegistry.fragments ?? []) {
       externalRecoveryTools[name] = declaration;
     }
   }
-  for (const key of ['exclusions', 'enforcedProducerCodePrefixes', 'enforcedProducerSources', 'enforcedProducerSourceFamilies']) recoveryRegistry[key] = [...(recoveryRegistry[key] ?? []), ...(fragment[key] ?? [])];
+  for (const key of ['exclusions', 'enforcedProducerCodePrefixes', 'enforcedProducerSources', 'enforcedProducerSourceFamilies', 'legacyProducerChecks', 'legacyNegativeChecks']) recoveryRegistry[key] = [...(recoveryRegistry[key] ?? []), ...(fragment[key] ?? [])];
   for (const key of ['recipes', 'codes', 'interfaces']) {
     recoveryRegistry[key] ??= {};
     for (const [name, entry] of Object.entries(fragment[key] ?? {})) {
@@ -642,6 +642,28 @@ for (const entry of recoveryRegistry.enforcedProducerSourceFamilies ?? []) {
   const pattern = new RegExp(`["'](${entry.codePattern})(?=[:"'])`, 'g');
   for (const match of source.matchAll(pattern)) discoveredReviewedCodes.add(match[1]);
 }
+function validateLegacyProducerContracts(registry) {
+  const qualified = new Set();
+  for (const entry of registry.legacyProducerChecks ?? []) {
+    assert(registry.codes[entry.code], `Uncovered known legacy producer ${entry.code}`);
+    assert.equal(entry.positiveExample.expectedCode,entry.code);
+    assert(entry.positiveExample.message?.length > 0 && entry.producerChecks.length > 0,'Legacy classification needs an actual producer and positive example');
+    for (const anchor of [...entry.producerChecks,entry.classifierCheck,entry.testCheck]) {
+      const source = readFileSync(anchor.path,'utf8');
+      assert(source.includes(anchor.sourceEvidence),`Missing legacy source anchor ${entry.code}:${anchor.path}`);
+      if (anchor.owningFunction) assert(source.includes(`fn ${anchor.owningFunction}(`),`Missing legacy classifier/test ${anchor.owningFunction}`);
+    }
+    assert(entry.classifierCheck.sourceEvidence.includes(entry.code),'Legacy classifier must actually emit its exact code');
+    qualified.add(entry.code);
+  }
+  for (const code of Object.keys(registry.codes).filter(code => code.startsWith('browser_action_'))) assert(qualified.has(code),`Missing source-specific legacy classification ${code}`);
+  for (const check of registry.legacyNegativeChecks ?? []) {
+    const source = readFileSync(check.path,'utf8');
+    assert(source.includes(check.sourceEvidence) && source.includes(`fn ${check.owningFunction}(`),'Missing legacy website/unknown negative source');
+    assert.equal(check.expectedCode,'service_operation_failed','Unqualified input must remain unclassified');
+  }
+}
+validateLegacyProducerContracts(recoveryRegistry);
 validateRecoveryInventory(recoveryRegistry, discoveredReviewedCodes);
 const clientQualification = JSON.parse(readFileSync('docs/dev/contracts/public-client-error-qualification.v1.json', 'utf8'));
 validateClientQualification(clientQualification, recoveryRegistry);
@@ -673,3 +695,5 @@ process.stdout.write(`Exact recovery contracts checked: ${Object.keys(recoveryRe
 assert.throws(() => validateComposedOwningCheck('unreviewed_anything', {path:'cli/src/native/service_profile_recovery.rs',codeComposition:{prefix:'unreviewed_',source:'fake.rs',suffix:'anything'}}), /Unreviewed composed producer source/);
 
 assert.throws(() => validateRecoveryCall({tool:'remote_view_recording_pin',arguments:{recordingId:'$recordingId',pinned:true,override:true}}), /Unavailable external owner argument/);
+
+assert.throws(() => validateLegacyProducerContracts({...recoveryRegistry,legacyProducerChecks:recoveryRegistry.legacyProducerChecks.slice(1)}), /Missing source-specific legacy classification/);

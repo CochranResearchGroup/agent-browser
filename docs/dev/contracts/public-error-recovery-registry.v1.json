@@ -17040,7 +17040,8 @@
   ],
   "fragments": [
     "docs/dev/contracts/public-error-recovery-client-dashboard.v1.json",
-    "docs/dev/contracts/public-error-recovery-service.v1.json"
+    "docs/dev/contracts/public-error-recovery-service.v1.json",
+    "docs/dev/contracts/public-error-recovery-legacy.v1.json"
   ],
   "recipeBudgetScope": "single_recipe_cycle",
   "enforcedProducerSources": [
