@@ -1845,13 +1845,19 @@ async fn write_json_result(
 fn json_result_parts(result: Result<String, String>, error_status: &str) -> (&str, String) {
     match result {
         Ok(resp) => ("200 OK", resp),
-        Err(e) => (
-            error_status,
-            format!(
-                r#"{{"success":false,"error":{}}}"#,
-                serde_json::to_string(&e).unwrap_or_else(|_| format!("\"{}\"", e))
-            ),
-        ),
+        Err(error) => {
+            // This adapter has no authenticated task or physical-effect proof.
+            // Typed admission rejections retain their own response path; raw
+            // owner errors acquire recourse without claiming safe replay.
+            let request = uuid::Uuid::new_v4().to_string();
+            let mut response = json!({"success":false,"error":error});
+            crate::native::service_failure::attach_public_failure(
+                &mut response,
+                &json!({"action":"http_service_gateway","requestId":request}),
+                "http_service_gateway",
+            );
+            (error_status, response.to_string())
+        }
     }
 }
 
@@ -4958,6 +4964,37 @@ async fn relay_service_command(session_name: &str, cmd: Value) -> Result<String,
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn http_json_error_owner_projection_preserves_error_and_uncertainty() {
+        let directory =
+            std::env::temp_dir().join(format!("http-owner-failure-{}", uuid::Uuid::new_v4()));
+        let guard = crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_HOME"]);
+        guard.set("HOME", directory.to_str().unwrap());
+        guard.set("AGENT_BROWSER_HOME", directory.to_str().unwrap());
+        let error = "service_state_stale_revision: retain original owner";
+        let (status, body) = super::json_result_parts(Err(error.into()), "409 Conflict");
+        let response: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(status, "409 Conflict");
+        assert_eq!(response["error"], error);
+        assert_eq!(response["failure"]["code"], "service_state_stale_revision");
+        assert!(
+            response["failure"]["occurrenceId"].is_string(),
+            "{response}"
+        );
+        assert!(response["failure"].get("taskId").is_none());
+        let (_, body) =
+            super::json_result_parts(Err("opaque upstream response".into()), "502 Bad Gateway");
+        let response: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(response["failure"]["code"], "service_operation_failed");
+        assert_eq!(response["failure"]["effectState"], "effect_uncertain");
+        let original = "{\"success\":true,\"data\":{\"unchanged\":true}}";
+        assert_eq!(
+            super::json_result_parts(Ok(original.into()), "502 Bad Gateway"),
+            ("200 OK", original.into())
+        );
+        drop(guard);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
     use super::*;
     use crate::native::action_runtime::DaemonState;
     use crate::native::actions::execute_command;
