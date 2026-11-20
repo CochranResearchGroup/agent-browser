@@ -213,6 +213,7 @@ pub(crate) fn metadata(browser_id: &str) -> Result<Value, String> {
     Ok(
         json!({"epoch":control.epoch,"owner":if control.human {"human"} else if control.awaiting_observation {"awaiting_observation"} else {"agent"},
         "pauseReads":control.pause_reads,"cooperativeOnly":true,"actor":control.actor,
+        "agentInteractionActive":!control.human && control.flights.values().any(|state| state == "dispatched"),
         "pendingOutcomeCount":pending.len(),"pendingOutcomes":pending.iter().take(32).map(|(id,state)|json!({"requestId":id,"state":state})).collect::<Vec<_>>(),"outcomesTruncated":pending.len()>32,"lastChange":control.audit.last()}),
     )
 }

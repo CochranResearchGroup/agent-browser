@@ -237,6 +237,8 @@ async fn mode_reply(id: &str, request: ModeRequest) -> Result<Value, String> {
             if let Some(request) = &returning {
                 control::return_handoff(&target.browser.id, &handoff, &digest, request)?;
             }
+            proof["agentInteractionActive"] =
+                control::metadata(&target.browser.id)?["agentInteractionActive"].clone();
             proof["handoffIntent"] = json!(control::handoff_intent(
                 &target.browser.id,
                 &handoff,
