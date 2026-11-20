@@ -1300,6 +1300,10 @@ pub struct BrowserSessionManager<'a, E> {
     config: BrowserSessionManagerConfig,
     protected_session_ids: BTreeSet<String>,
     externally_protected_session_ids: BTreeSet<String>,
+    maximum_retention_claims: usize,
+    maximum_popup_admissions: usize,
+    admission_policy_source: String,
+    deferred_child_tab_count: usize,
 }
 
 impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
@@ -1339,7 +1343,34 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             config,
             protected_session_ids,
             externally_protected_session_ids: leave_open_session_ids,
+            maximum_retention_claims: 4096,
+            maximum_popup_admissions: 64,
+            admission_policy_source: "model_default".into(),
+            deferred_child_tab_count: 0,
         }
+    }
+
+    /// Apply owner-observed live operational limits without changing custody or
+    /// deleting historical claim identities. No clock observation is inferred.
+    pub fn with_admission_limits(
+        mut self,
+        retention: usize,
+        popups: usize,
+        source: &str,
+    ) -> Result<Self, String> {
+        if retention == 0 || popups == 0 {
+            return Err("browser_session_admission_limits_invalid".into());
+        }
+        self.maximum_retention_claims = retention;
+        self.maximum_popup_admissions = popups;
+        self.admission_policy_source = source.to_owned();
+        Ok(self)
+    }
+
+    /// Eligible direct children still deferred by this observation's bounded
+    /// admission. Unknown/peer targets are not attributed by this count.
+    pub fn deferred_child_tab_count(&self) -> usize {
+        self.deferred_child_tab_count
     }
 
     /// Add sessions referenced by current external authority or a pending
@@ -1459,8 +1490,14 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .ok_or_else(fail)?
                 .max(prior.as_ref().map_or(0, |old| old.expires_at_ms))
         };
-        if prior.is_none() && self.state.retention_claims.len() >= 4096 {
-            return Err("browser_retention_claim_capacity".into());
+        let active_claims = self
+            .state
+            .retention_claims
+            .values()
+            .filter(|claim| !claim.released)
+            .count();
+        if prior.is_none() && !released && active_claims >= self.maximum_retention_claims {
+            return Err(format!("browser_retention_claim_capacity: activeCount={active_claims};limit={};policySource={}; released claim identities retained; inspect or increase maximumRetentionClaims through task_operation capacity", self.maximum_retention_claims, self.admission_policy_source));
         }
         let claim = BrowserSessionRetentionClaim {
             claim_id: request.claim_id.clone(),
@@ -2722,10 +2759,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .map(|tab| tab.target_id.clone())
             .collect::<BTreeSet<_>>();
         let mut admitted = Vec::new();
+        self.deferred_child_tab_count = 0;
         // Bounded transitive opener chains allow a login popup to open its
         // receiving destination. An unattached extension tab needs a separate
         // producer attribution contract and is never guessed from its URL.
-        for _ in 0..64 {
+        for _ in 0..self.maximum_popup_admissions {
             let mut changed = false;
             for (target, opener) in observations {
                 if target.is_empty()
@@ -2748,8 +2786,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 {
                     continue;
                 }
-                if admitted.len() >= 64 {
-                    return Err("browser_session_popup_limit_exceeded".into());
+                if admitted.len() >= self.maximum_popup_admissions {
+                    continue;
                 }
                 owned.insert(target.clone());
                 admitted.push(target.clone());
@@ -2759,6 +2797,23 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 break;
             }
         }
+        self.deferred_child_tab_count = observations
+            .iter()
+            .filter(|(target, opener)| {
+                !target.is_empty()
+                    && target != opener
+                    && owned.contains(opener)
+                    && !owned.contains(target)
+                    && !self.state.tabs.values().any(|tab| tab.target_id == *target)
+                    && !self
+                        .state
+                        .app_browser_attachments
+                        .get(&session.browser_id)
+                        .is_some_and(|row| row.borrowed_tab_ids.contains(target))
+            })
+            .map(|(target, _)| target)
+            .collect::<BTreeSet<_>>()
+            .len();
         for target in &admitted {
             self.state.tabs.insert(
                 target.clone(),

@@ -2268,6 +2268,51 @@
       },
       "resumeCondition": "The existing owner qualifies link timing or explicitly repairs the same-link retention under current authority; preserve independent authentication and original browser custody. Source finding: docs/dev/maintenance/spec749-legacy-handoff-time.md.",
       "maximumAutomaticAttempts": 1
+    },
+    "session_admission_capacity": {
+      "rationale": "Retention admission counts unreleased owner claims without discarding historical identity; popup observations admit bounded children and report eligible deferred targets.",
+      "requiredActor": "task_policy_owner",
+      "evidenceRequirement": "Current capacity readback includes all-retained-session unreleased claim count, released history count, effective limits and actual policy source. Guest age never releases claims.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "operation": "capacity"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Update the existing complete task capacity policy with authorized maximumRetentionClaims or maximumPopupAdmissions. Retain released original identities and unresolved claims. Popup continuation may instead observe the same task again without replaying its original input.",
+          "precondition": "The acting task policy owner has reviewed the complete positive policy and current global unreleased-claim count.",
+          "call": {
+            "tool": "browser_command",
+            "arguments": {
+              "taskId": "$taskId",
+              "action": "task_operation",
+              "params": {
+                "operation": "capacity",
+                "scope": "task",
+                "policy": "$reviewedPolicy"
+              }
+            }
+          }
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_operation",
+          "params": {
+            "operation": "capacity"
+          }
+        }
+      },
+      "resumeCondition": "Capacity inspection shows the authorized current limits. Retention retries retain the same original claim identity; deferred popup observation continues on the same task without input replay.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -12642,6 +12687,822 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "uncertain"
+    },
+    "browser_disposable_allocation_identity_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_session_missing_during_tab_close": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_placement_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_attachment_placement_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_retention_claim_released": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_disposable_allocation_path_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_tab_already_attributed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_profile_activity_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_navigation_url_empty": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_session_recovery_unsupported": {
+      "recipe": "runtime_capability",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_expired_epoch_activity_protected": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_browser_not_live": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_missing_during_tab_creation": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_sharing_required": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_navigation_history_limit_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_attachment_capability_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_lifecycle_peer_scope_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_session_expiry_exhausted": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_tab_observation_unsupported": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_owner_replacement_browser_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_profile_not_found": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_session_recovery_browser_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_tab_view_unsupported": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_admission_limits_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_disposable_profile_missing_during_reap": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_tab_new_source_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_session_browser_missing_after_open": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_missing_during_navigation": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_missing_during_refresh": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_remaining_session_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_build_selection_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_retention_claim_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_sequence_exhausted": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_missing_during_tab_refresh": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_profile_not_found": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_tab_initial_source_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_navigation_history_measure_failed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_tab_session_attribution_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_desktop_unavailable": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_retention_claim_capacity": {
+      "recipe": "session_admission_capacity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
+    },
+    "browser_disposable_profile_missing_during_quota": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_reconnect_explicit_recovery_placement_unsupported": {
+      "recipe": "runtime_capability",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_disposable_policy_not_found": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_disposable_profile_count_exhausted": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_current_tab_missing_during_navigation": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_profile_still_referenced": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_missing_during_recovery": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_profile_count_quota_protected": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_navigation_timestamp_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_session_current_tab_absent": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_retention_binding_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_disposable_sequence_exhausted": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_borrowed_tab_close_forbidden": {
+      "recipe": "runtime_app_authority",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_session_browser_missing_during_close": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_lost": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_profile_bytes_quota_protected": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_cleanup_expiry_exhausted": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_build_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_session_launch_desktop_mismatch": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_lifecycle_target_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_session_missing_during_tab_adoption": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_not_retained": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_placement_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_preserve_requires_live_browser": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_owner_replacement_identity_unverified": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_profile_requires_disposable_intent": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_tab_handoff_identity_conflict": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_retention_policy_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_tab_handoff_id_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_handoff_resume_intent_missing": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "remote_view_native_target_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "remote_view_tab_handoff_record_conflict": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "remote_view_tab_handoff_id_conflict": {
+      "recipe": "session_handoff",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "browser_session_popup_limit_exceeded": {
+      "recipe": "session_admission_capacity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs",
+          "revision": "11546fd1c9f6af19c7c818ab57451a67cbb09ac8"
+        }
+      ],
+      "legacy": true,
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -12973,6 +13834,16 @@
     },
     {
       "path": "cli/src/native/browser_human_handoff.rs",
+      "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
+    },
+    {
+      "path": "crates/agent-browser-service-model/src/remote_view_tab_handoff.rs",
       "codePattern": "(?:browser_|remote_view_)[a-z0-9_]+",
       "beforeNamedTestModule": true
     }

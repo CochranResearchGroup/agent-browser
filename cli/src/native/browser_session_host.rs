@@ -577,6 +577,15 @@ fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
 }
 
 pub(crate) trait BrowserSessionPersistence {
+    /// Non-SQL test adapters retain explicit model defaults; the production SQL
+    /// owner reads live policy on each retention/popup admission only.
+    fn session_admission_limits(
+        &self,
+        _task: &str,
+    ) -> Result<(usize, usize, &'static str), String> {
+        Ok((4096, 64, "backend_default"))
+    }
+
     fn runtime_database_path(&self) -> Result<PathBuf, String> {
         Err("browser_runtime_database_path_unavailable".into())
     }
@@ -650,6 +659,10 @@ pub(crate) trait BrowserSessionPersistence {
 }
 
 impl BrowserSessionPersistence for BrowserSessionSqliteStore {
+    fn session_admission_limits(&self, task: &str) -> Result<(usize, usize, &'static str), String> {
+        BrowserSessionSqliteStore::session_admission_limits(self, task)
+    }
+
     fn runtime_database_path(&self) -> Result<PathBuf, String> {
         self.database_path()
     }
@@ -2163,7 +2176,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 >(value)
                 .map_err(|_| "browser_retention_request_invalid")?;
                 // Retention uses owner time, never caller-supplied activity timestamps.
-                let receipt = self.manager()?.retain_session(request, current_unix_ms())?;
+                let (retention, popups, source) = self
+                    .persistence
+                    .session_admission_limits(&request.session_id)?;
+                let receipt = self
+                    .manager()?
+                    .with_admission_limits(retention, popups, source)?
+                    .retain_session(request, current_unix_ms())?;
                 self.commit_state()?;
                 serde_json::to_value(receipt)
                     .map_err(|_| "browser_retention_receipt_invalid".into())
@@ -3622,8 +3641,25 @@ where
                     ))
                 })
                 .collect::<Result<Vec<_>, String>>()?;
-            self.manager()?
-                .observe_child_tabs(&session.id, &children, now_ms)?;
+            let (retention, limit, source) =
+                self.persistence.session_admission_limits(&session.id)?;
+            let (admitted, deferred) = {
+                let mut manager = self
+                    .manager()?
+                    .with_admission_limits(retention, limit, source)?;
+                let admitted = manager
+                    .observe_child_tabs(&session.id, &children, now_ms)?
+                    .len();
+                (admitted, manager.deferred_child_tab_count())
+            };
+            let admission = serde_json::json!({"admittedCount":admitted,"deferredEligibleTargetCount":deferred,
+                "limit":limit,"policySource":source,"state":if deferred == 0 {"complete"}else{"deferred"},
+                "continuation":"Observe the same task again or increase maximumPopupAdmissions through task_operation capacity; no original input replay"});
+            if response["data"].is_object() {
+                response["data"]["popupAdmission"] = admission;
+            } else {
+                response["popupAdmission"] = admission;
+            }
             if self.state != self.persisted_state {
                 self.commit_state()?;
             }

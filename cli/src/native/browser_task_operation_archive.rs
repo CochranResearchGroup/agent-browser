@@ -25,6 +25,17 @@ pub(crate) struct CapacityPolicy {
     /// Admission limit only; already completed artifact metadata is always retained.
     #[serde(default = "default_artifact_references")]
     pub(crate) maximum_artifact_references: usize,
+    /// Live operational limits; released retention history is never discarded.
+    #[serde(default = "default_retention_claims")]
+    pub(crate) maximum_retention_claims: usize,
+    #[serde(default = "default_popup_admissions")]
+    pub(crate) maximum_popup_admissions: usize,
+}
+fn default_retention_claims() -> usize {
+    4096
+}
+fn default_popup_admissions() -> usize {
+    64
 }
 fn default_artifact_references() -> usize {
     256
@@ -42,6 +53,8 @@ impl Default for CapacityPolicy {
             maximum_capacity: 4096,
             maximum_login_steps: default_login_steps(),
             maximum_artifact_references: default_artifact_references(),
+            maximum_retention_claims: default_retention_claims(),
+            maximum_popup_admissions: default_popup_admissions(),
         }
     }
 }
@@ -52,8 +65,10 @@ impl CapacityPolicy {
             || self.maximum_capacity < self.initial_capacity
             || self.maximum_login_steps == 0
             || self.maximum_artifact_references == 0
+            || self.maximum_retention_claims == 0
+            || self.maximum_popup_admissions == 0
         {
-            return Err("browser_task_operation_capacity_policy_invalid: use positive initialCapacity and extensionIncrement with maximumCapacity at least initialCapacity; maximumLoginSteps and maximumArtifactReferences must be positive".into());
+            return Err("browser_task_operation_capacity_policy_invalid: use positive initialCapacity and extensionIncrement with maximumCapacity at least initialCapacity; maximumLoginSteps, maximumArtifactReferences, maximumRetentionClaims and maximumPopupAdmissions must be positive".into());
         }
         Ok(())
     }
@@ -238,6 +253,19 @@ pub(super) fn strip_archived_json(
     serde_json::to_string(&value).map_err(|_| "browser_task_operation_document_invalid".into())
 }
 impl BrowserSessionSqliteStore {
+    pub(crate) fn session_admission_limits(
+        &self,
+        task: &str,
+    ) -> Result<(usize, usize, &'static str), String> {
+        let config = configuration(&self.connection)?;
+        let (policy, source) = config.effective(task);
+        policy.validate()?;
+        Ok((
+            policy.maximum_retention_claims,
+            policy.maximum_popup_admissions,
+            source,
+        ))
+    }
     pub(crate) fn artifact_reference_limit(&self, task: &str) -> Result<usize, String> {
         let config = configuration(&self.connection)?;
         let (policy, _) = config.effective(task);
@@ -325,7 +353,17 @@ impl BrowserSessionSqliteStore {
             .filter(|r| !r.state.is_terminal())
             .count();
         let artifact_count = state.task_artifact_references.get(task).map_or(0, Vec::len);
-        let result = json!({"artifactReferenceCount":artifact_count,"artifactReferenceLimit":policy.maximum_artifact_references,"schemaVersion":POLICY_SCHEMA,"taskId":task,"policy":policy,"policySource":source,"capacity":capacity,"activeCount":active,"archivedCount":archived,"unresolvedCount":unresolved,"automaticArchival":true,"automaticExtension":true,"requiresRestart":false,"nextAction":{"tool":"browser_command","arguments":{"taskId":task,"action":"task_operation","params":{"operation":"capacity"}}}});
+        let retention_active = state
+            .retention_claims
+            .values()
+            .filter(|claim| !claim.released)
+            .count();
+        let retention_released = state
+            .retention_claims
+            .values()
+            .filter(|claim| claim.released)
+            .count();
+        let result = json!({"retentionClaimActiveCount":retention_active,"retentionClaimReleasedHistoryCount":retention_released,"retentionClaimCountScope":"all_retained_sessions","retentionClaimLimit":policy.maximum_retention_claims,"popupAdmissionLimit":policy.maximum_popup_admissions,"artifactReferenceCount":artifact_count,"artifactReferenceLimit":policy.maximum_artifact_references,"schemaVersion":POLICY_SCHEMA,"taskId":task,"policy":policy,"policySource":source,"capacity":capacity,"activeCount":active,"archivedCount":archived,"unresolvedCount":unresolved,"automaticArchival":true,"automaticExtension":true,"requiresRestart":false,"nextAction":{"tool":"browser_command","arguments":{"taskId":task,"action":"task_operation","params":{"operation":"capacity"}}}});
         transaction.commit().map_err(|_| {
             "browser_task_operation_capacity_commit_failed: inspect effective policy before retry"
         })?;
@@ -356,14 +394,24 @@ mod artifact_capacity_tests {
         );
         store.save_session_state(&state).unwrap();
         assert_eq!(store.artifact_reference_limit("task").unwrap(), 256);
-        let policy: CapacityPolicy = serde_json::from_value(json!({"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096,"maximumArtifactReferences":512})).unwrap();
+        let policy: CapacityPolicy = serde_json::from_value(json!({"initialCapacity":256,"extensionIncrement":256,"maximumCapacity":4096,"maximumArtifactReferences":512,"maximumRetentionClaims":8192,"maximumPopupAdmissions":128})).unwrap();
         let result = store
             .task_operation_capacity("task", "task", Some(policy))
             .unwrap();
         assert_eq!(result["artifactReferenceLimit"], 512);
+        assert_eq!(result["retentionClaimLimit"], 8192);
+        assert_eq!(result["popupAdmissionLimit"], 128);
+        assert_eq!(
+            store.session_admission_limits("task").unwrap(),
+            (8192, 128, "task_override")
+        );
         drop(store);
         let store = BrowserSessionSqliteStore::open(&root).unwrap();
         assert_eq!(store.artifact_reference_limit("task").unwrap(), 512);
+        assert_eq!(
+            store.session_admission_limits("task").unwrap(),
+            (8192, 128, "task_override")
+        );
         assert_eq!(store.load_session_state().unwrap(), state);
         drop(store);
         std::fs::remove_dir_all(root).unwrap();

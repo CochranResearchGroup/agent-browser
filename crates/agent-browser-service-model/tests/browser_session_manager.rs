@@ -108,7 +108,7 @@ struct FixtureEffects {
 }
 
 #[test]
-fn observed_popup_custody_preserves_peers_and_rejects_overflow_without_partial_claims() {
+fn observed_popup_custody_preserves_peers_and_defers_bounded_overflow() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();
     let mut effects = FixtureEffects {
@@ -168,18 +168,36 @@ fn observed_popup_custody_preserves_peers_and_rejects_overflow_without_partial_c
     let oversized = (0..65)
         .map(|index| (format!("overflow-{index}"), "alice-root".into()))
         .collect::<Vec<_>>();
-    let mut manager = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config);
+    let mut manager =
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone());
     assert_eq!(
         manager
             .observe_child_tabs(&alice.session_id, &oversized, 1300)
-            .unwrap_err(),
-        "browser_session_popup_limit_exceeded"
+            .unwrap()
+            .len(),
+        64
     );
+    assert_eq!(manager.deferred_child_tab_count(), 1);
+    drop(manager);
+    let mut manager = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .with_admission_limits(4096, 128, "task_override")
+        .unwrap();
+    assert_eq!(
+        manager
+            .observe_child_tabs(&alice.session_id, &oversized, 1301)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(manager.deferred_child_tab_count(), 0);
     drop(manager);
     assert_eq!(
-        state, before,
-        "Rejected observations publish no partial custody"
+        state.sessions, before.sessions,
+        "Observation preserves logical tasks"
     );
+    assert_eq!(state.tabs["bob-root"], before.tabs["bob-root"]);
+    assert!(!state.tabs.contains_key("peer-child"));
+    assert!(!state.tabs.contains_key("unowned"));
 }
 
 #[test]
@@ -3560,5 +3578,80 @@ fn explicit_closed_handoff_keeps_link_valid_and_binds_reopen_to_one_request() {
     assert_eq!(
         remote_view_handoff_reopen_intent(&state, "same-link", 5001).unwrap_err(),
         "remote_view_tab_handoff_missing"
+    );
+}
+
+#[test]
+fn retention_capacity_is_live_and_released_originals_do_not_consume_admission() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 100,
+        remote_view_desktops: vec![],
+    };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "claims",
+            "profile-a",
+            1000,
+        ))
+        .unwrap();
+    let browser = state.browsers[&opened.browser_id].clone();
+    let first = agent_browser_service_model::BrowserSessionRetentionRequest {
+        operation: "acquire".into(),
+        claim_id: "first".into(),
+        owner_id: "owner".into(),
+        session_id: opened.session_id.clone(),
+        browser_id: browser.id.clone(),
+        browser_pid: browser.pid,
+        ttl_ms: Some(1000),
+        generation: None,
+    };
+    let mut second = first.clone();
+    second.claim_id = "second".into();
+    let receipt = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .with_admission_limits(1, 64, "task_override")
+        .unwrap()
+        .retain_session(first.clone(), 1050)
+        .unwrap();
+    let refused = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .with_admission_limits(1, 64, "task_override")
+        .unwrap()
+        .retain_session(second.clone(), 999_999)
+        .unwrap_err();
+    assert!(refused.contains("activeCount=1;limit=1;policySource=task_override"));
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .with_admission_limits(2, 64, "task_override")
+        .unwrap()
+        .retain_session(second.clone(), 999_999)
+        .unwrap();
+    let mut release = first.clone();
+    release.operation = "release".into();
+    release.generation = Some(receipt.generation);
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .with_admission_limits(2, 64, "task_override")
+        .unwrap()
+        .retain_session(release, 1)
+        .unwrap();
+    let mut third = second;
+    third.claim_id = "third".into();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .with_admission_limits(2, 64, "task_override")
+        .unwrap()
+        .retain_session(third, 1)
+        .unwrap();
+    assert_eq!(state.retention_claims.len(), 3);
+    assert!(state.retention_claims["first"].released);
+    assert_eq!(
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+            .with_admission_limits(2, 64, "task_override")
+            .unwrap()
+            .retain_session(first, 1)
+            .unwrap_err(),
+        "browser_retention_claim_released"
     );
 }
