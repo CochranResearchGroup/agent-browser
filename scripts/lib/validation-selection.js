@@ -70,7 +70,7 @@ function normalizeFiles(files) {
 function surfacesFor(file) {
   const surfaces = [];
   if (isDocsOrGovernance(file)) surfaces.push('docs');
-  if (file.startsWith('packages/dashboard/') || ['scripts/test-dashboard-failure-observation.js', 'scripts/test-dashboard-read-coordinator.ts', 'scripts/test-dashboard-view-streams.js'].includes(file)) surfaces.push('dashboard');
+  if (file.startsWith('packages/dashboard/') || ['scripts/test-dashboard-failure-observation.js', 'scripts/test-dashboard-read-coordinator.ts', 'scripts/test-dashboard-view-streams.js', 'scripts/test-dashboard-guacamole-connection-sharing.ts', 'scripts/test-dashboard-launcher-eligibility.js', 'scripts/test-dashboard-profile-allocation.js', 'scripts/test-native-window-inventory.ts'].includes(file)) surfaces.push('dashboard');
   if (isServiceClient(file) || isAuthCompositionSurface(file) || /^scripts\/test-login-(?:progress|discovery|recovery|verification|continuation|workflow)\.mjs$/.test(file)) surfaces.push('service-client');
   if (isRepositoryTooling(file)) surfaces.push('repository-tooling');
   if (isWorkstationOrRelease(file)) surfaces.push('workstation');
@@ -89,6 +89,7 @@ function isDocsOrGovernance(file) {
   ) && !file.startsWith('docs/dev/contracts/');
 }
 function isServiceClient(file) {
+  if (['scripts/test-login-playbook.js', 'scripts/test-login-playbook-hosted.js', 'scripts/test-native-receiving-browser.js'].includes(file)) return true;
   if (['scripts/test-native-image-challenge.js', 'scripts/test-task-briefing-client.js', 'scripts/test-teaching-draft.js', 'scripts/test-teaching-evidence.js', 'scripts/test-teaching-review.js', 'scripts/test-workspace-siteguides.mjs'].includes(file)) return true;
   if (file === 'scripts/smoke-task-operation-continuation.mjs') return true;
   if (file === 'scripts/smoke-service-incident-summary-http.js') return true;
