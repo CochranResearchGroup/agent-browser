@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Public retained-task acceptance using the existing disposable smoke harness. */
 import assert from 'node:assert/strict';
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {existsSync, mkdirSync, readFileSync, readdirSync} from 'node:fs';
 import {isAbsolute, join} from 'node:path';
 import {createSmokeContext, createMcpStdioClient, runCli} from './smoke-utils.js';
@@ -84,9 +84,32 @@ try {
   assert.equal(full.success,false);assert.match(full.error,/capacity_reached/);
   const retained=await call('browser_command',advanced('task_operation',{requestId:'unknown-1'}));
   assert.equal(retained.operation.state,'uncertain');
-  await capacity({initialCapacity:2,extensionIncrement:1,maximumCapacity:3});
+  const occurrenceId=full.failure.occurrenceId;
+  assert(occurrenceId,'capacity refusal must retain its journal occurrence');
+  const recover=params=>call('browser_command',advanced('failure_recovery',params));
+  const inspection=await recover({operation:'inspect',occurrenceId});
+  assert.equal(inspection.failure.code,'browser_task_operation_capacity_reached');
+  await recover({operation:'configure',scope:'task',actor:'synthetic-acceptance',reason:'continue the same bounded synthetic work',policy:{maxAttempts:4,maxNoProgress:3}});
+  const attemptId=randomUUID();
+  const remedy={tool:'browser_command',arguments:advanced('task_operation',{operation:'capacity',scope:'task',policy:{initialCapacity:2,extensionIncrement:1,maximumCapacity:3}})};
+  const repair={operation:'run',occurrenceId,attemptId,remedy};
+  const recovered=await recover(repair);
+  assert.equal(recovered.status,'ready_for_explicit_resume',JSON.stringify(recovered));
+  assert.equal(recovered.originalOperationReplayed,false);
+  const recoveryReplay=await recover(repair);
+  assert.equal(recoveryReplay.replayedRecoveryResult,true);
+  assert.equal(recoveryReplay.attemptId,attemptId);
+  const changedRepair=await envelope('browser_command',advanced('failure_recovery',{...repair,remedy:{...remedy,arguments:advanced('task_operation',{operation:'capacity',scope:'task',policy:{initialCapacity:2,extensionIncrement:1,maximumCapacity:4}})}}));
+  assert.equal(changedRepair.success,false);assert.match(changedRepair.error,/attempt_conflict/);
+  receipt.boundedRecovery={attemptId,occurrenceId,replayedWithoutRemedy:true,changedIntentRefused:true};
   const continued=await evaluate('globalThis.continuationCount','after-ceiling');
   assert.equal(continued.result,260);
+  const report=await recover({operation:'record_resume',occurrenceId,attemptId,requestId:'after-ceiling',actor:'synthetic-acceptance'});
+  assert.equal(report.ownerAcknowledgement,'verified_from_original_journal');
+  assert.equal(report.taskCompletion,'unverified');
+  const duplicateReport=await recover({operation:'record_resume',occurrenceId,attemptId,requestId:'after-ceiling',actor:'synthetic-acceptance'});
+  assert.equal(duplicateReport.replayedResumeReport,true);
+  receipt.boundedRecovery.resumeAcknowledgementVerified=true;
   const current=await call('browser_continue',{taskId:task.taskId});
   assert.deepEqual([current.taskId,current.browserId,current.tabId],identity);
   usage=await capacity();receipt.finalCapacity=usage;receipt.ceilingRecovery=true;receipt.passed=true;
