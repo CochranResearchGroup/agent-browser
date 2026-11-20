@@ -111,3 +111,13 @@ invented exact per-phase duration.
 The documented supported client has no local elapsed-clock adapter. Source
 inspection found only time/health/deadline operations. Consequently the capture
 does not extrapolate service UTC using a WSL timer or start a private QPC reader.
+
+Client execution now has a five-second ordinary OS availability deadline and a
+128KiB stdout cap enforced during nonblocking pipe reads. Timeout, overflow and
+I/O failure kill/reap only the exact helper spawned for that observation and
+return an unavailable measurement; browser work is not vetoed. The bounded pipe
+transport is supported on Unix; other platforms explicitly report unsupported
+sampling transport rather than risking an unbounded wait. This does not describe
+an auxiliary-client failure as a StableTime service outage. Focused process tests
+cover a hung helper, oversized output, exact child reaping and successful input/
+output exchange using the existing connection test harness.
