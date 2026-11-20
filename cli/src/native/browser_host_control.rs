@@ -619,7 +619,8 @@ pub(crate) fn observed(browser_id: &str, expected: u64) -> Result<(), String> {
 
 /// Read existing producer provenance; never create a completion or accept caller
 /// supplied evidence. Restrict the live-supervisor exception to terminal ordinary
-/// journal-eligible requests. Native/private input uncertainty retains positive-dispatcher-exit rules.
+/// journal-eligible requests. Native input and unjournaled uncertainty retain
+/// positive-dispatcher-exit rules.
 /// Completion presence is producer bookkeeping, not trusted guest elapsed time;
 /// the terminal dispatcher flight, exact original and fresh observation remain required.
 fn completed_ordinary_request(
@@ -658,7 +659,10 @@ fn completed_ordinary_request(
         && super::browser_task_operations::eligible_action(&original.action)
         && original.state == agent_browser_service_model::BrowserTaskOperationState::Uncertain
         && original.completed_at_ms.is_some()
-        && original.control_epoch == expected
+        // Current expected epoch is already matched to the current control
+        // generation by reconcile_ready. Historical completed originals keep
+        // their immutable earlier epoch across actual human takeover/return.
+        && original.control_epoch <= expected
         && original.browser_id == browser_id
         && original.request_id == request_id
         && original.profile_id == task.profile_id
