@@ -152,13 +152,13 @@ try{
  async function heldStartupLockProbe(run,verifyResult){
   const token=`latency-probe-${randomUUID()}`;
   writeFileSync(startupLock,token,{flag:'wx',mode:0o600});
-  let completed=false;
+  let completed=false,completedBeforeStartupLockRelease=false;
   const outcome=run().then(value=>{completed=true;return {value};},error=>({error}));
   // Incidental OS coordination only, not trusted elapsed-time evidence.
-  try{await new Promise(resolve=>setTimeout(resolve,1000));}
+  try{await new Promise(resolve=>setTimeout(resolve,1000));completedBeforeStartupLockRelease=completed;}
   finally{assert.equal(readFileSync(startupLock,'utf8'),token);unlinkSync(startupLock);}
   const result=await outcome;if(result.error)throw result.error;verifyResult(result.value);
-  return {completedBeforeStartupLockRelease:completed,observation:'OS coordination check; no latency bound or delivery guarantee'};
+  return {completedBeforeStartupLockRelease,observation:'OS coordination check; no latency bound or delivery guarantee'};
  }
  receipt.heldStartupLockEvaluateProbe={...await heldStartupLockProbe(agent,verify),callPath:'existing task_operations transport; does not call ensure_daemon',causalForWarmStartupLockOptimization:false};
  // Retain the old field for receipt consumers, explicitly scoped to evaluate.
