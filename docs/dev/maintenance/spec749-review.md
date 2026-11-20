@@ -31,7 +31,7 @@ No scope-creep finding was accepted. Two owner Auth compatibility tests fail bec
 
 ## One bounded TDD pass
 
-Pass: 1, started; RED/GREEN execution pending. The five remediation tickets are the complete accepted finding set. Root owns #765 shared time/profile expiry, then #769 provider diagnostics/presentation. Capacity owns #766, coordination owns #767, latency owns #768. Existing auxiliaries are reused; there is no new architecture lane or test project.
+Pass: 1, active. Four initial behavioral RED cases are preserved at1046932d0; first profile planning GREEN atbd33 and five Auth/challenge/handoff/startup cases pass at3899f4b26. The second profile apply slice is behaviorally RED at3899f4b26; qualified apply source awaits GREEN. The five remediation tickets are the complete accepted finding set. Root owns #765 shared time/profile expiry and integration; one bounded provider worker delivered #769 diagnostics/presentation, with capacity performing source qualification after #766. Capacity owns #766, coordination owns #767, latency owns #768. Existing auxiliaries are reused; there is no new architecture lane or test project.
 
 Existing public seams: profile recovery/reset commands; Auth/challenge start/status/resume/cancel and original effect readback; retained handoff/store/native mode routes; connection warm reuse and paired measurement; provider Native activity/control and toolbar. Time is injected only at the existing external service boundary. Preserve exact RED and GREEN commands and source identities. Tests that selected zero cases or failed setup/cleanup do not count as passing acceptance.
 

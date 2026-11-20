@@ -9,14 +9,14 @@ lanes:
     branch: platform/spec749-integration
     target: main
     accountable_owner: ecochran76
-    work_items: [CochranResearchGroup/agent-browser#749, CochranResearchGroup/agent-browser#750, CochranResearchGroup/agent-browser#751, CochranResearchGroup/agent-browser#752, CochranResearchGroup/agent-browser#753, CochranResearchGroup/agent-browser#754, CochranResearchGroup/agent-browser#755, CochranResearchGroup/agent-browser#756, CochranResearchGroup/agent-browser#757, CochranResearchGroup/agent-browser#758]
+    work_items: [CochranResearchGroup/agent-browser#749, CochranResearchGroup/agent-browser#750, CochranResearchGroup/agent-browser#751, CochranResearchGroup/agent-browser#752, CochranResearchGroup/agent-browser#753, CochranResearchGroup/agent-browser#754, CochranResearchGroup/agent-browser#755, CochranResearchGroup/agent-browser#756, CochranResearchGroup/agent-browser#757, CochranResearchGroup/agent-browser#758, CochranResearchGroup/agent-browser#760, CochranResearchGroup/agent-browser#761, CochranResearchGroup/agent-browser#762, CochranResearchGroup/agent-browser#763, CochranResearchGroup/agent-browser#764, CochranResearchGroup/agent-browser#765, CochranResearchGroup/agent-browser#766, CochranResearchGroup/agent-browser#767, CochranResearchGroup/agent-browser#768, CochranResearchGroup/agent-browser#769]
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: [LINKEDIN-COMMAND-STATE-LATENCY]
-    reconciled_overlaps: ["User approved three bounded worker auxiliaries under this parent; all foreign checkouts preserved; Contacts dirty terminal-history work excluded; coordinator owns shared help/docs/CONTEXT and failure adapters; capacity worker owns task operation/store changes; coordination worker owns host-control and Native integration; latency worker measures already merged748 and avoids worker-owned store/control files until serialized"]
-    validation_status: ticket graph published; execution starting from ac0643a29
-    updated_at: 2026-11-19
+    reconciled_overlaps: ["Root owns shared time/profile expiry, help/docs/CONTEXT, catalog and integration; capacity owns Auth/challenge; coordination owns finite handoff/schema8; latency owns startup/registry; a bounded provider worker delivered769 and capacity now qualifies that clean source. Shared writes serialized via named commits; foreign Contacts worktree and unknown artifacts preserved."]
+    validation_status: one two-axis review complete; one bounded TDD remediation active; original continuation and five timing/ownership regression paths pass; combined final source and strict local gates pending
+    updated_at: 2026-11-20
   - id: LINKEDIN-COMMAND-STATE
     product_lane: PL-BUGFIX
     objective: Reduce aggregate history deserialization during retained-task inspection

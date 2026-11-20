@@ -8266,6 +8266,9 @@ Configuration:
   Optional capacity policy maximumLoginSteps (default32) updates the existing task immediately; settled login episodes can renew, uncertain input must reconcile first.
   Optional maximumArtifactReferences (default256) controls new artifact admission on existing tasks; inspect count/limit or raise live without restart. Completed artifact metadata is always retained; no deletion or destination permission expansion.
   Native input requires qualified StableTime capture evidence; fresh native_capture repairs legacy/expired evidence. Capture timing failures preserve readback, ordinary CDP and task inspection.
+  Finite handoff/Auth/challenge deadlines retain trusted service origins; legacy handoffs need explicit same-link set_link_lifetime. Inspect returns timeRecovery without a new occurrence. Qualified handoff retention requires schema8; older readers refuse it.
+  Profile plans retain sealed absolute expiry; uncertain bounds pause new effects, completed authenticated receipts replay without time access. Time repair never extends permission.
+  Cold startup uses a persistent kernel lock; healthy exact warm continuation bypasses it. Legacy marker age proves no ownership; follow diagnosis/preserve-mode replacement recourse.
   Running jobs with unqualified legacy start times are not automatically terminalized from guest-clock age; inspect service jobs --id JOB and preserve original uncertainty.
 
 

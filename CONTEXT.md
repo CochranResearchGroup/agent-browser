@@ -708,3 +708,10 @@ separate guards.
 **Qualified Native freshness**: Owner-minted service-time bounds and epoch/counter continuity carried with Native capture evidence. Freshness-dependent input uses the supported StableTime observation instant and uncertainty, never WSL wall/boot extrapolation. Legacy captures require fresh qualification; timing failures preserve independent inspection and original uncertain-input custody.
 
 **Legacy job deadline evidence**: Existing wall-clock submitted/started metadata is historical attribution, not reliable elapsed-time proof. Unqualified legacy starts cannot automatically terminalize running jobs. Current-owner cancellation and positive process-exit evidence remain separate authorities.
+
+
+**Qualified retention origin**: Immutable service UTC bounds and reviewed relative lifetime retained with Auth/challenge deadlines and finite handoffs. New effects require trustworthy bounds; unknown legacy origins are not invented. Exact authenticated return, read-only inspection and completed original replay remain independent where their owner contract allows it. Qualified finite handoff publication atomically guards runtime schema8, including against later schema7 settlement downgrade.
+
+**Sealed profile deadline admission**: Public recovery/reset commands use the supported service bounds against an existing sealed absolute expiry without changing the plan identity. A straddling interval is uncertain, not expired. Authenticated completed originals replay before fresh time or route checks; time qualification is acquired outside the global state writer.
+
+**Startup admission ownership**: Kernel-owned persistent descriptor for current cold starts, with positive process absence required for legacy admission. File age is incidental metadata and cannot reclaim a live owner. Exact warm reuse precedes cold admission.

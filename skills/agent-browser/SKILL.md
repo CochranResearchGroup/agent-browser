@@ -134,4 +134,4 @@ Latency: [phases](references/cli-and-service.md#optional-command-latency-diagnos
 
 [Login and grant continuation](references/cli-and-service.md#continued-login-and-scoped-override-capacity).
 
-Native input: [qualified freshness](references/cli-and-service.md#native-freshness-time).
+Time: [freshness and deadlines](references/cli-and-service.md#native-freshness-time).
