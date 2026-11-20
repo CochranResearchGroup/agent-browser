@@ -5,10 +5,29 @@ use std::sync::OnceLock;
 fn registry() -> &'static Value {
     static REGISTRY: OnceLock<Value> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        serde_json::from_str(include_str!(
+        let mut registry: Value = serde_json::from_str(include_str!(
             "../../../../docs/dev/contracts/public-error-recovery-registry.v1.json"
         ))
-        .expect("validated recovery registry must parse")
+        .expect("validated recovery registry must parse");
+        let fragment: Value = serde_json::from_str(include_str!(
+            "../../../../docs/dev/contracts/public-error-recovery-client-dashboard.v1.json"
+        ))
+        .expect("validated client recovery fragment must parse");
+        for key in ["recipes", "codes", "interfaces"] {
+            if let Some(additions) = fragment[key].as_object() {
+                if registry[key].is_null() {
+                    registry[key] = json!({});
+                }
+                let destination = registry[key].as_object_mut().expect("registry map");
+                for (name, value) in additions {
+                    assert!(
+                        destination.insert(name.clone(), value.clone()).is_none(),
+                        "duplicate recovery contract"
+                    );
+                }
+            }
+        }
+        registry
     })
 }
 
@@ -70,7 +89,7 @@ fn bind(value: &Value, command: &Value) -> (Value, bool) {
 
 fn step(template: &Value, command: &Value) -> Value {
     let (mut call, complete) = bind(template, command);
-    call["executable"] = json!(complete);
+    call["executable"] = json!(complete && call["kind"] != "source_reference");
     if !complete {
         call["precondition"] = json!("Resolve required task/original identity or reviewed policy before invoking this template; do not guess scope");
     }

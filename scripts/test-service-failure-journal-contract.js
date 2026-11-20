@@ -102,6 +102,30 @@ process.stdout.write('Service failure journal contract checks passed\n');
 // This registry is deliberately exact-code. A future named producer error in a
 // reviewed family cannot inherit a generic plan without review.
 const recoveryRegistry = JSON.parse(readFileSync('docs/dev/contracts/public-error-recovery-registry.v1.json', 'utf8'));
+for (const path of recoveryRegistry.fragments ?? []) {
+  const fragment = JSON.parse(readFileSync(path, 'utf8'));
+  assert.equal(fragment.schemaVersion, recoveryRegistry.schemaVersion);
+  for (const key of ['recipes', 'codes', 'interfaces']) {
+    recoveryRegistry[key] ??= {};
+    for (const [name, entry] of Object.entries(fragment[key] ?? {})) {
+      assert(!Object.hasOwn(recoveryRegistry[key], name), `Duplicate recovery ${key} ${name}`);
+      recoveryRegistry[key][name] = entry;
+    }
+  }
+}
+function validateRecoveryInterface(name) {
+  const entry = recoveryRegistry.interfaces?.[name];
+  assert(entry, `Unavailable recovery interface ${name}`);
+  const source = readFileSync(entry.source, 'utf8');
+  assert(source.includes(`function ${entry.export}(`) || source.includes(`const ${entry.export} `), `Missing recovery interface symbol ${name}`);
+  if (entry.kind === 'client_export') {
+    assert(source.includes(`export function ${entry.export}(`) || source.includes(`export async function ${entry.export}(`) || source.includes(`export const ${entry.export} `), `Unexported recovery interface ${name}`);
+    const publicModule = name.split('#')[0].replace('@agent-browser/client/', './');
+    const exports = JSON.parse(readFileSync('packages/client/package.json', 'utf8')).exports;
+    assert.equal(exports[publicModule]?.import, `./${entry.source.replace('packages/client/', '')}`, `Unavailable public module ${publicModule}`);
+  } else assert.equal(entry.kind, 'caller_correction', 'Unknown noncallable interface kind');
+}
+
 const mcpSource = readFileSync('cli/src/mcp.rs', 'utf8');
 const allowedActionsBlock = mcpSource.match(/const BROWSER_COMMAND_ALLOWED_ACTIONS:[\s\S]*?= &\[([\s\S]*?)\];/)[1];
 const allowedActions = new Set([...allowedActionsBlock.matchAll(/"([a-z_]+)"/g)].map(match => match[1]));
@@ -112,6 +136,28 @@ const toolSchemas = {
   browser_discover: readFileSync('cli/src/mcp/catalog.rs', 'utf8'),
 };
 function validateRecoveryCall(call) {
+  if (call.interface === 'caller_error') {
+    assert.equal(call.kind, 'source_reference');
+    assert.deepEqual(call.fields, ['code', 'source', 'owningFunction', 'message']);
+    assert(call.precondition.includes('not a file-read command'));
+    const normalization = JSON.parse(readFileSync(call.contract, 'utf8'));
+    assert.equal(normalization.schemaVersion, 'agent-browser.client-argument-normalization.v1');
+    for (const path of new Set(normalization.reviewedChecks.map(check => check.path))) {
+      const reviewed = normalization.reviewedChecks.filter(check => check.path === path).length;
+      const emitted = [...readFileSync(path, 'utf8').matchAll(/\bclientArgumentError\(/g)].length;
+      assert.equal(emitted, reviewed, `Unreviewed caller normalization added or removed in ${path}`);
+    }
+    for (const check of normalization.reviewedChecks) {
+      const source = readFileSync(check.path, 'utf8');
+      assert(source.includes(check.expression) && source.includes(`"${check.owningFunction}"`), `Missing normalized caller check ${check.path}#${check.owningFunction}`);
+    }
+    return;
+  }
+  if (call.interface && call.interface !== 'cli') {
+    validateRecoveryInterface(call.interface);
+    assert(call.precondition?.length > 10, 'Client read interface needs explicit binding preconditions');
+    return;
+  }
   if (call.interface === 'cli') {
     assert.equal(call.command, 'agent-browser', 'Recovery command must use the current Agent Browser executable');
     assert(['["--help"]', '["--json","install","doctor"]'].includes(JSON.stringify(call.arguments)), `Unavailable recovery CLI arguments ${JSON.stringify(call.arguments)}`);
@@ -120,8 +166,12 @@ function validateRecoveryCall(call) {
   }
   assert(call.tool === 'browser_command' || Object.hasOwn(toolSchemas, call.tool), `Unavailable recovery tool ${call.tool}`);
   if (call.tool === 'browser_discover') {
-    assert.equal(call.arguments.category, 'browser');
-    assert(allowedActions.has(call.arguments.operation), `Unavailable discovery operation ${call.arguments.operation}`);
+    assert(['browser', 'diagnostics'].includes(call.arguments.category));
+    if (call.arguments.category === 'browser') assert(allowedActions.has(call.arguments.operation), `Unavailable discovery operation ${call.arguments.operation}`);
+    else {
+      const operations = toolSchemas.browser_discover.match(/const DIAGNOSTIC_OPERATIONS:[\s\S]*?= &\[([\s\S]*?)\];/)[1];
+      assert(operations.includes(`"${call.arguments.operation}"`), `Unavailable diagnostic operation ${call.arguments.operation}`);
+    }
     return;
   }
   if (call.tool === 'browser_command' && call.arguments.action === 'profile_duplicate') {
@@ -172,7 +222,11 @@ function validateRecoveryInventory(registry, discovered) {
     for (const step of recipe.remediation) {
       assert(step.instruction?.length > 20 && step.precondition?.length > 10, `${code} lacks an actionable remedy precondition`);
       if (step.call) validateRecoveryCall(step.call);
-      else assert(step.interface, `${code} has no supported owner interface`);
+      else {
+        assert(step.interface, `${code} has no supported owner interface`);
+        if (recoveryRegistry.interfaces?.[step.interface]) validateRecoveryInterface(step.interface);
+        else assert(['installation_owner_storage_repair','original_public_request','supported_stable_time_service','retained_native_remote_view_view_only','existing_app_host_binding','existing_app_artifact_reconciliation','existing_profile_copy_owner_reconciliation'].includes(step.interface), `Unavailable recovery owner interface ${step.interface}`);
+      }
     }
     assert(recipe.maximumAutomaticAttempts <= 1, 'Recovery cannot create an unbounded retry loop');
   }
@@ -190,6 +244,7 @@ validateRecoveryInventory(recoveryRegistry, discoveredReviewedCodes);
 assert.throws(() => validateRecoveryInventory(recoveryRegistry, new Set(['unregistered_public_error'])), /Uncovered public code/);
 assert.throws(() => validateRecoveryCall({tool:'browser_command',arguments:{taskId:'$taskId',action:'nonexistent_recovery_command'}}), /Unavailable recovery action/);
 assert.throws(() => validateRecoveryCall({interface:'cli',command:'agent-browser',arguments:['nonexistent-repair']}), /Unavailable recovery CLI arguments/);
+assert.throws(() => validateRecoveryCall({interface:'@agent-browser/client/nonexistent#repair',arguments:{}}), /Unavailable recovery interface/);
 assert.throws(() => validateRecoveryCall({tool:'nonexistent_recovery_tool',arguments:{taskId:'$taskId'}}), /Unavailable recovery tool/);
 for (const boundary of recoveryRegistry.boundaries) assert(readFileSync(boundary.source, 'utf8').includes(boundary.publication), `Missing ${boundary.surface} publication seam`);
 if (process.argv.includes('--require-complete-recovery')) {

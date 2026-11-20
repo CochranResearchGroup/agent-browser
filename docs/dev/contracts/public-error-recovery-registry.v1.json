@@ -5389,5 +5389,8 @@
       "reason": "Fault injection compiled only under cfg(test); unavailable in the public production binary.",
       "sourceEvidence": "directory.join(\"fixture-disposal-stop-after\")"
     }
+  ],
+  "fragments": [
+    "docs/dev/contracts/public-error-recovery-client-dashboard.v1.json"
   ]
 }
