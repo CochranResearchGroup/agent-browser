@@ -780,35 +780,33 @@
       "maximumAutomaticAttempts": 1
     },
     "runtime_storage": {
-      "rationale": "The named durable runtime store, schema, migration, backup or write prerequisite failed; missing observations never prove operation absence.",
-      "requiredActor": "installation_owner",
-      "evidenceRequirement": "Current no-launch install diagnostics, the specific owning storage check and retained original outcomes after storage returns.",
+      "rationale": "The owner could not read, allocate or preserve the exact disposable profile bytes.",
+      "requiredActor": "installation_and_profile_owner",
+      "evidenceRequirement": "Current exact task/browser/profile binding and original outcome; any process/target observation must come from its existing owner, not inferred from an error label.",
       "inspect": {
-        "interface": "cli",
-        "command": "agent-browser",
-        "arguments": [
-          "--json",
-          "install",
-          "doctor"
-        ]
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
       },
       "remediation": [
         {
-          "instruction": "Preserve the existing database, originals, signing keys and migration/backup receipts. Repair the specific reported path, permission, lock availability, schema or interrupted migration prerequisite under installation-owner authority using the supported installer transaction flow where applicable. Retain a sanitized escalation packet for corruption or incompatible schema; never delete history, regenerate keys, reset profiles or blind-replay input.",
-          "interface": "installation_owner_storage_repair",
-          "precondition": "No browser input retry and no destructive store mutation."
+          "instruction": "Have the existing installation/profile owner repair the specifically reported directory, permissions or byte-count failure. Inspect the original task after repair before continuing; never widen cleanup paths or remove another profile to make room.",
+          "precondition": "Original task scope and existing acting owner authority are known. If either is missing, recover that binding through the original caller without performing browser effects.",
+          "interface": "original_public_request"
         }
       ],
       "verification": {
-        "interface": "cli",
-        "command": "agent-browser",
-        "arguments": [
-          "--json",
-          "install",
-          "doctor"
-        ]
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
       },
-      "resumeCondition": "The actual storage prerequisite is restored under installation-owner authority; verify the same original outcome and task identity before any effect resumes. Doctor alone does not prove no dispatch or repair the database.",
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
       "maximumAutomaticAttempts": 1
     },
     "publication_conflict": {
@@ -1676,6 +1674,156 @@
         }
       },
       "resumeCondition": "The same profile inspection confirms current selection and original custody. Any requested launch remains separately owner-confirmed and identity-checked; do not automatically replay browser effects.",
+      "maximumAutomaticAttempts": 1
+    },
+    "runtime_caller": {
+      "rationale": "Runtime path, allocation or launch parameters are invalid for this operation.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Current exact task/browser/profile binding and original outcome; any process/target observation must come from its existing owner, not inferred from an error label.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Correct the specifically named path/kind/allocation or mode using its advertised caller contract. Preserve original scope and do not redirect cleanup to unrelated bytes.",
+          "precondition": "Original task scope and existing acting owner authority are known. If either is missing, recover that binding through the original caller without performing browser effects.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "runtime_app_authority": {
+      "rationale": "The browser or borrowed target is owned by its application; Agent Browser lacks the requested lifecycle authority.",
+      "requiredActor": "existing_application_browser_owner",
+      "evidenceRequirement": "Current exact task/browser/profile binding and original outcome; any process/target observation must come from its existing owner, not inferred from an error label.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Return the scoped lifecycle request to the existing application owner. Continue task inspection while that owner reconciles or explicitly authorizes its own supported close/launch/recovery operation; a read attachment does not grant lifecycle custody.",
+          "precondition": "Original task scope and existing acting owner authority are known. If either is missing, recover that binding through the original caller without performing browser effects.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "runtime_capability": {
+      "rationale": "The selected runtime driver does not implement the requested lifecycle/custody capability.",
+      "requiredActor": "runtime_configuration_owner",
+      "evidenceRequirement": "Current exact task/browser/profile binding and original outcome; any process/target observation must come from its existing owner, not inferred from an error label.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the current task and choose an already-supported owner path or configured compatible runtime. Preserve the original browser; do not retry an unsupported operation or invent application authority.",
+          "precondition": "Original task scope and existing acting owner authority are known. If either is missing, recover that binding through the original caller without performing browser effects.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "runtime_custody": {
+      "rationale": "The current process, endpoint, target or original effect cannot be positively matched to retained owner custody.",
+      "requiredActor": "current_task_and_runtime_owner",
+      "evidenceRequirement": "Current exact task/browser/profile binding and original outcome; any process/target observation must come from its existing owner, not inferred from an error label.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect current task and original operation, then use its existing owner reconciliation path. Keep original request IDs and retained browser/profile bytes. Missing or conflicting observation never authorizes killing, adopting or replaying an uncertain effect.",
+          "precondition": "Original task scope and existing acting owner authority are known. If either is missing, recover that binding through the original caller without performing browser effects.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "runtime_connection": {
+      "rationale": "The owned runtime thread, browser connection or process is unavailable; this does not establish the outcome of a prior effect.",
+      "requiredActor": "current_runtime_owner",
+      "evidenceRequirement": "Current exact task/browser/profile binding and original outcome; any process/target observation must come from its existing owner, not inferred from an error label.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect retained task and original operation first. Restore the existing runtime transport through its owner, then verify exact process and target identity before continuation; do not launch a replacement solely from a missing reply.",
+          "precondition": "Original task scope and existing acting owner authority are known. If either is missing, recover that binding through the original caller without performing browser effects.",
+          "interface": "original_public_request"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current scoped inspection and actual owner evidence confirm the original outcome and exact custody; independent reads remain available and physical effects require their existing admission.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -7779,6 +7927,787 @@
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
+    },
+    "browser_disposable_cleanup_kind_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_attachment_profile_identity_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_runtime_startup_failed": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_runtime_command_unsupported": {
+      "recipe": "runtime_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_idle_effect_readback_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_idle_original_target_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_popup_attach_invalid": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_group_admission_unsupported": {
+      "recipe": "runtime_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_browser_sequence_exhausted": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_idle_original_identity_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_profile_occupied": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_process_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_launch_process_exited": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_disposable_directory_create_failed": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_attachment_recovery_requires_app_authority": {
+      "recipe": "runtime_app_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_disposable_size_path_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_session_profile_debug_endpoint_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_observation_binding_changed": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_target_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_target_census_invalid": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_retained_observation_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_borrowed_tab_close_requires_app_authority": {
+      "recipe": "runtime_app_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_attachment_retirement_requires_app_authority": {
+      "recipe": "runtime_app_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_attachment_process_identity_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_profile_bytes_exhausted": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_attachment_close_requires_app_authority": {
+      "recipe": "runtime_app_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_session_runtime_stopped": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_reattach_unresponsive": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_profile_path_not_absolute": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_session_recovery_profile_census_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_process_absence_unproven": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_launch_pid_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_root_not_absolute": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_attachment_identity_invalid": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_identity_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_target_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_profile_build_selection_unsupported": {
+      "recipe": "runtime_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_disposable_size_failed": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_idle_original_effect_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_rebind_cached_process_custody_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_profile_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_profile_identity_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_reattach_failed": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_idle_original_identity_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_size_root_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_session_runtime_reply_lost": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_attachment_launch_requires_app_authority": {
+      "recipe": "runtime_app_authority",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_session_profile_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_runtime_browser_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_attachment_target_census_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_runtime_thread_failed": {
+      "recipe": "runtime_connection",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_private_launch_environment_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_session_recorded_process_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_owned_target_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_launch_absence_unsupported": {
+      "recipe": "runtime_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_disposable_cleanup_failed": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_close_exit_unproven": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_profile_endpoint_identity_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_profile_path_not_directory": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_disposable_cleanup_path_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_attachment_runtime_unsupported": {
+      "recipe": "runtime_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_login_mode_conflict": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_disposable_size_kind_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "browser_session_tab_target_missing": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_recovery_profile_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_directory_permissions_failed": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_graceful_close_dispatch_unsupported": {
+      "recipe": "runtime_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_build_selection_unsupported": {
+      "recipe": "runtime_capability",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_session_process_observation_unavailable": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_session_owned_target_identity_conflict": {
+      "recipe": "runtime_custody",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "browser_disposable_allocation_id_invalid": {
+      "recipe": "runtime_caller",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -7876,5 +8805,12 @@
     "cli/src/native/browser_build_selection.rs",
     "cli/src/native/browser_build_open.rs",
     "cli/src/native/browser_profile_build_store.rs"
+  ],
+  "enforcedProducerSourceFamilies": [
+    {
+      "path": "cli/src/native/browser_session_runtime.rs",
+      "codePattern": "(?:browser_|runtime_)[a-z0-9_]+",
+      "beforeTestModule": true
+    }
   ]
 }

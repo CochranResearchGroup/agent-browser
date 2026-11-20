@@ -289,6 +289,12 @@ for (const path of recoveryRegistry.enforcedProducerSources ?? []) {
   const source = readFileSync(path, 'utf8');
   for (const match of source.matchAll(/["'](browser_build_[a-z0-9_]+)(?=[:"'])/g)) discoveredReviewedCodes.add(match[1]);
 }
+for (const entry of recoveryRegistry.enforcedProducerSourceFamilies ?? []) {
+  let source = readFileSync(entry.path, 'utf8');
+  if (entry.beforeTestModule) source = source.split(/^#\[cfg\(test\)\]/m)[0];
+  const pattern = new RegExp(`["'](${entry.codePattern})(?=[:"'])`, 'g');
+  for (const match of source.matchAll(pattern)) discoveredReviewedCodes.add(match[1]);
+}
 validateRecoveryInventory(recoveryRegistry, discoveredReviewedCodes);
 const clientQualification = JSON.parse(readFileSync('docs/dev/contracts/public-client-error-qualification.v1.json', 'utf8'));
 validateClientQualification(clientQualification, recoveryRegistry);
