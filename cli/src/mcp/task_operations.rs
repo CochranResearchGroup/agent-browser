@@ -365,16 +365,6 @@ pub(super) fn completion_failure_clock(error: &str) -> Option<Value> {
     )
 }
 
-fn bind_native_owner_allowance(command: &mut Value, admitted_at_ms: u64) {
-    if matches!(
-        command["action"].as_str(),
-        Some("native_input" | "native_capture")
-    ) && command.get("ownerTimeoutMs").is_some()
-    {
-        command["_nativeOwnerAdmittedAtMs"] = json!(admitted_at_ms);
-    }
-}
-
 /// Static transport cause only: raw socket errors can contain private endpoints.
 fn transport_failure_cause(error: &str) -> &'static str {
     let error = error.to_ascii_lowercase();
@@ -409,6 +399,11 @@ pub(super) fn transport_with_latency(
     mut command: Value,
     run: impl FnOnce(Value) -> Result<crate::connection::Response, String>,
 ) -> (Result<crate::connection::Response, String>, Vec<Value>) {
+    // These are adapter-owned admission evidence, never caller authority.
+    if let Some(fields) = command.as_object_mut() {
+        fields.remove("_nativeOwnerAdmittedServiceTime");
+        fields.remove("_nativeOwnerAdmittedAtMs");
+    }
     let mut samples = Vec::new();
     let result = (|| {
         use crate::native::browser_task_operations::{self as operations, Admission};
@@ -420,16 +415,10 @@ pub(super) fn transport_with_latency(
                     &command,
                 )
         }) else {
-            if matches!(
-                command["action"].as_str(),
-                Some("native_input" | "native_capture")
-            ) && command.get("ownerTimeoutMs").is_some()
-            {
-                let admitted = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|_| "browser_native_owner_clock_invalid")?
-                    .as_millis() as u64;
-                bind_native_owner_allowance(&mut command, admitted);
+            if command["action"] == "native_input" && command.get("ownerTimeoutMs").is_some() {
+                command["_nativeOwnerAdmittedServiceTime"] =
+                    serde_json::to_value(crate::connection::stable_time::native_now()?)
+                        .map_err(|_| "browser_native_time_evidence_invalid")?;
             }
             return run(command);
         };
@@ -482,34 +471,31 @@ pub(super) fn transport_with_latency(
         };
         match admitted {
             Admission::Existing(original) => Ok(existing_response(&original)),
-            Admission::Dispatch(original) => {
-                bind_native_owner_allowance(&mut command, original.created_at_ms);
-                match run(command) {
-                    Ok(mut response) => {
-                        let persistence =
-                            crate::connection::latency::PhaseCapture::start("persistence");
-                        let completed = operations::finish(&original, Some(&response));
-                        crate::connection::latency::finish(
-                            persistence,
-                            "task operation completion store transaction",
-                            &mut samples,
-                        );
-                        let completed=completed.map_err(|error| {
+            Admission::Dispatch(original) => match run(command) {
+                Ok(mut response) => {
+                    let persistence =
+                        crate::connection::latency::PhaseCapture::start("persistence");
+                    let completed = operations::finish(&original, Some(&response));
+                    crate::connection::latency::finish(
+                        persistence,
+                        "task operation completion store transaction",
+                        &mut samples,
+                    );
+                    let completed=completed.map_err(|error| {
                     let clock=completion_failure_clock(&error).map(|value|format!(";observationClock={value}")).unwrap_or_default();
                     format!("browser_task_operation_completion_unavailable:{}:inspect original; no retry;cause={}{}",original.request_id,completion_failure_cause(&error),clock)
                 })?;
-                        response_data(&mut response, &completed, false);
-                        Ok(response)
-                    }
-                    Err(error) => {
-                        let _ = operations::finish(&original, None);
-                        Err(format!(
+                    response_data(&mut response, &completed, false);
+                    Ok(response)
+                }
+                Err(error) => {
+                    let _ = operations::finish(&original, None);
+                    Err(format!(
                             "browser_task_operation_uncertain:{}:inspect original; no retry;cause={}; taskId={}; use browser_command task_operation with original requestId, then browser_reconnect status on the same task through an initialized or fresh facade",
                             original.request_id, transport_failure_cause(&error), original.task_id
                         ))
-                    }
                 }
-            }
+            },
         }
     })();
     (result, samples)

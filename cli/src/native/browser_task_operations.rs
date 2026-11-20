@@ -781,6 +781,17 @@ fn begin_inner(task_id: &str, command: &mut Value, native: bool) -> Result<Admis
         command["taskOperationExpected"] = json!({"requestId":original.request_id,"context":expected,"dispatchSeal":dispatch_seal});
         command["retainedTaskOnly"] = json!(true);
         command["noTransportReplay"] = json!(true);
+        if native && action == "native_input" && command.get("ownerTimeoutMs").is_some() {
+            // The original MAC and durable admission above exclude this private
+            // observation. Reuse this boundary's qualified observation; the
+            // physical owner still samples fresh time immediately before input.
+            command["_nativeOwnerAdmittedServiceTime"] = serde_json::to_value(
+                native_time
+                    .as_ref()
+                    .ok_or("browser_native_time_evidence_invalid")?,
+            )
+            .map_err(|_| "browser_native_time_evidence_invalid")?;
+        }
     }
     Ok(admitted)
 }

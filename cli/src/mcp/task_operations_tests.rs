@@ -1,6 +1,47 @@
 use super::*;
 
 #[test]
+fn native_owner_allowance_uses_private_service_admission_only_for_input() {
+    use crate::connection::stable_time::{fixture_stamp, Fixture};
+    let stamp = fixture_stamp(123_000);
+    let _time = Fixture::set(Ok(stamp.clone()));
+    task_operations::transport(
+        json!({"action":"native_input","ownerTimeoutMs":1000,
+        "_nativeOwnerAdmittedServiceTime":{"forged":true},"_nativeOwnerAdmittedAtMs":0}),
+        |command| {
+            assert_eq!(
+                command["_nativeOwnerAdmittedServiceTime"],
+                serde_json::to_value(stamp).unwrap()
+            );
+            assert!(command.get("_nativeOwnerAdmittedAtMs").is_none());
+            Ok(crate::connection::Response {
+                success: true,
+                ..Default::default()
+            })
+        },
+    )
+    .unwrap();
+    let _outage = Fixture::set(Err("stable_time_client_start_failed".into()));
+    task_operations::transport(
+        json!({"action":"native_capture","ownerTimeoutMs":1000}),
+        |command| {
+            assert!(command.get("_nativeOwnerAdmittedServiceTime").is_none());
+            Ok(crate::connection::Response {
+                success: true,
+                ..Default::default()
+            })
+        },
+    )
+    .unwrap();
+    assert!(task_operations::transport(
+        json!({"action":"native_input","ownerTimeoutMs":1000}),
+        |_| { panic!("Unqualified input allowance cannot dispatch") }
+    )
+    .unwrap_err()
+    .contains("stable_time_client_start_failed"));
+}
+
+#[test]
 fn public_original_task_operation_readback_does_not_start_transport() {
     use crate::native::browser_session_store::BrowserSessionSqliteStore;
     use agent_browser_service_model::BrowserSessionState;
@@ -456,6 +497,7 @@ fn native_image_public_completion_case(
     }
     if matches!(round_fault, Some("no_effect" | "no_effect_bootstrap")) {
         input["ownerDeadlineAtMs"] = json!(now + 60_000);
+        input["ownerTimeoutMs"] = json!(60_000);
     }
     let mut wrong_profile_envelope = input.clone();
     if rounds {
@@ -483,6 +525,11 @@ fn native_image_public_completion_case(
     task_operations::with_context(Some(&params), || {
         let response = task_operations::transport(input.clone(), |command| {
             dispatched += 1;
+            if matches!(round_fault, Some("no_effect" | "no_effect_bootstrap")) {
+                assert_eq!(command["_nativeOwnerAdmittedServiceTime"],
+                    serde_json::to_value(crate::connection::stable_time::fixture_stamp(now)).unwrap());
+                assert!(command.get("_nativeOwnerAdmittedAtMs").is_none());
+            }
             let binding = crate::native::browser_task_operations::native_site_policy(
                 &command,
                 "https://owned.example.test",
