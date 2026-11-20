@@ -167,7 +167,8 @@ function validateRecoveryCall(call) {
   assert(call.tool === 'browser_command' || Object.hasOwn(toolSchemas, call.tool), `Unavailable recovery tool ${call.tool}`);
   if (call.tool === 'browser_discover') {
     assert(['browser', 'diagnostics'].includes(call.arguments.category));
-    if (call.arguments.category === 'browser') assert(allowedActions.has(call.arguments.operation), `Unavailable discovery operation ${call.arguments.operation}`);
+    if (call.arguments.category === 'browser' && call.arguments.operation !== undefined) assert(allowedActions.has(call.arguments.operation), `Unavailable discovery operation ${call.arguments.operation}`);
+    else if (call.arguments.category === 'browser') return;
     else {
       const operations = toolSchemas.browser_discover.match(/const DIAGNOSTIC_OPERATIONS:[\s\S]*?= &\[([\s\S]*?)\];/)[1];
       assert(operations.includes(`"${call.arguments.operation}"`), `Unavailable diagnostic operation ${call.arguments.operation}`);
@@ -207,6 +208,13 @@ function validateRecoveryInventory(registry, discovered) {
     assert(/^[a-z][a-z0-9_]+$/.test(code));
     const recipe = registry.recipes[entry.recipe];
     assert(recipe, `Missing recipe for ${code}`);
+    for (const [action, recipeName] of Object.entries(entry.recipesByAction ?? {})) {
+      assert(['browser_session_mode_convert','mode_convert','browser_session_profile_duplicate','profile_duplicate'].includes(action), `Unreviewed owner action ${action}`);
+      const variant = registry.recipes[recipeName];
+      assert(variant, `Missing action recipe ${recipeName}`);
+      validateRecoveryCall(variant.inspect); validateRecoveryCall(variant.verification);
+    }
+
     for (const field of ['rationale', 'requiredActor', 'evidenceRequirement', 'resumeCondition']) assert(recipe[field]?.length > (field === 'requiredActor' ? 0 : 10), `${code} lacks ${field}`);
     assert(['unknown','stale','denied','unavailable','invalid','uncertain','configured_budget','coordination_paused'].includes(entry.evidenceClass), `Missing evidence classification for ${code}`);
     assert.equal(entry.evidenceFreshness, 'not_observed_by_projection', 'Registry must not invent runtime freshness');

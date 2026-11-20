@@ -1637,7 +1637,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         };
         let admission = match admission {
             Ok(value) => value,
-            Err(error) => return serde_json::json!({"id":id,"success":false,"error":error}),
+            Err(error) => {
+                let mut response = serde_json::json!({"id":id,"success":false,"error":error});
+                super::service_failure::attach_public_failure(
+                    &mut response,
+                    command,
+                    "managed_owner_admission",
+                );
+                return response;
+            }
         };
         let mut result = self.handle_command_result(command);
         if let Some(admission) = admission {
@@ -1645,10 +1653,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 result = Err(error);
             }
         }
-        match result {
+        let mut response = match result {
             Ok(data) => serde_json::json!({ "id": id, "success": true, "data": data }),
             Err(error) => serde_json::json!({ "id": id, "success": false, "error": error }),
-        }
+        };
+        super::service_failure::attach_public_failure(&mut response, command, "managed_owner");
+        response
     }
 
     fn handle_command_result(

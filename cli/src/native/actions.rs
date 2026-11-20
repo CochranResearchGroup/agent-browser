@@ -534,6 +534,16 @@ pub(crate) async fn execute_managed_target_command(
     state: &mut DaemonState,
     target_id: &str,
 ) -> Value {
+    let admission_error = |code: &str| {
+        let mut response = error_response(cmd["id"].as_str().unwrap_or(""), code);
+        response["failure"] = json!({"code":code,"axis":"lifecycle_owner","phase":"child_admission","effectState":"no_effect"});
+        super::service_failure::attach_public_failure(
+            &mut response,
+            cmd,
+            "managed_target_admission",
+        );
+        response
+    };
     if cmd
         .get("targetId")
         .filter(|value| !value.is_null())
@@ -546,10 +556,7 @@ pub(crate) async fn execute_managed_target_command(
                     && value.as_str() != Some(format!("target:{target_id}").as_str())
             })
     {
-        return error_response(
-            cmd["id"].as_str().unwrap_or(""),
-            "browser_session_target_selector_conflict",
-        );
+        return admission_error("browser_session_target_selector_conflict");
     }
     if state
         .browser
@@ -557,10 +564,7 @@ pub(crate) async fn execute_managed_target_command(
         .and_then(|browser| browser.active_target_id().ok())
         != Some(target_id)
     {
-        return error_response(
-            cmd["id"].as_str().unwrap_or(""),
-            "browser_session_target_unproven",
-        );
+        return admission_error("browser_session_target_unproven");
     }
     execute_command_with_target_custody(cmd, state, true).await
 }

@@ -971,3 +971,22 @@ fn failed_evaluate_phase_diagnostics_preserve_error_and_inactive_envelope() {
     }
     assert_eq!(sampled, original);
 }
+
+#[tokio::test]
+async fn managed_target_admission_failures_keep_verified_no_effect_recourse() {
+    for command in [
+        json!({"id":"selector-refusal","action":"evaluate","sessionId":"task","targetId":"other"}),
+        json!({"id":"missing-target-refusal","action":"evaluate","sessionId":"task"}),
+    ] {
+        let mut state = DaemonState::new();
+        let response =
+            execute_managed_target_command(&command, &mut state, "retained-target").await;
+        assert_eq!(response["success"], false);
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert_eq!(
+            response["failure"]["recoveryRegistry"]["coverage"],
+            "registered"
+        );
+        assert!(response["failure"]["occurrenceId"].is_string());
+    }
+}

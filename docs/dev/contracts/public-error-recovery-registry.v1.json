@@ -1184,6 +1184,104 @@
       },
       "resumeCondition": "The original input outcome is safely reconciled, and a newly captured observation for the declared checkbox/image/login purpose has qualified current serviceTime in the same epoch. Complete all target/control/site checks; no unresolved input is replayed.",
       "maximumAutomaticAttempts": 1
+    },
+    "owner_operation_lookup": {
+      "rationale": "A retained profile operation or missing/bound identity prevents starting a conflicting transition. The existing owner phase and original operation remain authoritative.",
+      "requiredActor": "profile_owner",
+      "evidenceRequirement": "Current inspect result for the original source profile and duplication operation, including its durable copy/close/launch/disposal phase and physical identity proof.",
+      "inspect": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "browser"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Use the existing request kind to inspect mode_convert or profile_duplicate with choice inspect and the exact retained task/profile/operation IDs. Continue only the actions offered by that original phase; do not start a new operation ID to evade a busy, missing or changed owner.",
+          "interface": "existing_profile_copy_owner_reconciliation",
+          "precondition": "Use the existing request kind and exact retained identities. Schema discovery alone is not evidence of owner state."
+        }
+      ],
+      "verification": {
+        "tool": "browser_discover",
+        "arguments": {
+          "category": "browser"
+        }
+      },
+      "resumeCondition": "The original owner operation is inspected and safely settled or advanced through its advertised continuation; current physical identity is verified before the same intended work continues.",
+      "maximumAutomaticAttempts": 1
+    },
+    "owner_operation_mode": {
+      "rationale": "A retained profile operation or missing/bound identity prevents starting a conflicting transition. The existing owner phase and original operation remain authoritative.",
+      "requiredActor": "profile_owner",
+      "evidenceRequirement": "Current inspect result for the original source profile and duplication operation, including its durable copy/close/launch/disposal phase and physical identity proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "mode_convert",
+          "params": {
+            "choice": "inspect",
+            "operationId": "$operationId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Use the existing request kind to inspect mode_convert or profile_duplicate with choice inspect and the exact retained task/profile/operation IDs. Continue only the actions offered by that original phase; do not start a new operation ID to evade a busy, missing or changed owner.",
+          "interface": "existing_profile_copy_owner_reconciliation",
+          "precondition": "Use the existing request kind and exact retained identities. Schema discovery alone is not evidence of owner state."
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "mode_convert",
+          "params": {
+            "choice": "inspect",
+            "operationId": "$operationId"
+          }
+        }
+      },
+      "resumeCondition": "The original owner operation is inspected and safely settled or advanced through its advertised continuation; current physical identity is verified before the same intended work continues.",
+      "maximumAutomaticAttempts": 1
+    },
+    "owner_operation_copy": {
+      "rationale": "A retained profile operation or missing/bound identity prevents starting a conflicting transition. The existing owner phase and original operation remain authoritative.",
+      "requiredActor": "profile_owner",
+      "evidenceRequirement": "Current inspect result for the original source profile and duplication operation, including its durable copy/close/launch/disposal phase and physical identity proof.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "profile_duplicate",
+          "params": {
+            "choice": "inspect",
+            "sourceProfileId": "$sourceProfileId",
+            "operationId": "$operationId"
+          }
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Use the existing request kind to inspect mode_convert or profile_duplicate with choice inspect and the exact retained task/profile/operation IDs. Continue only the actions offered by that original phase; do not start a new operation ID to evade a busy, missing or changed owner.",
+          "interface": "existing_profile_copy_owner_reconciliation",
+          "precondition": "Use the existing request kind and exact retained identities. Schema discovery alone is not evidence of owner state."
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "action": "profile_duplicate",
+          "params": {
+            "choice": "inspect",
+            "sourceProfileId": "$sourceProfileId",
+            "operationId": "$operationId"
+          }
+        }
+      },
+      "resumeCondition": "The original owner operation is inspected and safely settled or advanced through its advertised continuation; current physical identity is verified before the same intended work continues.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -2031,6 +2129,214 @@
       "policySource": "AGENTS.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unavailable"
+    },
+    "browser_operation_busy": {
+      "recipe": "owner_operation_lookup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/service_failure/public.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "configured_budget",
+      "recipesByAction": {
+        "browser_session_mode_convert": "owner_operation_mode",
+        "mode_convert": "owner_operation_mode",
+        "browser_session_profile_duplicate": "owner_operation_copy",
+        "profile_duplicate": "owner_operation_copy"
+      }
+    },
+    "browser_operation_busy_readback_unavailable": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_operation_journal_unavailable": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_operation_not_found": {
+      "recipe": "owner_operation_lookup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown",
+      "recipesByAction": {
+        "browser_session_mode_convert": "owner_operation_mode",
+        "mode_convert": "owner_operation_mode",
+        "browser_session_profile_duplicate": "owner_operation_copy",
+        "profile_duplicate": "owner_operation_copy"
+      }
+    },
+    "browser_operation_profile_missing": {
+      "recipe": "owner_operation_lookup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown",
+      "recipesByAction": {
+        "browser_session_mode_convert": "owner_operation_mode",
+        "mode_convert": "owner_operation_mode",
+        "browser_session_profile_duplicate": "owner_operation_copy",
+        "profile_duplicate": "owner_operation_copy"
+      }
+    },
+    "browser_operation_profile_required": {
+      "recipe": "owner_operation_lookup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown",
+      "recipesByAction": {
+        "browser_session_mode_convert": "owner_operation_mode",
+        "mode_convert": "owner_operation_mode",
+        "browser_session_profile_duplicate": "owner_operation_copy",
+        "profile_duplicate": "owner_operation_copy"
+      }
+    },
+    "browser_operation_readback_invalid": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_operation_readback_unavailable": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_operation_runtime_directory_missing": {
+      "recipe": "runtime_storage",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "browser_operation_target_binding_changed": {
+      "recipe": "owner_operation_lookup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied",
+      "recipesByAction": {
+        "browser_session_mode_convert": "owner_operation_mode",
+        "mode_convert": "owner_operation_mode",
+        "browser_session_profile_duplicate": "owner_operation_copy",
+        "profile_duplicate": "owner_operation_copy"
+      }
+    },
+    "browser_operation_task_binding_changed": {
+      "recipe": "owner_operation_lookup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied",
+      "recipesByAction": {
+        "browser_session_mode_convert": "owner_operation_mode",
+        "mode_convert": "owner_operation_mode",
+        "browser_session_profile_duplicate": "owner_operation_copy",
+        "profile_duplicate": "owner_operation_copy"
+      }
+    },
+    "browser_operation_task_binding_missing": {
+      "recipe": "owner_operation_lookup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown",
+      "recipesByAction": {
+        "browser_session_mode_convert": "owner_operation_mode",
+        "mode_convert": "owner_operation_mode",
+        "browser_session_profile_duplicate": "owner_operation_copy",
+        "profile_duplicate": "owner_operation_copy"
+      }
+    },
+    "browser_operation_task_missing": {
+      "recipe": "owner_operation_lookup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown",
+      "recipesByAction": {
+        "browser_session_mode_convert": "owner_operation_mode",
+        "mode_convert": "owner_operation_mode",
+        "browser_session_profile_duplicate": "owner_operation_copy",
+        "profile_duplicate": "owner_operation_copy"
+      }
+    },
+    "browser_operation_task_required": {
+      "recipe": "owner_operation_lookup",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_operation_lookup.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_operation_lookup.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown",
+      "recipesByAction": {
+        "browser_session_mode_convert": "owner_operation_mode",
+        "mode_convert": "owner_operation_mode",
+        "browser_session_profile_duplicate": "owner_operation_copy",
+        "profile_duplicate": "owner_operation_copy"
+      }
     },
     "browser_policy_action_denied": {
       "recipe": "policy_denied",
@@ -2911,6 +3217,50 @@
       "policySource": "cli/src/native/browser_session_store.rs",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "stale"
+    },
+    "browser_session_target_inventory_unavailable": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/browser_session_runtime.rs"
+        }
+      ],
+      "policySource": "cli/src/native/browser_session_runtime.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_session_target_not_found": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "crates/agent-browser-service-model/src/browser_session_manager.rs"
+        }
+      ],
+      "policySource": "crates/agent-browser-service-model/src/browser_session_manager.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
+    },
+    "browser_session_target_selector_conflict": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/actions.rs"
+        }
+      ],
+      "policySource": "cli/src/native/actions.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "browser_session_target_unproven": {
+      "recipe": "identity",
+      "owningChecks": [
+        {
+          "path": "cli/src/native/actions.rs"
+        }
+      ],
+      "policySource": "cli/src/native/actions.rs",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unknown"
     },
     "browser_task_operation_action_invalid": {
       "recipe": "invalid_request",
@@ -5349,7 +5699,9 @@
     "cli_invalid_",
     "profile_duplicate_",
     "browser_native_time_",
-    "browser_native_observation_"
+    "browser_native_observation_",
+    "browser_operation_",
+    "browser_session_target_"
   ],
   "sourceBaseline": "bf181f4ca",
   "knownCoverageGaps": [
@@ -5392,5 +5744,6 @@
   ],
   "fragments": [
     "docs/dev/contracts/public-error-recovery-client-dashboard.v1.json"
-  ]
+  ],
+  "recipeBudgetScope": "single_recipe_cycle"
 }

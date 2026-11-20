@@ -14,6 +14,12 @@ pub use agent_browser_service_model::{
     ServiceFailureRecourse, ServiceRetryDisposition,
 };
 
+/// Project the exact-code contract without recording a new refusal occurrence.
+/// Historical owner outcomes and recovery lookups use this read-only adapter.
+pub(crate) fn enrich_recovery_contract(failure: &mut Value, command: &Value) {
+    recovery_registry::enrich(failure, command);
+}
+
 /// Add machine-readable recourse to a failed Service response while preserving
 /// the legacy error field. Successful responses and already-decorated failures
 /// are left unchanged.

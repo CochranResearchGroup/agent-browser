@@ -73,7 +73,7 @@ fn project_job_recovery(job: &mut Value) {
     }
     for path in ["/failure", "/terminalOutcome/failure", "/result/failure"] {
         if let Some(failure) = job.pointer_mut(path).filter(|value| value.is_object()) {
-            super::recovery_registry::enrich(failure, &command);
+            super::enrich_recovery_contract(failure, &command);
             if failure["executableNextAction"].is_null() && command["jobId"].is_string() {
                 failure["executableNextAction"] = json!({"interface":"cli","command":"agent-browser",
                     "arguments":["--json","service","jobs","--id",command["jobId"]],"executable":true,
@@ -129,11 +129,112 @@ fn project_capture_time_recourse(response: &mut Value, command: &Value) {
     response["data"]["timeQualificationRecourse"] = qualification["failure"].clone();
 }
 
+/// Known owner-operation views carry a failure beside their continuation phase.
+/// Preserve that phase protocol; enrich its failure rather than treating a
+/// successful transport as proof that the requested owner transition completed.
+fn project_owner_operation_recovery(response: &mut Value, command: &Value, source: &str) {
+    if response["success"] != true
+        || !matches!(
+            command["action"].as_str(),
+            Some(
+                "browser_session_profile_duplicate"
+                    | "browser_session_mode_convert"
+                    | "browser_session_build_select"
+                    | "profile_duplicate"
+                    | "mode_convert"
+                    | "browser_build"
+            )
+        )
+    {
+        return;
+    }
+    let schema = response
+        .pointer("/data/schemaVersion")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !matches!(
+        schema,
+        "agent-browser.profile-duplication.v1"
+            | "agent-browser.mode-operation.v1"
+            | "agent-browser.build-selection.v1"
+            | "agent-browser.browser-operations.v1"
+    ) {
+        return;
+    }
+    if schema == "agent-browser.browser-operations.v1" {
+        if let Some(operations) = response
+            .pointer_mut("/data/operations")
+            .and_then(Value::as_array_mut)
+        {
+            for operation in operations {
+                let mut historical = json!({"success":true,"data":operation.clone()});
+                let mut inspect = command.clone();
+                inspect["choice"] = json!("inspect");
+                project_owner_operation_recovery(&mut historical, &inspect, source);
+                *operation = historical["data"].take();
+            }
+        }
+    }
+    let busy = response.pointer("/data/schemaVersion")
+        == Some(&json!("agent-browser.browser-operations.v1"))
+        && response.pointer("/data/state") == Some(&json!("busy"));
+    let error = if busy {
+        "browser_operation_busy".to_owned()
+    } else if let Some(error) = response
+        .pointer("/data/failure")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    {
+        error.to_owned()
+    } else {
+        return;
+    };
+    let mut context = command.clone();
+    for (key, path) in [
+        ("operationId", "/data/operationId"),
+        ("sourceProfileId", "/data/source/id"),
+        ("taskId", "/data/taskId"),
+    ] {
+        if let Some(value) = response.pointer(path).filter(|value| value.is_string()) {
+            context[key] = value.clone();
+        }
+    }
+    let mut failure = response
+        .pointer("/data/failureRecourse")
+        .filter(|value| value.is_object())
+        .cloned()
+        .unwrap_or_else(|| {
+            serde_json::to_value(classify_service_failure(&error)).expect("recourse serializes")
+        });
+    if failure["code"] == "service_operation_failed" {
+        failure["code"] = json!(code_token(error.split(':').next().unwrap_or_default())
+            .unwrap_or("service_operation_failed"));
+    }
+    if busy {
+        failure["effectState"] = json!("no_effect");
+    }
+    let inspect = command["choice"] == "inspect"
+        || command.pointer("/params/choice") == Some(&json!("inspect"));
+    if inspect {
+        super::enrich_recovery_contract(&mut failure, &context);
+        if failure["occurrenceId"].is_null() {
+            failure["readbackJournal"] =
+                json!({"state":"not_attempted","reason":"historical_operation_readback"});
+        }
+    } else {
+        let mut refused = json!({"success":false,"error":error,"failure":failure});
+        attach_public_failure(&mut refused, &context, source);
+        failure = refused["failure"].take();
+    }
+    response["data"]["failureRecourse"] = failure;
+}
+
 /// Preserve existing typed evidence, add executable exact-task inspection and
 /// publish sanitized refusal metadata. Request payloads never enter the journal.
 pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, source: &str) {
     project_job_readback(response, command);
     project_capture_time_recourse(response, command);
+    project_owner_operation_recovery(response, command, source);
     if response["success"] != false {
         // Successful transport does not establish a successful operation. Only
         // the action envelope is inspected, never arbitrary evaluate result data.
@@ -206,7 +307,7 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
                 "purpose":"Inspect capacity and unresolved originals before adjusting configured limits"});
         }
     }
-    super::recovery_registry::enrich(failure, command);
+    super::enrich_recovery_contract(failure, command);
     if failure["executableNextAction"].is_null() {
         failure["executableNextAction"] = if let Some(task) = task {
             json!({"tool":"browser_command","executable":true,
@@ -247,7 +348,8 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
             "taskIdSha256":task.map(|id| format!("{:x}", Sha256::digest(id.as_bytes()))),
         "evidenceFreshness":failure["recoveryPlan"]["evidence"],
         "policySource":failure["recoveryPlan"]["policySource"],
-        "recoveryCoverage":failure["recoveryRegistry"]["coverage"]
+        "recoveryCoverage":failure["recoveryRegistry"]["coverage"],
+        "operationIdSha256":command.get("operationId").or_else(||command.get("params").and_then(|params|params.get("operationId"))).and_then(Value::as_str).filter(|id|id.len()<=128).map(|id|format!("{:x}",Sha256::digest(id.as_bytes())))
     }));
     failure["occurrenceId"] = json!(record.occurrence_id);
     failure["logging"] = match append_service_failure(&record) {
@@ -259,6 +361,35 @@ pub(crate) fn attach_public_failure(response: &mut Value, command: &Value, sourc
 #[cfg(test)]
 mod registry_projection_tests {
     use super::*;
+    #[test]
+    fn source_bound_copy_inspection_keeps_phase_actions_and_never_journals_history() {
+        let mut response = json!({"success":true,"data":{"schemaVersion":"agent-browser.profile-duplication.v1","operationId":"original-copy","source":{"id":"source-profile"},"phase":"awaiting_graceful_close","failure":"profile_duplicate_close_readback_required","actions":[{"action":"reconcile","requiresConfirmation":false}]}});
+        let before = response.clone();
+        project_owner_operation_recovery(
+            &mut response,
+            &json!({"action":"browser_session_profile_duplicate","choice":"inspect"}),
+            "fixture",
+        );
+        assert_eq!(response["success"], true);
+        assert_eq!(response["data"]["phase"], before["data"]["phase"]);
+        assert_eq!(response["data"]["actions"], before["data"]["actions"]);
+        assert_eq!(
+            response["data"]["failureRecourse"]["code"],
+            "profile_duplicate_close_readback_required"
+        );
+        assert!(response["data"]["failureRecourse"]
+            .get("occurrenceId")
+            .is_none());
+        assert_eq!(
+            response["data"]["failureRecourse"]["recoveryRegistry"]["verification"]["arguments"]
+                ["params"]["operationId"],
+            "original-copy"
+        );
+        let mut arbitrary = before.clone();
+        project_owner_operation_recovery(&mut arbitrary, &json!({"action":"evaluate"}), "fixture");
+        assert_eq!(arbitrary, before);
+    }
+
     #[test]
     fn running_job_exposes_unqualified_deadline_without_fabricating_failure() {
         let mut job =

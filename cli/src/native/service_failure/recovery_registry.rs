@@ -118,7 +118,12 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
         publish_plan(failure, plan);
         return;
     };
-    let recipe = &source["recipes"][entry["recipe"].as_str().unwrap_or_default()];
+    let recipe_name = command["action"]
+        .as_str()
+        .and_then(|action| entry["recipesByAction"][action].as_str())
+        .or_else(|| entry["recipe"].as_str())
+        .unwrap_or_default();
+    let recipe = &source["recipes"][recipe_name];
     let inspect = step(&recipe["inspect"], command);
     let verification = step(&recipe["verification"], command);
     let mut remediation = recipe["remediation"].clone();
@@ -137,7 +142,7 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
         "policySource":{"kind":"owning_runtime_check","path":entry["policySource"],"effectiveConfiguration":"not_supplied"},
         "evidence":{"status":"not_observed_by_projection","required":recipe["evidenceRequirement"]},
         "inspect":inspect,"remediation":remediation,"verification":verification,
-        "maximumAutomaticAttempts":recipe["maximumAutomaticAttempts"],
+        "maximumAutomaticAttempts":recipe["maximumAutomaticAttempts"],"budgetScope":"single_recipe_cycle",
         "resumeCondition":recipe["resumeCondition"]
     });
     publish_plan(failure, plan);
@@ -147,7 +152,10 @@ pub(super) fn enrich(failure: &mut Value, command: &Value) {
 }
 
 fn publish_plan(failure: &mut Value, plan: Value) {
-    failure["recoveryRegistry"] = plan.clone();
+    let existing = &failure["recoveryRegistry"];
+    if !(existing["coverage"] == "registered" && existing["code"] == plan["code"]) {
+        failure["recoveryRegistry"] = plan.clone();
+    }
     if !failure["recoveryPlan"].is_object() {
         failure["recoveryPlan"] = plan;
     }
@@ -188,6 +196,17 @@ mod tests {
         assert_eq!(failure["recoveryPlan"], owner_plan);
         assert_eq!(failure["executableNextAction"], owner_action);
         assert_eq!(failure["recoveryRegistry"]["coverage"], "registered");
+    }
+    #[test]
+    fn facade_without_scope_does_not_replace_bound_owner_registry() {
+        let mut failure = json!({"code":"browser_task_operation_capacity_reached"});
+        enrich(
+            &mut failure,
+            &json!({"taskId":"original-task","requestId":"original-request"}),
+        );
+        let original = failure.clone();
+        enrich(&mut failure, &Value::Null);
+        assert_eq!(failure, original);
     }
     #[test]
     fn unbound_and_unknown_contracts_never_claim_executable_coverage() {
