@@ -301,6 +301,7 @@ for (const path of recoveryRegistry.enforcedProducerSources ?? []) {
 for (const entry of recoveryRegistry.enforcedProducerSourceFamilies ?? []) {
   let source = readFileSync(entry.path, 'utf8');
   if (entry.beforeTestModule) source = source.split(/^#\[cfg\(test\)\]/m)[0];
+  if (entry.beforeNamedTestModule) source = source.split(/^#\[cfg\(test\)\]\s*\nmod tests/m)[0];
   const pattern = new RegExp(`["'](${entry.codePattern})(?=[:"'])`, 'g');
   for (const match of source.matchAll(pattern)) discoveredReviewedCodes.add(match[1]);
 }
