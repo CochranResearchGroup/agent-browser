@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: RECOVERABLE-WORK-749
+    product_lane: PL-PLATFORM
+    objective: Recoverable task capacity, executable refusal recourse, Native coordination and measured latency
+    plan: docs/dev/plans/0307-2026-11-19-recoverable-work749.md
+    branch: platform/spec749-integration
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#749, CochranResearchGroup/agent-browser#750, CochranResearchGroup/agent-browser#751, CochranResearchGroup/agent-browser#752, CochranResearchGroup/agent-browser#753, CochranResearchGroup/agent-browser#754, CochranResearchGroup/agent-browser#755, CochranResearchGroup/agent-browser#756, CochranResearchGroup/agent-browser#757, CochranResearchGroup/agent-browser#758]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [LINKEDIN-COMMAND-STATE-LATENCY]
+    reconciled_overlaps: ["User approved three bounded worker auxiliaries under this parent; all foreign checkouts preserved; Contacts dirty terminal-history work excluded; coordinator owns shared help/docs/CONTEXT and failure adapters; capacity worker owns task operation/store changes; coordination worker owns host-control and Native integration; latency worker measures already merged748 and avoids worker-owned store/control files until serialized"]
+    validation_status: ticket graph published; execution starting from ac0643a29
+    updated_at: 2026-11-19
   - id: LINKEDIN-COMMAND-STATE
     product_lane: PL-BUGFIX
     objective: Reduce aggregate history deserialization during retained-task inspection
