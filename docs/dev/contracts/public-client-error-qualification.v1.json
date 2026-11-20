@@ -1428,6 +1428,15 @@
       "code": "challenge_continuation_identity_changed",
       "classification": "exact_registered_local_failure",
       "recipe": "clientNativeTaskContext"
+    },
+    {
+      "path": "packages/client/src/service-request.js",
+      "owningFunction": "classifyServiceControlPlaneAuthority",
+      "kind": "local_result_reason_fallback",
+      "expression": "responseFailureError(response, 'service_tab_handle_unavailable', {\n      source: 'packages/client/src/service-request.js',\n      owningFunction: 'classifyServiceControlPlaneAuthority',\n    })",
+      "code": "service_tab_handle_unavailable",
+      "classification": "exact_registered_local_failure",
+      "recipe": "serviceTabHandleReadback"
     }
   ],
   "dynamicBoundaries": [
