@@ -1442,7 +1442,7 @@
     {
       "path": "packages/client/src/hosted-auth-helper.js",
       "owningFunction": "ownerAuthHelper",
-      "expression": "client.call('auth_capabilities',{})",
+      "expression": "callClientOwner(client,'auth_capabilities',{},{source:\"packages/client/src/hosted-auth-helper.js\",owningFunction:\"ownerAuthHelper\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1457,7 +1457,7 @@
     {
       "path": "packages/client/src/hosted-auth-helper.js",
       "owningFunction": "ownerAuthHelper.resumeLoginContinuation",
-      "expression": "client.call('inspect_credential_request',args)",
+      "expression": "callClientOwner(client,'inspect_credential_request',args,{source:\"packages/client/src/hosted-auth-helper.js\",owningFunction:\"ownerAuthHelper.resumeLoginContinuation\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1472,7 +1472,7 @@
     {
       "path": "packages/client/src/hosted-auth-helper.js",
       "owningFunction": "ownerAuthHelper.inspectLoginProgress",
-      "expression": "client.call(operation,options)",
+      "expression": "callClientOwner(client,operation,options,{source:\"packages/client/src/hosted-auth-helper.js\",owningFunction:\"ownerAuthHelper.inspectLoginProgress\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1487,7 +1487,7 @@
     {
       "path": "packages/client/src/hosted-auth-helper.js",
       "owningFunction": "ownerAuthHelper.requestLogin",
-      "expression": "client.call('request_credential',{...options,operation:'login',mode:'private'})",
+      "expression": "callClientOwner(client,'request_credential',{...options,operation:'login',mode:'private'},{source:\"packages/client/src/hosted-auth-helper.js\",owningFunction:\"ownerAuthHelper.requestLogin\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1502,7 +1502,7 @@
     {
       "path": "packages/client/src/hosted-auth-helper.js",
       "owningFunction": "ownerAuthHelper.advanceLogin",
-      "expression": "client.call('inspect_credential_request',{requestId})",
+      "expression": "callClientOwner(client,'inspect_credential_request',{requestId},{source:\"packages/client/src/hosted-auth-helper.js\",owningFunction:\"ownerAuthHelper.advanceLogin\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1517,7 +1517,7 @@
     {
       "path": "packages/client/src/hosted-auth-helper.js",
       "owningFunction": "ownerAuthHelper.advanceLogin",
-      "expression": "client.call('receive_credential_approval',{requestId})",
+      "expression": "callClientOwner(client,'receive_credential_approval',{requestId},{source:\"packages/client/src/hosted-auth-helper.js\",owningFunction:\"ownerAuthHelper.advanceLogin\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1532,7 +1532,7 @@
     {
       "path": "packages/client/src/hosted-auth-helper.js",
       "owningFunction": "ownerAuthHelper.advanceLogin",
-      "expression": "client.call('use_credential',{requestId})",
+      "expression": "callClientOwner(client,'use_credential',{requestId},{source:\"packages/client/src/hosted-auth-helper.js\",owningFunction:\"ownerAuthHelper.advanceLogin\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1547,7 +1547,7 @@
     {
       "path": "packages/client/src/hosted-auth-helper.js",
       "owningFunction": "ownerAuthHelper",
-      "expression": "client.call(operation,args)",
+      "expression": "callClientOwner(client,operation,args,{source:\"packages/client/src/hosted-auth-helper.js\",owningFunction:\"ownerAuthHelper\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1562,7 +1562,7 @@
     {
       "path": "packages/client/src/login-recovery.js",
       "owningFunction": "createLoginRecovery",
-      "expression": "client.call('inspect_credential_request',{requestId})",
+      "expression": "callClientOwner(client,'inspect_credential_request',{requestId},{source:\"packages/client/src/login-recovery.js\",owningFunction:\"createLoginRecovery\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1577,7 +1577,7 @@
     {
       "path": "packages/client/src/login-recovery.js",
       "owningFunction": "createLoginRecovery.reconcile",
-      "expression": "client.call('reconcile_credential_request',{requestId})",
+      "expression": "callClientOwner(client,'reconcile_credential_request',{requestId},{source:\"packages/client/src/login-recovery.js\",owningFunction:\"createLoginRecovery.reconcile\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1592,7 +1592,7 @@
     {
       "path": "packages/client/src/login-recovery.js",
       "owningFunction": "createLoginRecovery.recordFailure",
-      "expression": "client.call('complete_authentication',{...options,outcome:'failed'})",
+      "expression": "callClientOwner(client,'complete_authentication',{...options,outcome:'failed'},{source:\"packages/client/src/login-recovery.js\",owningFunction:\"createLoginRecovery.recordFailure\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1607,7 +1607,7 @@
     {
       "path": "packages/client/src/login-recovery.js",
       "owningFunction": "createLoginRecovery.recordFailure",
-      "expression": "client.call('inspect_authentication_completion',{requestId:options.requestId})",
+      "expression": "callClientOwner(client,'inspect_authentication_completion',{requestId:options.requestId},{source:\"packages/client/src/login-recovery.js\",owningFunction:\"createLoginRecovery.recordFailure\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1622,7 +1622,7 @@
     {
       "path": "packages/client/src/login-recovery.js",
       "owningFunction": "createLoginRecovery.prepareFresh",
-      "expression": "client.call('inspect_authentication_completion',{requestId:previousRequestId})",
+      "expression": "callClientOwner(client,'inspect_authentication_completion',{requestId:previousRequestId},{source:\"packages/client/src/login-recovery.js\",owningFunction:\"createLoginRecovery.prepareFresh\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1637,7 +1637,7 @@
     {
       "path": "packages/client/src/login-recovery.js",
       "owningFunction": "createLoginRecovery.prepareFresh",
-      "expression": "client.call('prepare_credential_login',intent)",
+      "expression": "callClientOwner(client,'prepare_credential_login',intent,{source:\"packages/client/src/login-recovery.js\",owningFunction:\"createLoginRecovery.prepareFresh\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1652,7 +1652,7 @@
     {
       "path": "packages/client/src/login-discovery.js",
       "owningFunction": "createLoginDiscovery.inspect",
-      "expression": "client.call('auth_capabilities',{})",
+      "expression": "callClientOwner(client,'auth_capabilities',{},{source:\"packages/client/src/login-discovery.js\",owningFunction:\"createLoginDiscovery.inspect\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1667,7 +1667,7 @@
     {
       "path": "packages/client/src/login-discovery.js",
       "owningFunction": "createLoginDiscovery.inspect",
-      "expression": "client.call('inspect_credential_request',{requestId:intent.requestId})",
+      "expression": "callClientOwner(client,'inspect_credential_request',{requestId:intent.requestId},{source:\"packages/client/src/login-discovery.js\",owningFunction:\"createLoginDiscovery.inspect\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1682,7 +1682,7 @@
     {
       "path": "packages/client/src/login-discovery.js",
       "owningFunction": "createLoginDiscovery.inspect",
-      "expression": "client.call('discover_credentials',{origin:intent.origin,accountHint:intent.accountHint,credentialType:'password'})",
+      "expression": "callClientOwner(client,'discover_credentials',{origin:intent.origin,accountHint:intent.accountHint,credentialType:'password'},{source:\"packages/client/src/login-discovery.js\",owningFunction:\"createLoginDiscovery.inspect\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1697,7 +1697,7 @@
     {
       "path": "packages/client/src/login-verification.js",
       "owningFunction": "createLoginVerifier.verify",
-      "expression": "client.call('inspect_credential_request',args)",
+      "expression": "callClientOwner(client,'inspect_credential_request',args,{source:\"packages/client/src/login-verification.js\",owningFunction:\"createLoginVerifier.verify\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1712,7 +1712,7 @@
     {
       "path": "packages/client/src/login-verification.js",
       "owningFunction": "createLoginVerifier.verify",
-      "expression": "client.call('inspect_authentication_completion',args)",
+      "expression": "callClientOwner(client,'inspect_authentication_completion',args,{source:\"packages/client/src/login-verification.js\",owningFunction:\"createLoginVerifier.verify\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
@@ -1727,7 +1727,7 @@
     {
       "path": "packages/client/src/login-verification.js",
       "owningFunction": "createLoginVerifier.verify",
-      "expression": "client.call('inspect_credential_request',args)",
+      "expression": "callClientOwner(client,'inspect_credential_request',args,{source:\"packages/client/src/login-verification.js\",owningFunction:\"createLoginVerifier.verify\"})",
       "classification": "auth_owner_failure_forwarded_with_local_original_readback",
       "normalizationCode": "client_auth_owner_failure",
       "ownerFieldsPreserved": [
