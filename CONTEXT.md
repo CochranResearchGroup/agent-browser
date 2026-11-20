@@ -690,3 +690,5 @@ separate guards.
 **Login episode continuation**: An observed supported input sequence under one scoped episode. Acknowledged prefixes never replay; runtime step budgets can extend, settled episodes can renew, and unresolved input anywhere in the task requires original reconciliation before another episode.
 
 **Scoped override working set**: Configurable active grant count with archived original grants resolved under identical task/action/request/effective-policy checks. Archival and capacity updates do not expand permission. Effective permission changes revoke active and archived originals permanently. The archive remains in the policy document and does not promise smaller serialized state.
+
+**Artifact reference admission budget**: Live configurable bound for new retained artifact references. The pre-effect adapter checks the current limit; post-effect custody always retains completed metadata even if another caller lowered that limit. Originals remain available and destination permissions are unchanged.

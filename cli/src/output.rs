@@ -8253,6 +8253,8 @@ Configuration:
   Retained-browser identity rejection (runtime_handoff_orphan_browser_hint_mismatch) fails resolution with no_effect and inspect_profile_recovery_plan recourse. Preserve the handoff identity; do not blindly retry or reopen a replacement. This does not establish permanent browser loss.
   Configure retained operation capacity with browser_command action task_operation, params.operation=capacity, scope=task|defaults, and optional policy {{initialCapacity,extensionIncrement,maximumCapacity}}. Defaults256/256/4096; omit policy to inspect. Completed operations archive before extension; uncertain records remain active. Archived original IDs still prevent redispatch. First archival requires runtime schema6; do not downgrade to an older binary that cannot read it.
   Optional capacity policy maximumLoginSteps (default32) updates the existing task immediately; settled login episodes can renew, uncertain input must reconcile first.
+  Optional maximumArtifactReferences (default256) controls new artifact admission on existing tasks; inspect count/limit or raise live without restart. Completed artifact metadata is always retained; no deletion or destination permission expansion.
+
   browser_policy override_capacity uses scope app|task and capacity {{activeLimit:256}}, with expectedRevision, actor and reason. Archived grants preserve exact authorization; override_lookup with overrideId inspects originals. Capacity updates require no restart or permission expansion.
   Ordinary browser_reconnect status returns exact-task continuity and a fresh-facade command; reconnect observes the retained page without reopening closed tasks or replaying uncertain requests.
 

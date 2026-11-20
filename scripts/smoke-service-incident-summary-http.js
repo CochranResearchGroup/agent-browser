@@ -85,7 +85,7 @@ try {
   assert(logged.data.records.length === 1 && logged.data.records[0].occurrenceId === occurrenceId,
     `HTTP failure lookup did not preserve the producer occurrence: ${JSON.stringify(logged)}`);
   const afterJobs = await httpJson(port, 'GET', '/api/service/jobs');
-  assert(!afterJobs.data.jobs.some(job => job.requestId === rejection.id || job.command?.id === rejection.id),
+  assert(!afterJobs.data.jobs.some(job => job.id === rejection.id || job.action === 'synthetic_unsupported_action'),
     'Rejected request created a job for its original request ID');
   const incidents = await httpJson(
     port,
