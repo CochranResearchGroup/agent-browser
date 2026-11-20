@@ -55,6 +55,10 @@ pub enum ServiceRetryDisposition {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ServiceFailureRecourse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub occurrence_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logging: Option<Value>,
     pub schema_version: String,
     pub code: String,
     pub axis: ServiceFailureAxis,

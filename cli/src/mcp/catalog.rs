@@ -204,8 +204,17 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
             "task_retirement" => Some(json!({"type":"object","additionalProperties":false,
                 "properties":{"choice":{"enum":["inspect","retire","status"]},"operationId":{"type":"string","minLength":1,"maxLength":160},"expectedBindingRef":{"type":"string","pattern":"^[a-fA-F0-9]{64}$"}},"required":["choice"],
                 "oneOf":[{"properties":{"choice":{"const":"inspect"}},"not":{"anyOf":[{"required":["operationId"]},{"required":["expectedBindingRef"]}]}},{"properties":{"choice":{"const":"status"}},"required":["operationId"],"not":{"required":["expectedBindingRef"]}},{"properties":{"choice":{"const":"retire"}},"required":["operationId","expectedBindingRef"]}]})),
+            "failure_log" => Some(json!({"type":"object","additionalProperties":false,
+                "properties":{"occurrenceId":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":1000}}})),
             "task_operation" => Some(json!({"type":"object","additionalProperties":false,
-                "properties":{"requestId":{"type":"string","minLength":1}},"required":["requestId"]})),
+                "properties":{"requestId":{"type":"string","minLength":1},
+                    "operation":{"enum":["capacity"]},"scope":{"enum":["task","defaults"]},
+                    "policy":{"type":"object","additionalProperties":false,"properties":{
+                        "initialCapacity":{"type":"integer","minimum":1},
+                        "extensionIncrement":{"type":"integer","minimum":1},
+                        "maximumCapacity":{"type":"integer","minimum":1}},
+                        "required":["initialCapacity","extensionIncrement","maximumCapacity"]}},
+                "anyOf":[{"required":["requestId"]},{"required":["operation"]}]})),
             "task_briefing" | "mode" | "back" | "forward" | "reload" | "service_resources" => {
                 Some(json!({"type":"object",
                 "additionalProperties":false,"properties":{},"required":[]}))

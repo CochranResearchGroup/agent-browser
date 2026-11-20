@@ -135,11 +135,15 @@ pub(super) fn execute(command: Value, session: &str) -> Result<Value, JsonRpcErr
     })
     .map_err(|error| issue(format!("workflow_transport_failed:{error}")))?;
     if !response.success {
-        return Err(issue(
-            response
-                .error
-                .unwrap_or_else(|| "workflow_operation_failed".into()),
-        ));
+        return Err(super::JsonRpcError {
+            code: -32603,
+            message: "Browser operation failed",
+            data: Some(
+                json!({"message":response.error.unwrap_or_else(|| "workflow_operation_failed".into()),
+                "requestId":response.id,"failure":response.failure,
+                "terminalOutcome":response.terminal_outcome,"operation":response.data}),
+            ),
+        });
     }
     Ok(response.data.unwrap_or(Value::Null))
 }

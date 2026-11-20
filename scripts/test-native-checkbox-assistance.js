@@ -73,6 +73,20 @@ async function scenario(condition,family=families[1]) {
   return {condition,family,inputs,captures,clearanceReads,accessReads};
 }
 const receipts=[];
+const refused = createChallengeAssistanceClient({
+  callTool: async () => ({isError:true,content:[{type:'text',text:JSON.stringify({
+    success:false,error:'browser_control_human',id:'original-request',
+    failure:{code:'browser_control_human',occurrenceId:'occurrence-1',effectState:'no_effect',
+      executableNextAction:{tool:'browser_control',arguments:{taskId:'task',operation:'status'}}}
+  })}]}),
+  verifyClearance:async()=>({}),verifyAccess:async()=>({})
+});
+await assert.rejects(refused.prepare({taskId:'task'}), error => {
+  assert.equal(error.code,'browser_control_human');
+  assert.equal(error.failure.occurrenceId,'occurrence-1');
+  assert.equal(error.requestId,'original-request');
+  return true;
+});
 for(const family of families)receipts.push(await scenario('success',family));
 for(const condition of ['visual_v2','unknown_v2_rule','rpc_not_found','passive','image','manual','requires_cdp_free','manual_mode','manual_login','profile_manual','provider_denied','provider_disabled','wrong_backend','missing_capability','policy_denied','policy_changed','stale','control_changed','access_denied','clearance_denied','uncertain'])receipts.push(await scenario(condition));
 console.log(JSON.stringify({passed:true,publicClient:true,receipts}));

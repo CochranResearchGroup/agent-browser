@@ -1,5 +1,28 @@
 # Service Mode
 
+### Recover a public refusal
+
+Workflow refusals preserve structured `failure` recourse alongside the original
+message, request and operation evidence. `failure.occurrenceId` identifies a
+private journal occurrence. `failure.logging.state=durable_pending` means the
+record is in durable custody awaiting journal projection; `failed` reports a
+logging failure separately from the original refusal. An uncertain effect is
+never permission to repeat input.
+
+Read recent task-scoped records without starting a browser:
+
+```json
+{"name":"browser_command","arguments":{"taskId":"session:report","action":"failure_log","params":{"occurrenceId":"RETURNED-OCCURRENCE-ID","limit":100}}}
+```
+
+Omit `occurrenceId` for recent task records. This view searches the most recent
+1,000 journal entries and returns at most `limit` matching records; absence
+outside that window does not prove no refusal occurred. The authenticated
+`GET /api/service/failures` and private journal remain available for diagnostics.
+Use the returned `executableNextAction` for supported inspection. Inspection
+itself does not resolve an uncertain operation or establish that replay is safe.
+
+
 ## Hosted reconnect, rules and artifacts
 
 The connected MCP catalog has 17 workflow tools. Discover actual schemas before

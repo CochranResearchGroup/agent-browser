@@ -2,6 +2,9 @@
 
 use serde_json::Value;
 
+mod public;
+pub(crate) use public::attach_public_failure;
+
 pub(crate) use agent_browser_service_model::{
     child_access_failure_evidence, operator_focus_failure_code, profile_child_denial_error,
 };

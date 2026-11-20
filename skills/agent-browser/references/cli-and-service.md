@@ -1,5 +1,28 @@
 # Advanced CLI and service reference
 
+### Recover a public refusal
+
+Workflow refusals preserve structured `failure` recourse alongside the original
+message, request and operation evidence. `failure.occurrenceId` identifies a
+private journal occurrence. `failure.logging.state=durable_pending` means the
+record is in durable custody awaiting journal projection; `failed` reports a
+logging failure separately from the original refusal. An uncertain effect is
+never permission to repeat input.
+
+Read recent task-scoped records without starting a browser:
+
+```json
+{"name":"browser_command","arguments":{"taskId":"session:report","action":"failure_log","params":{"occurrenceId":"RETURNED-OCCURRENCE-ID","limit":100}}}
+```
+
+Omit `occurrenceId` for recent task records. This view searches the most recent
+1,000 journal entries and returns at most `limit` matching records; absence
+outside that window does not prove no refusal occurred. The authenticated
+`GET /api/service/failures` and private journal remain available for diagnostics.
+Use the returned `executableNextAction` for supported inspection. Inspection
+itself does not resolve an uncertain operation or establish that replay is safe.
+
+
 Workstation candidates must include the built dashboard. `pnpm build:development-candidate` builds it before Cargo and stops if the frontend build fails. Installation and doctor reject missing or placeholder-only dashboard assets with `dashboard_build_incomplete`; rebuild the dashboard and then recompile the candidate. Rust-only compilation remains available for source development.
 
 Only an executing workstation writer delays a conflicting change. Renaming or

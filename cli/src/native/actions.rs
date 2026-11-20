@@ -570,6 +570,16 @@ async fn execute_command_with_target_custody(
     state: &mut DaemonState,
     managed_target: bool,
 ) -> Value {
+    let mut response = execute_command_with_target_custody_inner(cmd, state, managed_target).await;
+    super::service_failure::attach_public_failure(&mut response, cmd, "browser_dispatch");
+    response
+}
+
+async fn execute_command_with_target_custody_inner(
+    cmd: &Value,
+    state: &mut DaemonState,
+    managed_target: bool,
+) -> Value {
     let mut prepared_command = cmd.clone();
     if let Err(error) = super::browser_host_policy::prepare_dispatch(
         state

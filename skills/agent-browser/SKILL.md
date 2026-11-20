@@ -6,6 +6,8 @@ allowed-tools: Bash(agent-browser:*)
 
 # Agent Browser
 
+For public refusal occurrence IDs and no-launch task error-log readback, see [the CLI and service reference](references/cli-and-service.md#recover-a-public-refusal).
+
 Authelia supplies access; dashboard login, enrollment and roles are disabled.
 
 [Control and credentials](references/cli-and-service.md).

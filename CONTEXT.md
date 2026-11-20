@@ -4,6 +4,8 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Refusal occurrence**: One sanitized public failure linked to private journal custody. Its occurrence ID survives workflow adapters; logging delivery, operation effect certainty and successful recovery are separate observations. Supported task-scoped failure-log reads do not dispatch browser input.
+
 **Workspace launch acknowledgement**: The original operator-bound launch intent
 and owner response for one immutable operation. Stable ingress must allow the
 bounded launch response to arrive; an ingress timeout never proves a launch was

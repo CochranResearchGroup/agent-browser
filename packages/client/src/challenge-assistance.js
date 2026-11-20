@@ -16,10 +16,17 @@ export function createChallengeAssistanceClient({callTool,verifyClearance,verify
   async function call(name,args) {
     const reply=await callTool(name,args);
     const text=reply?.content?.find(block=>block.type==='text')?.text;
-    if(reply?.isError||typeof text!=='string'||text.length>8*1024*1024)fail('challenge_workflow_response_invalid');
+    if(typeof text!=='string'||text.length>8*1024*1024)fail('challenge_workflow_response_invalid');
     let envelope;
     try{envelope=JSON.parse(text);}catch{fail('challenge_workflow_response_invalid');}
-    if(envelope.success!==true)fail('challenge_workflow_refused_observe_before_retry');
+    if(reply?.isError||envelope.success!==true) {
+      // Keep the public owner's recovery contract. A refusal is not malformed JSON.
+      const failure=envelope.failure??envelope.error?.data?.failure;
+      const candidate=failure?.code??envelope.error?.code;
+      const code=typeof candidate==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(candidate)
+        ?candidate:'challenge_workflow_refused_observe_before_retry';
+      throw Object.assign(new Error(code),{code,failure,requestId:envelope.id??envelope.error?.data?.requestId});
+    }
     return envelope.data;
   }
   const briefing=taskId=>call('browser_command',{taskId,action:'task_briefing'});

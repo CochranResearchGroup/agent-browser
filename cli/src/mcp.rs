@@ -110,6 +110,7 @@ const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 // Advanced commands address one task. Explicit profile duplication also
 // supports a source profile without acquiring a task.
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
+    "failure_log",
     "task_operation",
     "task_retirement",
     "mode",
@@ -5507,9 +5508,53 @@ fn call_service_mcp_tool(
     session: &str,
     configured_service_state: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
-    task_operations::with_context(params, || {
+    let mut command = params
+        .map(|value| value["arguments"].clone())
+        .unwrap_or_else(|| json!({}));
+    if !command.is_object() {
+        command = json!({});
+    }
+    if command["action"].is_null() {
+        command["action"] = params
+            .map(|value| value["name"].clone())
+            .unwrap_or(Value::Null);
+    }
+    let result = task_operations::with_context(params, || {
         call_service_mcp_tool_inner(params, session, configured_service_state)
-    })
+    });
+    result
+        .map(|mut result| {
+            if let Some(text) = result["content"][0]["text"].as_str() {
+                if let Ok(mut payload) = serde_json::from_str::<Value>(text) {
+                    if payload["success"] == false {
+                        crate::native::service_failure::attach_public_failure(
+                            &mut payload,
+                            &command,
+                            "mcp_workflow",
+                        );
+                        result["content"][0]["text"] = json!(payload.to_string());
+                    }
+                }
+            }
+            result
+        })
+        .map_err(|mut error| {
+            let mut response = json!({"success":false,"error":error.data.as_ref()
+            .and_then(|data| data["message"].as_str()).unwrap_or(error.message)});
+            if let Some(data) = &error.data {
+                if data["failure"].is_object() {
+                    response["failure"] = data["failure"].clone();
+                }
+            }
+            crate::native::service_failure::attach_public_failure(
+                &mut response,
+                &command,
+                "mcp_workflow",
+            );
+            let data = error.data.get_or_insert_with(|| json!({}));
+            data["failure"] = response["failure"].clone();
+            error
+        })
 }
 
 fn call_service_mcp_tool_inner(
@@ -5685,6 +5730,28 @@ fn call_service_mcp_tool_inner(
         }
         if arguments["action"] == "task_retirement" {
             return task_retirement::call(arguments, session);
+        }
+        if arguments["action"] == "failure_log" {
+            let task = required_string_argument(arguments, "taskId")?;
+            let params = &arguments["params"];
+            let limit = params["limit"].as_u64().unwrap_or(100).clamp(1, 1000) as usize;
+            let mut journal = crate::native::service_failure_journal::read_service_failures(1000)
+                .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            journal.records.retain(|record| {
+                record.references.session_id.as_deref() == Some(task)
+                    && params["occurrenceId"]
+                        .as_str()
+                        .is_none_or(|id| record.occurrence_id == id)
+            });
+            let remove = journal.records.len().saturating_sub(limit);
+            journal.records.drain(..remove);
+            return Ok(tool_response_from_payload(
+                "browser_command",
+                session,
+                json!({}),
+                serde_json::to_value(journal).expect("journal is serializable"),
+                false,
+            ));
         }
         if arguments["action"] == "task_operation" {
             return task_operations::call(arguments, session);
@@ -11511,6 +11578,9 @@ struct JsonRpcError {
     message: &'static str,
     data: Option<Value>,
 }
+
+#[cfg(test)]
+mod refusal_tests;
 
 impl JsonRpcError {
     fn invalid_params(message: &str) -> Self {
