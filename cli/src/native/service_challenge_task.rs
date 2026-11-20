@@ -532,6 +532,45 @@ mod tests {
     }
 
     #[test]
+    fn public_challenge_start_requires_reliable_relative_deadline_origin() {
+        // Exercise the existing public adapter and real disposable repository.
+        // A guest timestamp must not mint a relative deadline when the supported
+        // time client has failed, even though all task identity checks pass.
+        let home =
+            std::env::temp_dir().join(format!("ab-challenge-origin-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&home).unwrap();
+        let environment =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        environment.set("HOME", home.to_str().unwrap());
+        environment.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let repository =
+            super::super::service_store::LockedServiceStateRepository::default_json().unwrap();
+        let state = service_state();
+        let command = start_command(&state);
+        repository
+            .mutate(|retained| {
+                *retained = state.clone();
+                Ok(())
+            })
+            .unwrap();
+        let before = repository.load_snapshot().unwrap();
+        let _time = crate::connection::stable_time::Fixture::set(Err(
+            "stable_time_client_start_failed".to_string(),
+        ));
+        let result = handle_service_challenge_task(&command);
+        let after = repository.load_snapshot().unwrap();
+        std::fs::remove_dir_all(&home).unwrap();
+        assert!(
+            matches!(&result, Err(cause) if cause.contains("stable_time_client_start_failed")),
+            "relative-deadline creation must expose the actual time-client cause: {result:?}",
+        );
+        assert_eq!(
+            after.challenge_tasks, before.challenge_tasks,
+            "unavailable reliable time must not create a task with a guest-derived deadline"
+        );
+    }
+
+    #[test]
     fn start_is_exact_handle_bound_idempotent_and_secret_free() {
         let mut state = service_state();
         let command = start_command(&state);
