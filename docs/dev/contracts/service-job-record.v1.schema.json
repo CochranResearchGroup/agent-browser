@@ -40,30 +40,52 @@
     },
     "terminalOutcome": {
       "oneOf": [
-        { "$ref": "service-terminal-outcome.v1.schema.json" },
-        { "type": "null" }
+        {
+          "$ref": "service-terminal-outcome.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
       ],
       "description": "Canonical outcome for terminal jobs. Null while queued, waiting, or running."
     },
     "serviceName": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "agentName": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "taskName": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "targetServiceId": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Singular target service or identity-provider hint supplied by the caller."
     },
     "siteId": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Singular site hint supplied by the caller."
     },
     "loginId": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Singular login identity hint supplied by the caller."
     },
     "targetServiceIds": {
@@ -103,7 +125,10 @@
       "description": "True when the job manages browser, profile, monitor, or service lifecycle rather than a CDP-backed tab interaction."
     },
     "displayIsolation": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "enum": [
         "private_virtual_display",
         "shared_display",
@@ -113,31 +138,52 @@
       "description": "Remote-headed display allocation policy requested by the caller or copied access plan."
     },
     "requestedDisplayAllocationId": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Display allocation id requested by the caller before service resolution."
     },
     "displayAllocationId": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Display allocation id resolved by launch, focus, route allocation, or viewer takeover handling."
     },
     "requestedRemoteViewRouteId": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Remote-view route id requested by the caller before service resolution."
     },
     "remoteViewRouteId": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Remote-view route id resolved by the service or provider."
     },
     "routePoolEntryId": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Static route-pool entry used to resolve the remote-view route, when known."
     },
     "viewerLeaseId": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Viewer lease id requested or created by a view operation."
     },
     "controllerLeaseId": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Controller lease id requested or granted by a view operation."
     },
     "target": {
@@ -172,24 +218,39 @@
       ]
     },
     "submittedAt": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "format": "date-time"
     },
     "startedAt": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "format": "date-time"
     },
     "completedAt": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "format": "date-time"
     },
     "timeoutMs": {
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 0
     },
     "result": {},
     "error": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "failure": {
       "oneOf": [
@@ -201,6 +262,30 @@
         }
       ],
       "description": "Machine-readable recourse for failed jobs. Absence preserves compatibility with older records."
+    },
+    "deadlineEvidence": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "const": "unqualified_legacy_start"
+        },
+        "automaticTerminalization": {
+          "const": false
+        },
+        "nextAction": {
+          "type": "object"
+        },
+        "resumeCondition": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "automaticTerminalization",
+        "nextAction",
+        "resumeCondition"
+      ],
+      "additionalProperties": false
     }
   },
   "additionalProperties": true

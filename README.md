@@ -3108,6 +3108,8 @@ On macOS, `AGENT_BROWSER_KEYCHAIN_PASSWORD` unlocks the login keychain before Ch
 | `AGENT_BROWSER_CONFIRM_ACTIONS`     | Action categories requiring confirmation |
 | `AGENT_BROWSER_CONFIRM_INTERACTIVE` | Enable interactive confirmation prompts  |
 | `AGENT_BROWSER_RUNTIME_HOST`        | Enable guarded single-host admission for named runtime lanes |
+| `AGENT_BROWSER_STABLE_TIME_CLIENT` | Absolute supported Native freshness client config; default ~/.local/share/stable-time/client.json |
+| `AGENT_BROWSER_STABLE_TIME_BINARY` | Supported Native freshness client executable, default stable-time |
 | `AGENT_BROWSER_LATENCY_PHASE` | Opt-in StableTime sampling: routing, state_read, readiness, startup_lock, cdp, persistence or queue; unset means no sampling |
 | `AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT` | Absolute supported StableTime MCP client configuration path for selected sampling |
 | `AGENT_BROWSER_LATENCY_STABLE_TIME_BINARY` | Optional supported StableTime executable, default stable-time |
@@ -7955,3 +7957,13 @@ For a Native control observation, pass the addressed browser task ID rather than
 Select one phase with `AGENT_BROWSER_LATENCY_PHASE` and configure the supported StableTime client with `AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT`. Returned `latencyPhases` stay outside command fingerprints and appear in operation data, including supported failure envelopes. Sampling adds clock-client overhead and cannot qualify ordinary command speed. Missing configuration, helper failure or unqualified time produces an unavailable sample without replacing the browser result; each helper exchange is bounded to five seconds. No selected phase means no added time-service call. Service-observation brackets include delivery overhead and bound actual operation elapsed time only from zero to their upper bound.
 
 Artifact reference admission uses optional `maximumArtifactReferences` in the same live task-operation capacity policy (default 256). Capacity status reports `artifactReferenceCount` and `artifactReferenceLimit`; raise the limit on the retained task before another capture. Existing originals remain available. Completed file effects always retain their completion metadata, including if another caller lowered the budget during capture. Updating this admission budget does not delete artifacts or expand destination permissions.
+
+### Native freshness time
+
+Native checkbox, login and image input uses owner-minted StableTime `serviceTime` evidence with service measurement bounds, epoch and counter continuity. Guest wall/boot clocks do not establish freshness. Existing age budgets remain 10 seconds for checkbox/login and 60 seconds for image input. Expired evidence, excessive uncertainty, changed time domain and helper/service failures have distinct recourse. Legacy unqualified evidence requires a fresh supported `native_capture`; original uncertain input is never replayed. A timing failure remains visible in `timeQualificationFailure` on a capture, while freshness-dependent input pauses. Ordinary CDP and read-only task inspection continue.
+
+`AGENT_BROWSER_STABLE_TIME_CLIENT` selects an absolute supported client configuration (default `~/.local/share/stable-time/client.json`); `AGENT_BROWSER_STABLE_TIME_BINARY` selects its executable (default `stable-time`). Credentials remain inside that private supported client. Each helper exchange is bounded to five seconds. Helper/configuration failure is not proof that the StableTime service is down. No local host-counter bridge or guest-clock extrapolation is used.
+
+### Running job deadline evidence
+
+Running job readback may include `deadlineEvidence.state: "unqualified_legacy_start"` and `automaticTerminalization: false`. Legacy guest-clock timestamps cannot prove elapsed execution time and no longer cause automatic terminalization. Inspect the exact original job with `agent-browser --json service jobs --id JOB`. Active-owner cancellation and positive process-exit reconciliation keep their existing proof requirements; inspection does not authorize replay. Persisted qualified deadline auto-finalization is not implemented by this change.

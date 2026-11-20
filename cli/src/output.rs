@@ -8254,6 +8254,9 @@ Configuration:
   Configure retained operation capacity with browser_command action task_operation, params.operation=capacity, scope=task|defaults, and optional policy {{initialCapacity,extensionIncrement,maximumCapacity}}. Defaults256/256/4096; omit policy to inspect. Completed operations archive before extension; uncertain records remain active. Archived original IDs still prevent redispatch. First archival requires runtime schema6; do not downgrade to an older binary that cannot read it.
   Optional capacity policy maximumLoginSteps (default32) updates the existing task immediately; settled login episodes can renew, uncertain input must reconcile first.
   Optional maximumArtifactReferences (default256) controls new artifact admission on existing tasks; inspect count/limit or raise live without restart. Completed artifact metadata is always retained; no deletion or destination permission expansion.
+  Native input requires qualified StableTime capture evidence; fresh native_capture repairs legacy/expired evidence. Capture timing failures preserve readback, ordinary CDP and task inspection.
+  Running jobs with unqualified legacy start times are not automatically terminalized from guest-clock age; inspect service jobs --id JOB and preserve original uncertainty.
+
 
   browser_policy override_capacity uses scope app|task and capacity {{activeLimit:256}}, with expectedRevision, actor and reason. Archived grants preserve exact authorization; override_lookup with overrideId inspects originals. Capacity updates require no restart or permission expansion.
   Ordinary browser_reconnect status returns exact-task continuity and a fresh-facade command; reconnect observes the retained page without reopening closed tasks or replaying uncertain requests.
@@ -8426,6 +8429,10 @@ Environment:
   AGENT_BROWSER_JSON             JSON output
   AGENT_BROWSER_ANNOTATE         Annotated screenshot with numbered labels and legend
   AGENT_BROWSER_DEBUG            Debug output
+  AGENT_BROWSER_STABLE_TIME_CLIENT
+                                 Absolute supported Native freshness client config (default: ~/.local/share/stable-time/client.json)
+  AGENT_BROWSER_STABLE_TIME_BINARY
+                                 Supported Native freshness executable (default: stable-time); no guest-clock fallback
   AGENT_BROWSER_LATENCY_PHASE    Optional StableTime phase: routing, state_read, readiness, startup_lock, cdp, persistence, queue
   AGENT_BROWSER_LATENCY_STABLE_TIME_CLIENT
                                  Absolute supported StableTime MCP client config; selected samples only, no guest-time fallback

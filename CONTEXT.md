@@ -692,3 +692,7 @@ separate guards.
 **Scoped override working set**: Configurable active grant count with archived original grants resolved under identical task/action/request/effective-policy checks. Archival and capacity updates do not expand permission. Effective permission changes revoke active and archived originals permanently. The archive remains in the policy document and does not promise smaller serialized state.
 
 **Artifact reference admission budget**: Live configurable bound for new retained artifact references. The pre-effect adapter checks the current limit; post-effect custody always retains completed metadata even if another caller lowered that limit. Originals remain available and destination permissions are unchanged.
+
+**Qualified Native freshness**: Owner-minted service-time bounds and epoch/counter continuity carried with Native capture evidence. Freshness-dependent input uses the supported StableTime observation instant and uncertainty, never WSL wall/boot extrapolation. Legacy captures require fresh qualification; timing failures preserve independent inspection and original uncertain-input custody.
+
+**Legacy job deadline evidence**: Existing wall-clock submitted/started metadata is historical attribution, not reliable elapsed-time proof. Unqualified legacy starts cannot automatically terminalize running jobs. Current-owner cancellation and positive process-exit evidence remain separate authorities.

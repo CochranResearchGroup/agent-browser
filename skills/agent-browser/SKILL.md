@@ -131,3 +131,5 @@ Read [evidence-backed login progress](references/cli-and-service.md#evidence-bac
 Latency: [phases](references/cli-and-service.md#optional-command-latency-diagnostics).
 
 [Login and grant continuation](references/cli-and-service.md#continued-login-and-scoped-override-capacity).
+
+Native input: [qualified freshness](references/cli-and-service.md#native-freshness-time).

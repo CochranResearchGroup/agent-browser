@@ -168,6 +168,7 @@ export interface ServiceFailureRecourse {
   waitMs?: number | null;
   holderOperation?: string | null;
   recoveryPlan?: Record<string, unknown> | null;
+  recoveryRegistry?: Record<string, unknown> | null;
   jobId?: string | null;
   traceId?: string | null;
   safeNextActions?: string[];
@@ -262,6 +263,7 @@ export interface ServiceJobRecord {
   result: unknown;
   error: string | null;
   failure?: ServiceFailureRecourse | null;
+  deadlineEvidence?: {state: "unqualified_legacy_start"; automaticTerminalization: false; nextAction: Record<string, unknown>; resumeCondition: string};
   [key: string]: unknown;
 }
 

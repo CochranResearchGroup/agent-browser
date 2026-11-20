@@ -1840,6 +1840,7 @@ export interface ServiceFailureRecourse {
   waitMs?: number | null;
   holderOperation?: string | null;
   recoveryPlan?: Record<string, unknown> | null;
+  recoveryRegistry?: Record<string, unknown> | null;
   jobId?: string | null;
   traceId?: string | null;
   safeNextActions?: string[];

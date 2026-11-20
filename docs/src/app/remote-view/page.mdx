@@ -1449,3 +1449,9 @@ remains passive. A confirmed graceful relaunch returns only the current viewer's
 own Native control lease, then closes with the fresh agent epoch. Generic input
 still requires its supplied epoch. A different controller or unresolved original
 return keeps the browser open and reports the precise control boundary.
+
+## Native input freshness time
+
+Native checkbox, login and image input uses owner-minted StableTime `serviceTime` evidence with service measurement bounds, epoch and counter continuity. Guest wall/boot clocks do not establish freshness. Existing age budgets remain 10 seconds for checkbox/login and 60 seconds for image input. Expired evidence, excessive uncertainty, changed time domain and helper/service failures have distinct recourse. Legacy unqualified evidence requires a fresh supported `native_capture`; original uncertain input is never replayed. A timing failure remains visible in `timeQualificationFailure` on a capture, while freshness-dependent input pauses. Ordinary CDP and read-only task inspection continue.
+
+`AGENT_BROWSER_STABLE_TIME_CLIENT` selects an absolute supported client configuration (default `~/.local/share/stable-time/client.json`); `AGENT_BROWSER_STABLE_TIME_BINARY` selects its executable (default `stable-time`). Credentials remain inside that private supported client. Each helper exchange is bounded to five seconds. Helper/configuration failure is not proof that the StableTime service is down. No local host-counter bridge or guest-clock extrapolation is used.
