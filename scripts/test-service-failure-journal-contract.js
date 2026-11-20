@@ -274,8 +274,7 @@ function validateClientLiteralInventory(contract) {
   assert.deepEqual(found.map(key).sort(),contract.remainingLiteralChecks.map(key).sort(),'Unreviewed client literal/result-reason producer');
 }
 
-function validateDashboardBoundaryInventory(contract, registry) {
-  const inventory = contract.dashboardBoundaryInventory;
+function validateDashboardBoundaryInventory(contract, registry, inventory = contract.dashboardBoundaryInventory, sourceRoot = 'packages/dashboard/src/lib') {
   if (!inventory) return;
   const ts = createRequire(resolve('docs/package.json'))('typescript');
   const files = [], found = [];
@@ -286,7 +285,7 @@ function validateDashboardBoundaryInventory(contract, registry) {
       else if (/\.(ts|tsx|js)$/.test(item)) files.push(item);
     }
   }
-  directory('packages/dashboard/src/lib');
+  directory(sourceRoot);
   for (const path of files) {
     const parsed = ts.createSourceFile(path,readFileSync(path,'utf8'),ts.ScriptTarget.Latest,true);
     function walk(node) {
@@ -295,7 +294,7 @@ function validateDashboardBoundaryInventory(contract, registry) {
       if (ts.isThrowStatement(node) || isReject || constructor) {
         const expression = ts.isThrowStatement(node) ? node.expression.getText(parsed) : node.getText(parsed);
         let wrapper = node;
-        while (wrapper && !((ts.isCallExpression(wrapper) || ts.isNewExpression(wrapper)) && ['dashboardLocalFailure','dashboardResponseFailureError','foreignCdpFailure'].includes(wrapper.expression.getText(parsed)))) wrapper = wrapper.parent;
+        while (wrapper && !((ts.isCallExpression(wrapper) || ts.isNewExpression(wrapper)) && ['dashboardLocalFailure','dashboardResponseFailureError','dashboardConfirmationFailure','foreignCdpFailure'].includes(wrapper.expression.getText(parsed)))) wrapper = wrapper.parent;
         found.push({path,kind:ts.isThrowStatement(node)?'throw':isReject?'reject':'error_constructor',expression,wrapper:wrapper?.expression.getText(parsed)});
       }
       ts.forEachChild(node,walk);
@@ -315,13 +314,39 @@ function validateDashboardBoundaryInventory(contract, registry) {
       case 'preserved_original_error_propagation': assert.equal(entry.expression,'error'); break;
       case 'typed_owner_proven_no_effect_failure_preserved': assert(entry.expression.includes('ManualBrowserLaunchRefusal')); break;
       case 'registered_intentional_read_suspension': assert(entry.expression.includes('DashboardReadPausedError') && registry.codes.dashboard_read_paused); break;
-      case 'registered_local_or_owner_normalization_boundary': assert(actual.wrapper || entry.expression.startsWith('dashboardLocalFailure(') || entry.expression.includes('dashboardResponseFailureError(') || entry.expression.includes('foreignCdpFailure('),'Missing actual dashboard normalization wrapper'); break;
+      case 'registered_local_or_owner_normalization_boundary': assert(actual.wrapper || entry.expression.startsWith('dashboardLocalFailure(') || entry.expression.includes('dashboardResponseFailureError(') || entry.expression.includes('dashboardConfirmationFailure(') || entry.expression.includes('foreignCdpFailure('),'Missing actual dashboard normalization wrapper'); break;
       default: assert.fail(`Unreviewed dashboard boundary classification ${entry.classification}`);
     }
   }
   for (const check of contract.dashboardLocalChecks ?? []) {
     assert(readFileSync(check.path,'utf8').includes(check.expression),`Missing dashboard local error ${check.path}`);
     assert(registry.codes[check.code],`Uncovered dashboard local code ${check.code}`);
+  }
+}
+
+function validateDashboardPublicChecks(contract, registry) {
+  const ts = createRequire(resolve('docs/package.json'))('typescript');
+  for (const check of [...(contract.dashboardPublicChecks ?? []),...(contract.dashboardHookChecks ?? [])]) {
+    assert(check.path.startsWith('packages/dashboard/src/'),'Public dashboard check outside reviewed source');
+    const source = readFileSync(check.path,'utf8');
+    const parsed = ts.createSourceFile(check.path,source,ts.ScriptTarget.Latest,true);
+    let actual;
+    function walk(node) {
+      if (ts.isCallExpression(node) && node.getText(parsed) === check.expression) actual = node;
+      ts.forEachChild(node,walk);
+    }
+    walk(parsed);
+    assert(actual,`Missing current dashboard publication call ${check.path}#${check.owningFunction}`);
+    assert(registry.codes[check.code],`Uncovered public dashboard code ${check.code}`);
+    assert.equal(registry.codes[check.code].recipe,check.recipe,'Dashboard publication recipe mismatch');
+    const name = actual.expression.getText(parsed);
+    assert(['dashboardLocalFailure','dashboardResponseFailureError','dashboardConfirmationFailure'].includes(name),'Unreviewed dashboard publication normalizer');
+    assert(actual.arguments.some(argument => ts.isStringLiteral(argument) && argument.text === check.code),'Dashboard call does not emit its qualified code');
+    assert(['local_contract_failure_no_owner_transport','owner_publication_receipt_unconfirmed_preserves_original_ids','owner_response_failure_preserved','local_timing_projection_refresh_only_no_input_authority'].includes(check.classification),'Unreviewed dashboard public classification');
+    if(check.classification==='owner_publication_receipt_unconfirmed_preserves_original_ids') {
+      assert.equal(name,'dashboardConfirmationFailure');
+      assert.equal(actual.arguments[0].getText(parsed),check.payloadExpression,'Dashboard original owner payload lost');
+    }
   }
 }
 
@@ -363,6 +388,10 @@ function validateClientQualification(contract, registry) {
   validateClientFactoryInventory(contract, registry);
   validateClientLiteralInventory(contract);
   validateDashboardBoundaryInventory(contract, registry);
+  if (contract.dashboardFrontendInventory) {
+    validateDashboardBoundaryInventory(contract,registry,contract.dashboardFrontendInventory,'packages/dashboard/src');
+    validateDashboardPublicChecks(contract,registry);
+  }
 
   for (const check of contract.checks) {
     assert(['local_failure_call','explicit_result_reason','local_result_reason_fallback'].includes(check.kind), `Unreviewed client check kind ${check.kind}`);
@@ -689,6 +718,15 @@ missingClientFactory.reviewedFactoryInventory.candidateCount++;
 assert.throws(() => validateClientFactoryInventory(missingClientFactory,recoveryRegistry), /Unreviewed client failure factory count/);
 const missingDashboardBoundary = structuredClone(clientQualification);
 missingDashboardBoundary.dashboardBoundaryInventory.candidateCount++;
+const missingFrontendBoundary = structuredClone(clientQualification);
+if (missingFrontendBoundary.dashboardFrontendInventory) {
+  missingFrontendBoundary.dashboardFrontendInventory.candidateCount++;
+  assert.throws(()=>validateDashboardBoundaryInventory(missingFrontendBoundary,recoveryRegistry,missingFrontendBoundary.dashboardFrontendInventory,'packages/dashboard/src'),/Unreviewed dashboard boundary count/);
+  const uncoveredDashboardPublication = structuredClone(clientQualification);
+  uncoveredDashboardPublication.dashboardPublicChecks[0].code='unregistered_dashboard_publication';
+  assert.throws(()=>validateDashboardPublicChecks(uncoveredDashboardPublication,recoveryRegistry),/Uncovered public dashboard code/);
+}
+
 assert.throws(() => validateDashboardBoundaryInventory(missingDashboardBoundary,recoveryRegistry), /Unreviewed dashboard boundary count/);
 const uncoveredClientQualification = structuredClone(clientQualification);
 uncoveredClientQualification.checks.find(check => check.classification === 'exact_registered_local_failure').code = 'unregistered_client_failure';
