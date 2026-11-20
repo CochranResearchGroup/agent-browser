@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
 import { createRequire } from 'node:module';
@@ -108,12 +109,17 @@ for (const path of recoveryRegistry.fragments ?? []) {
   const fragment = JSON.parse(readFileSync(path, 'utf8'));
   assert.equal(fragment.schemaVersion, recoveryRegistry.schemaVersion);
   if (fragment.externalToolContract) {
-    assert.equal(fragment.externalToolContract, 'docs/dev/contracts/client-external-owner-tools.v1.json', 'Unreviewed external recovery tool contract');
+    const externalContracts = {
+      'docs/dev/contracts/client-external-owner-tools.v1.json':['remote_view_recordings','remote_view_recording_pin'],
+      'docs/dev/contracts/service-model-external-owner-tools.v1.json':['remote_view_pool_inspect','remote_view_operation_status'],
+    };
+    assert(Object.hasOwn(externalContracts,fragment.externalToolContract),'Unreviewed external recovery tool contract');
     const contract = JSON.parse(readFileSync(fragment.externalToolContract, 'utf8'));
-    assert.equal(contract.schemaVersion, 'agent-browser.client-external-owner-tools.v1');
+    assert(['agent-browser.client-external-owner-tools.v1','agent-browser.service-model-external-owner-tools.v1'].includes(contract.schemaVersion),'Unreviewed external declaration schema');
     for (const [name, declaration] of Object.entries(contract.tools)) {
-      assert(['remote_view_recordings','remote_view_recording_pin'].includes(name), 'Unreviewed external recovery tool');
+      assert(externalContracts[fragment.externalToolContract].includes(name), 'Unreviewed external recovery tool');
       assert(declaration.provenance.includes(`mcp__remote_view__${name}`), 'Missing external owner declaration provenance');
+      if(Object.hasOwn(externalRecoveryTools,name)) assert.deepEqual(externalRecoveryTools[name],declaration,'Conflicting external owner declaration');
       externalRecoveryTools[name] = declaration;
     }
   }
@@ -420,7 +426,14 @@ function validateRecoveryCall(call) {
       assert.equal(typeof value, schema.properties[name].type, `Invalid external owner argument ${name}`);
       assert(name !== 'accessToken', 'Recovery recipes must not retain private owner tokens');
     }
-    assert.equal(call.arguments.recordingId, '$recordingId', 'External owner recipe must retain exact original recording');
+    const identity = {remote_view_recordings:'recordingId',remote_view_recording_pin:'recordingId',remote_view_pool_inspect:'poolId',remote_view_operation_status:'operationId'}[call.tool];
+    assert.equal(call.arguments[identity],`$${identity}`,'External owner recipe must retain its exact original identity');
+    if(['remote_view_pool_inspect','remote_view_operation_status'].includes(call.tool)) {
+      assert.deepEqual(schema.required,[identity],'External read must require its actual scoped identity');
+      assert.deepEqual(Object.keys(schema.properties),[identity],'Unreviewed external read argument');
+      assert.equal(declaration.requiredActor,undefined,'Read-only external declaration cannot grant a new mutation role');
+      assert(call.precondition?.length>10,'External owner read requires explicit existing scope and authority');
+    }
     return;
   }
   if (call.interface === 'caller_error') {
@@ -759,11 +772,32 @@ assert.throws(() => validateRecoveryCall({tool:'nonexistent_recovery_tool',argum
 for (const check of recoveryRegistry.cliPublicationChecks ?? []) assert(readFileSync(check.path,'utf8').includes(check.sourceEvidence) && check.meaning.length > 20, 'Missing public CLI publication boundary');
 for (const check of recoveryRegistry.privateCliExclusions ?? []) assert(readFileSync(check.path,'utf8').includes(check.sourceEvidence) && check.reason.length > 20, 'Unproven private CLI protocol exclusion');
 for (const boundary of recoveryRegistry.boundaries) assert(readFileSync(boundary.source, 'utf8').includes(boundary.publication), `Missing ${boundary.surface} publication seam`);
+function validateOriginalCandidateCensus(census, registry) {
+  assert.equal(census.schemaVersion,'agent-browser.original-error-candidate-census.v1');
+  const candidates = Object.keys(census.candidates).sort();
+  assert.equal(candidates.length,census.candidateCount,'Original candidate census entry removed');
+  assert.equal(createHash('sha256').update(candidates.join('\n')+'\n').digest('hex'),census.candidateCodesSha256,'Original candidate census codes changed without source qualification');
+  const dispositions = new Set((registry.exclusions ?? []).map(entry=>entry.code));
+  for(const code of candidates) {
+    assert(census.candidates[code].length>0 && census.candidates[code].every(path=>typeof path==='string'),'Candidate source provenance missing');
+    assert(registry.codes[code] || dispositions.has(code),`Unadjudicated original error candidate ${code}`);
+  }
+  return candidates.length;
+}
+const originalCandidateCensus = JSON.parse(readFileSync('docs/dev/contracts/public-original-error-candidate-census.v1.json','utf8'));
+const qualifiedOriginalCandidates = validateOriginalCandidateCensus(originalCandidateCensus,recoveryRegistry);
+const uncoveredOriginalCensus = structuredClone(originalCandidateCensus);
+const originalCode = Object.keys(uncoveredOriginalCensus.candidates)[0];
+const withoutOriginal = structuredClone(recoveryRegistry);
+delete withoutOriginal.codes[originalCode];
+withoutOriginal.exclusions = withoutOriginal.exclusions.filter(entry=>entry.code!==originalCode);
+assert.throws(()=>validateOriginalCandidateCensus(uncoveredOriginalCensus,withoutOriginal),/Unadjudicated original error candidate/);
+
 if (process.argv.includes('--require-complete-recovery')) {
   assert.equal(recoveryRegistry.inventoryStatus, 'complete', `Public recovery inventory incomplete: ${recoveryRegistry.knownCoverageGaps.join('; ')}`);
   assert.deepEqual(recoveryRegistry.knownCoverageGaps, []);
 }
-process.stdout.write(`Exact recovery contracts checked: ${Object.keys(recoveryRegistry.codes).length}; reviewed namespace code candidates checked: ${discoveredReviewedCodes.size}; full inventory: ${recoveryRegistry.inventoryStatus}\n`);
+process.stdout.write(`Exact recovery contracts checked: ${Object.keys(recoveryRegistry.codes).length}; reviewed namespace code candidates checked: ${discoveredReviewedCodes.size}; original candidates adjudicated: ${qualifiedOriginalCandidates}; full inventory: ${recoveryRegistry.inventoryStatus}\n`);
 
 assert.throws(() => validateComposedOwningCheck('unreviewed_anything', {path:'cli/src/native/service_profile_recovery.rs',codeComposition:{prefix:'unreviewed_',source:'fake.rs',suffix:'anything'}}), /Unreviewed composed producer source/);
 

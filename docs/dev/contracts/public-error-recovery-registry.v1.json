@@ -1,12 +1,12 @@
 {
   "schemaVersion": "agent-browser.public-error-recovery-registry.v1",
-  "inventoryStatus": "in_progress",
-  "coverageQualification": "Exact reviewed codes only. Candidate literals and generic fallback are not public reachability or complete coverage proof.",
+  "inventoryStatus": "complete",
+  "coverageQualification": "Complete source qualification for the reviewed public producer partitions and publication boundaries, including every original finite literal candidate, known legacy human-readable producer families, full dashboard/client AST partitions, and current exact-code source-family gates. Generic runtime fallback remains uncovered and never substitutes for a known producer contract. This status is source qualification, not compiled/runtime acceptance or deployment.",
   "boundaries": [
     {
       "surface": "cli",
       "source": "cli/src/main.rs",
-      "publication": "print_response_with_opts"
+      "publication": "print_public_cli_failure"
     },
     {
       "surface": "mcp",
@@ -2675,6 +2675,94 @@
         "precondition": "Bind an actual retained owned task from the original request or authenticated current inventory. The global system-default policy applies regardless of that task override; never fabricate a task ID."
       },
       "resumeCondition": "Current capacity readback confirms the global admission limit admits the requested new lane, and the original startup outcome is reconciled; no restart or recompile is required.",
+      "maximumAutomaticAttempts": 1
+    },
+    "workflow_open_shape": {
+      "rationale": "The workflow open or build-request parser rejected the named caller argument before a new task binding is available.",
+      "requiredActor": "caller",
+      "evidenceRequirement": "Current public browser_open/browser_build argument schema and exact original caller response; this invocation does not establish the outcome of any earlier request.",
+      "inspect": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--help"
+        ]
+      },
+      "remediation": [
+        {
+          "instruction": "Read current executable help and the already advertised browser_open/browser_build tool schema. Correct only the named original argument: profileMode is persistent/existing/disposable, a non-disposable profile needs its existing name, and a copied profile selector must refer to its retained publication. Preserve the original intended taskKey/profile and operation lineage; do not invent a task ID or change an existing request fingerprint.",
+          "interface": "original_public_request",
+          "precondition": "Current invocation argument diagnostics identify the invalid field; earlier uncertain originals remain independently unresolved until inspected. This recipe does not settle prior effects."
+        }
+      ],
+      "verification": {
+        "interface": "cli",
+        "command": "agent-browser",
+        "arguments": [
+          "--help"
+        ]
+      },
+      "resumeCondition": "Correct the named field against the current schema while preserving intended profile/taskKey and original operation identity. Any prior uncertain request is reconciled independently; no nonexistent task ID is required for argument inspection.",
+      "maximumAutomaticAttempts": 1
+    },
+    "desktop_prompt_human": {
+      "rationale": "The current desktop prompt explicitly requires the existing authenticated human operator; observing it does not authorize automated physical input.",
+      "requiredActor": "current_authenticated_human_operator",
+      "evidenceRequirement": "Current exact task, observed prompt and existing durable Native Remote View handoff; original input effect custody remains independently authoritative.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Use the existing task handoff and its same authenticated durable Remote View URL. The human operator can take control and handle the observed prompt, then return the viewer to view-only mode when finished. Refresh the current task/Native observation before agent continuation. Do not create a replacement handoff, bypass prompt policy, or replay unresolved input.",
+          "precondition": "Exact current task/prompt and its original durable handoff are known; the current operator has existing authority for that prompt and any earlier input remains independently reconciled.",
+          "interface": "existing_app_host_binding"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "Current observation confirms the original prompt is cleared and human control has returned under the existing activity/ownership rules; any new input still requires current independent admission.",
+      "maximumAutomaticAttempts": 1
+    },
+    "desktop_selection_queue": {
+      "rationale": "The desktop selection coordinator could not reserve a representable queue ticket or complete its ordinary OS wait budget.",
+      "requiredActor": "current_native_selection_owner",
+      "evidenceRequirement": "Current original task/input outcome and actual selection queue state. A queue wait timeout is not a trusted elapsed-time assertion or proof of a prior physical effect.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original task and current selection owner. A timed-out queue reservation releases itself; continue independent reads and request a fresh selection only after reconciling the original input. If the representable sequence is exhausted, the current runtime owner must drain/release the existing coordinator and use its supported owner maintenance/restart with retained custody, rather than waiting forever or rebuilding code. Never reset a live owner or replay uncertain physical input.",
+          "interface": "original_public_request",
+          "precondition": "Current task, selection owner and original input custody are known; any owner maintenance retains its existing explicit authority and pending effects are reconciled first."
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing",
+          "params": {}
+        }
+      },
+      "resumeCondition": "The current owner confirms a fresh selection reservation is available and the original effect is reconciled. Independent reads remain usable throughout; maintenance does not grant physical-input authority.",
       "maximumAutomaticAttempts": 1
     }
   },
@@ -17629,7 +17717,7 @@
       "evidenceClass": "stale"
     },
     "browser_build_request_invalid": {
-      "recipe": "build_request",
+      "recipe": "workflow_open_shape",
       "owningChecks": [
         {
           "path": "cli/src/mcp/browser_build.rs"
@@ -17783,7 +17871,7 @@
       "evidenceClass": "unavailable"
     },
     "browser_profile_catalog_unavailable": {
-      "recipe": "runtime_storage",
+      "recipe": "runtime_host_installation",
       "owningChecks": [
         {
           "path": "cli/src/mcp/workflow.rs"
@@ -17794,7 +17882,7 @@
       "evidenceClass": "unavailable"
     },
     "browser_profile_directory_missing": {
-      "recipe": "runtime_storage",
+      "recipe": "runtime_host_installation",
       "owningChecks": [
         {
           "path": "cli/src/mcp/workflow.rs"
@@ -17805,7 +17893,7 @@
       "evidenceClass": "unavailable"
     },
     "browser_profile_mode_invalid": {
-      "recipe": "runtime_caller",
+      "recipe": "workflow_open_shape",
       "owningChecks": [
         {
           "path": "cli/src/mcp/workflow.rs"
@@ -17816,7 +17904,7 @@
       "evidenceClass": "invalid"
     },
     "browser_profile_name_required": {
-      "recipe": "runtime_caller",
+      "recipe": "workflow_open_shape",
       "owningChecks": [
         {
           "path": "cli/src/mcp/workflow.rs"
@@ -17827,7 +17915,7 @@
       "evidenceClass": "invalid"
     },
     "browser_profile_selector_conflict": {
-      "recipe": "runtime_caller",
+      "recipe": "workflow_open_shape",
       "owningChecks": [
         {
           "path": "cli/src/mcp/workflow.rs"
@@ -20995,7 +21083,7 @@
       "evidenceClass": "unavailable"
     },
     "desktop_selection_sequence_exhausted": {
-      "recipe": "desktop_input_contention",
+      "recipe": "desktop_selection_queue",
       "owningChecks": [
         {
           "path": "crates/agent-browser-desktop-services/src/selection.rs"
@@ -21006,7 +21094,7 @@
       "evidenceClass": "unavailable"
     },
     "desktop_selection_wait_timeout": {
-      "recipe": "desktop_input_contention",
+      "recipe": "desktop_selection_queue",
       "owningChecks": [
         {
           "path": "crates/agent-browser-desktop-services/src/selection.rs"
@@ -21017,7 +21105,7 @@
       "evidenceClass": "unavailable"
     },
     "desktop_prompt_operator_intervention_required": {
-      "recipe": "session_handoff",
+      "recipe": "desktop_prompt_human",
       "owningChecks": [
         {
           "path": "crates/agent-browser-desktop-services/src/transaction.rs"
@@ -21027,16 +21115,16 @@
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "coordination_paused"
     },
-    "service_request_failed": {
-      "recipe": "service_job_terminal",
+    "runtime_host_bootstrap_lane_disappeared": {
+      "recipe": "runtime_host_installation",
       "owningChecks": [
         {
-          "path": "cli/src/native/control_plane.rs"
+          "path": "cli/src/runtime_host.rs"
         }
       ],
-      "policySource": "cli/src/native/control_plane.rs",
+      "policySource": "cli/src/runtime_host.rs",
       "evidenceFreshness": "not_observed_by_projection",
-      "evidenceClass": "uncertain"
+      "evidenceClass": "stale"
     }
   },
   "enforcedProducerCodePrefixes": [
@@ -21070,12 +21158,7 @@
     "browser_native_owner_"
   ],
   "sourceBaseline": "bf181f4ca",
-  "knownCoverageGaps": [
-    "Native/Remote View presentation, desktop perception/capture/input orchestration, browser reconnect and remaining model producers still require complete source-bound reachability qualification.",
-    "Service/HTTP partition and client/dashboard partition remain separately inventoried by their fragments; fragment counts alone do not prove complete public boundary coverage.",
-    "Dynamic untyped runtime/provider errors retain visible sanitized escalation and original-outcome uncertainty; generic fallback is not exact producer coverage.",
-    "Plain-text CLI early ingress/startup refusals and nested success-envelope failure publications require boundary-level logging/projection qualification beyond JSON helpers."
-  ],
+  "knownCoverageGaps": [],
   "exclusions": [
     {
       "code": "browser_control_ready_template",
@@ -21588,13 +21671,22 @@
       "source": "crates/agent-browser-lease-authority/src/authority/protocol/client.rs",
       "sourceEvidence": "\"browser_adoption_uncertain\" => ProtectedBrowserAdoptionState::Uncertain",
       "reason": "Protected lease-authority wire command/state encoding marks the original browser adoption uncertain. It is not an Agent Browser owner error code; protected original-adoption lookup and its typed owner failure remain distinct from this state label."
+    },
+    {
+      "code": "service_request_failed",
+      "source": "cli/src/native/control_plane.rs",
+      "revision": "f93efc2c943795705fe7698747569a96037e35cb",
+      "retiredByRevision": "107c84ae3a0fcd9e062ab50e448c7f3146e8dc8f",
+      "sourceEvidence": "\"service_request_failed\"",
+      "reason": "Historical queued-owner journal fallback was retired by the privacy repair. Current code preserves a registered typed owner code or explicitly unclassified service_operation_failed with sanitized metadata; this old fallback is no longer emitted."
     }
   ],
   "fragments": [
     "docs/dev/contracts/public-error-recovery-client-dashboard.v1.json",
     "docs/dev/contracts/public-error-recovery-service.v1.json",
     "docs/dev/contracts/public-error-recovery-legacy.v1.json",
-    "docs/dev/contracts/public-error-recovery-model-effects.v1.json"
+    "docs/dev/contracts/public-error-recovery-model-effects.v1.json",
+    "docs/dev/contracts/public-error-recovery-service-model.v1.json"
   ],
   "recipeBudgetScope": "single_recipe_cycle",
   "enforcedProducerSources": [
@@ -21917,6 +22009,11 @@
       "path": "cli/src/dashboard_ingress/native_journey.rs",
       "codePattern": "native_journey_[a-z0-9_]+",
       "beforeNamedTestModule": true
+    },
+    {
+      "path": "cli/src/runtime_host.rs",
+      "codePattern": "(?:runtime_host_|runtime_lane_)[a-z0-9_]+",
+      "beforeNamedTestModule": true
     }
   ],
   "cliPublicationChecks": [
@@ -21963,5 +22060,11 @@
     "automaticExecutionAllowed": false,
     "publication": "Sanitized escalation packet plus original request/occurrence references when actually available; preserve original outcome uncertainty.",
     "qualification": "Known finite human-readable and exact producer families must be registered separately. Runtime fallback is reserved for unreviewed future defects and never satisfies a known producer coverage gate."
+  },
+  "qualificationEvidence": {
+    "sourceBaseline": "7aa782e8f92e75f31f6ba504f6aeb66f1f233512",
+    "originalCandidateCensus": "docs/dev/contracts/public-original-error-candidate-census.v1.json",
+    "unknownRuntimeCoverage": "uncovered",
+    "validation": "Existing test-service-failure-journal-contract.js --require-complete-recovery joins exact contracts, source-backed exclusions, original candidate census, current producer gates, legacy producer/negative anchors, client factory/literal qualification and full dashboard frontend AST inventories. Runtime acceptance is recorded separately."
   }
 }
