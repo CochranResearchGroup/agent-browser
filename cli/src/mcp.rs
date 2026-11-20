@@ -327,6 +327,20 @@ fn mcp_command_response_with_config(
                     arguments[field] = value;
                 }
             }
+            if let Some(original_failure) =
+                task_operations::settled_native_refusal(&arguments).map_err(native_request_error)?
+            {
+                let request = original_failure
+                    .data
+                    .as_ref()
+                    .and_then(|data| data["requestId"].as_str())
+                    .unwrap_or("original")
+                    .to_owned();
+                return Err(format!(
+                    "{};originalRequestId={request};effectStatus=no_effect;dispatchAttempted=false",
+                    native_request_error(original_failure)
+                ));
+            }
             validate_browser_command_action(&arguments).map_err(|error| error.message)?;
             let mut command = browser_command_command(BrowserCommandArgs {
                 action: &args[3],
@@ -5685,6 +5699,9 @@ fn call_service_mcp_tool_inner(
     if name == "browser_command" {
         if arguments["action"] == "playbook" {
             return playbooks::call(arguments, session);
+        }
+        if let Some(original_failure) = task_operations::settled_native_refusal(arguments)? {
+            return Err(original_failure);
         }
         validate_browser_command_action(arguments)?;
         if arguments["action"] == "failure_recovery" {

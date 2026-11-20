@@ -207,6 +207,55 @@ fn response_data(
     response.data = Some(Value::Object(data));
 }
 
+/// Read a settled original before current-state admission. This path has no
+/// transport/time/process effects and cannot make an unknown request runnable.
+pub(super) fn settled_native_refusal(
+    arguments: &Value,
+) -> Result<Option<JsonRpcError>, JsonRpcError> {
+    if arguments["action"] != "native_input" {
+        return Ok(None);
+    }
+    let Some(request) = super::optional_string_argument(arguments, "requestId")? else {
+        return Ok(None);
+    };
+    let task = required_string_argument(arguments, "taskId")?;
+    let Some(original) = crate::native::browser_task_operations::exact_original(task, request)
+        .map_err(|error| JsonRpcError::invalid_params(&error))?
+    else {
+        return Ok(None);
+    };
+    if original.state
+        != agent_browser_service_model::BrowserTaskOperationState::OwnerRefusedNoEffect
+    {
+        return Ok(None);
+    }
+    crate::native::browser_task_operations::validate_no_effect_outcome(&original)
+        .map_err(|error| JsonRpcError::invalid_params(&error))?;
+    let mut command = Value::Object(
+        super::optional_object_argument(arguments, "params")?
+            .cloned()
+            .unwrap_or_default(),
+    );
+    command["action"] = json!("native_input");
+    command["id"] = json!(request);
+    super::forward_native_request_context(arguments, &mut command)?;
+    let tag = crate::native::browser_task_operations::native_caller_fingerprint(task, &command)
+        .map_err(|error| JsonRpcError::invalid_params(&error))?;
+    if original.evidence_references.get("callerCommandFingerprint") != Some(&tag) {
+        return Err(JsonRpcError::invalid_params(
+            "browser_task_operation_request_conflict: inspect the original request; no replay",
+        ));
+    }
+    let response = existing_response(&original);
+    Ok(Some(JsonRpcError {
+        code: -32603,
+        message: "Original browser operation refused",
+        data: Some(json!({
+            "message":response.error,"requestId":response.id,"operation":response.data,"originalReplay":true,"dispatchAttempted":false
+        })),
+    }))
+}
+
 fn existing_response(original: &BrowserTaskOperation) -> crate::connection::Response {
     let mut response = crate::connection::Response {
         success: original.state

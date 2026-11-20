@@ -454,6 +454,9 @@ fn native_image_public_completion_case(
     if rounds {
         input["imageAttempt"]["originalRequestId"] = json!("image-attempt");
     }
+    if matches!(round_fault, Some("no_effect" | "no_effect_bootstrap")) {
+        input["ownerDeadlineAtMs"] = json!(now + 60_000);
+    }
     let mut wrong_profile_envelope = input.clone();
     if rounds {
         wrong_profile_envelope["imageAttempt"]
@@ -712,6 +715,70 @@ fn native_image_public_completion_case(
             Ok(Value::Null)
         })
         .unwrap();
+        // Exercise the actual public facade after archival, with no current
+        // routing authority and both unavailable and certainly expired time.
+        reopened
+            .mutate_session_state(|state| {
+                state.browsers.get_mut("browser").unwrap().pid = u32::MAX;
+                Ok(())
+            })
+            .unwrap();
+        for clock in [
+            Err("stable_time_client_start_failed".to_owned()),
+            Ok(crate::connection::stable_time::fixture_stamp(now + 120_000)),
+        ] {
+            let _clock = crate::connection::stable_time::Fixture::set(clock);
+            let response = handle_jsonrpc_line(
+                &json!({
+                    "jsonrpc":"2.0","id":762,"method":"tools/call","params":params
+                })
+                .to_string(),
+                "never-started",
+            )
+            .unwrap();
+            assert_eq!(
+                response["error"]["data"]["originalReplay"], true,
+                "{response}"
+            );
+            assert_eq!(
+                response["error"]["data"]["dispatchAttempted"], false,
+                "{response}"
+            );
+            assert!(
+                response.to_string().contains(original_failure),
+                "{response}"
+            );
+            assert!(!response.to_string().contains("callerCommandFingerprint"));
+            let mut changed = params.clone();
+            changed["arguments"]["params"]["ownerDeadlineAtMs"] = json!(now + 180_000);
+            let conflict = handle_jsonrpc_line(
+                &json!({"jsonrpc":"2.0","id":763,
+                "method":"tools/call","params":changed})
+                .to_string(),
+                "never-started",
+            )
+            .unwrap();
+            assert!(
+                conflict
+                    .to_string()
+                    .contains("browser_task_operation_request_conflict"),
+                "{conflict}"
+            );
+            let mut unknown = params.clone();
+            unknown["arguments"]["requestId"] = json!("unknown-original");
+            let refused = handle_jsonrpc_line(
+                &json!({"jsonrpc":"2.0","id":764,
+                "method":"tools/call","params":unknown})
+                .to_string(),
+                "never-started",
+            )
+            .unwrap();
+            assert!(refused.get("error").is_some(), "{refused}");
+            assert_ne!(
+                refused["error"]["data"]["originalReplay"], true,
+                "{refused}"
+            );
+        }
         return;
     }
     if !acknowledged {
