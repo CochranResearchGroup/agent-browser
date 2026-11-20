@@ -1,3 +1,4 @@
+import {withClientErrorRecovery} from './client-recovery.js';
 /** Authorized, bounded recording consumption for an inert agent interpretation.
  * Remote View retains recording/playback ownership. No media paths or credentials
  * are returned, and Speech range/source revisions are preserved independently.
@@ -8,10 +9,11 @@ import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const digest=value=>createHash('sha256').update(value).digest('hex');
-const fail=code=>{throw new Error(code)};
+const fail=code=>{throw withClientErrorRecovery(new Error(code),{source:"packages/client/src/teaching-media.js",owningFunction:"module"},code)};
 const integer=value=>Number.isSafeInteger(value)&&value>=0;
 const MAX_VIDEO=64*1024*1024, MAX_FRAME=128*1024, MAX_PACKET=900*1024;
 
+/** @param {{videoBytes:any,timeMs:number,startMs?:number,endMs?:number}} input */
 async function decodeFrame({videoBytes,timeMs}) {
  const directory=await mkdtemp(join(tmpdir(),'agent-browser-teaching-frame-'));
  try {
@@ -21,8 +23,8 @@ async function decodeFrame({videoBytes,timeMs}) {
    const chunks=[];let size=0,error=null;
    const timer=setTimeout(()=>{error='teaching_frame_timeout';child.kill('SIGKILL')},15000);
    child.stdout.on('data',chunk=>{size+=chunk.length;if(size>MAX_FRAME){error='teaching_frame_limit';child.kill('SIGKILL')}else chunks.push(chunk)});
-   child.on('error',()=>{clearTimeout(timer);reject(new Error('teaching_frame_decoder_unavailable'))});
-   child.on('close',code=>{clearTimeout(timer);if(error||code!==0)return reject(new Error(error||'teaching_frame_decode_failed'));if(!size)return reject(new Error('teaching_frame_empty'));resolve(Buffer.concat(chunks))});
+   child.on('error',()=>{clearTimeout(timer);reject(withClientErrorRecovery(new Error('teaching_frame_decoder_unavailable'),{source:"packages/client/src/teaching-media.js",owningFunction:"decodeFrame"},'teaching_frame_decoder_unavailable'))});
+   child.on('close',code=>{clearTimeout(timer);if(error||code!==0)return reject(withClientErrorRecovery(new Error(error||'teaching_frame_decode_failed'),{source:'packages/client/src/teaching-media.js',owningFunction:'decodeFrame'},error||'teaching_frame_decode_failed'));if(!size)return reject(withClientErrorRecovery(new Error('teaching_frame_empty'),{source:"packages/client/src/teaching-media.js",owningFunction:"decodeFrame"},'teaching_frame_empty'));resolve(Buffer.concat(chunks))});
   });
   return {bytes,mimeType:'image/jpeg'};
  } finally {await rm(directory,{recursive:true,force:true})}

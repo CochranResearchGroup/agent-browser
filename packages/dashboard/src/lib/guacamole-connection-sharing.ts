@@ -1,3 +1,4 @@
+import {dashboardResponseFailureError,responseFailureMetadata} from "./response-failure.ts";
 import type { ServiceViewStream } from "@/lib/service-view-streams";
 
 type GuacamoleAuthToken = {
@@ -128,19 +129,17 @@ function guacamoleSharingRoot(root: URL): URL {
 }
 
 async function readJson<T>(response: Response, operation: string): Promise<T> {
-  if (!response.ok) {
-    if (operation === "Guacamole backend primary ownership" || operation === "Guacamole primary recovery") {
-      const failure = await response.json().catch(() => null) as { code?: unknown; occurrenceId?: unknown } | null;
-      if (typeof failure?.code === "string" && /^guacamole_(primary_|viewer_primary_)[a-z_]+$/.test(failure.code)) {
-        const occurrence = typeof failure.occurrenceId === "string"
-          && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(failure.occurrenceId)
-          ? ` (occurrence ${failure.occurrenceId})` : "";
-        throw new Error(`${operation}: ${failure.code}${occurrence}`);
-      }
-    }
-    throw new Error(`${operation} returned HTTP ${response.status}`);
+  let payload: unknown;
+  try { payload = await response.json(); }
+  catch { throw dashboardResponseFailureError({success:false}, "guacamole_response_invalid"); }
+  if (!response.ok || responseFailureMetadata(payload)) {
+    const envelope = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+    const error = dashboardResponseFailureError({...envelope,success:false}, "guacamole_owner_request_failed");
+    const occurrence = responseFailureMetadata({...envelope,success:false})?.observationId;
+    error.message = `${operation}: ${error.message}${occurrence ? ` (occurrence ${occurrence})` : ""}`;
+    throw error;
   }
-  return response.json() as Promise<T>;
+  return payload as T;
 }
 
 function waitForElection(delayMs: number, signal?: AbortSignal): Promise<void> {
@@ -275,9 +274,11 @@ export async function recoverGuacamolePrimary({
   const observed = await response.json() as GuacamolePrimaryClaim & {
     success?: boolean; terminalOccurrenceId?: string; code?: string; occurrenceId?: string;
   };
-  if (response.ok && observed.primaryOwned === true && observed.granted === false && observed.activeConnectionId) return;
+  if (response.ok && !responseFailureMetadata(observed) && observed.primaryOwned === true && observed.granted === false && observed.activeConnectionId) return;
   if (response.status !== 503 || observed.success !== false || !observed.terminalOccurrenceId) {
-    throw new Error(`Guacamole recovery lacks a terminated owner: ${observed.code ?? response.status}`);
+    const error = dashboardResponseFailureError({...observed,success:false}, "guacamole_recovery_owner_unverified");
+    error.message = `Guacamole recovery lacks a terminated owner: ${error.message}`;
+    throw error;
   }
   const recovered = await readJson<GuacamolePrimaryClaim>(
     await request("recover", observed.terminalOccurrenceId), "Guacamole primary recovery",

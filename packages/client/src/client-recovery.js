@@ -41,10 +41,9 @@ export function clientFailureError(code,context={}) {
 export function withClientResultRecovery(result,context={}) {
   const original=/** @type {any} */(result),owner=context.ownerError;
   const preserved=owner&&typeof owner==='object'?Object.fromEntries(['failure','occurrenceId','requestId','recoveryPlan','executableNextAction','clientRecovery'].filter(key=>owner[key]!==undefined).map(key=>[key,owner[key]])):{};
-  const value=original&&typeof original==='object'?{...preserved,...original}:original,reason=value?.reason??value?.reasonCode;
-  if(!value||typeof value!=='object'||!validCode(reason)||typeof value.status!=='string'||value.status.startsWith('verified')||value.status==='completed')return result;
-  const known=/** @type {Record<string,any>} */(CLIENT_RECOVERY_CODES)[reason];
-  const selected=known?reason:value.clientRecovery?.coverage==='registered'?value.clientRecovery.code:reason;
+  const value=original&&typeof original==='object'?{...preserved,...original}:original,reason=value?.reason??value?.reasonCode??(value?.outcome==='incomplete'?value.category:undefined);
+  if(!value||typeof value!=='object'||!validCode(reason)||(typeof value.status!=='string'&&value.outcome!=='incomplete')||value.status?.startsWith('verified')||value.status==='completed')return result;
+  const selected=value.clientRecovery?.coverage==='registered'?value.clientRecovery.code:reason;
   const recovery=clientRecoveryFor(selected,{...context,...value.clientRecovery?.packet,taskId:value.taskId??context.taskId,episodeId:value.episodeId??context.episodeId,requestId:value.originalOperation?.requestId??value.requestId??value.recovery?.inspect?.arguments?.requestId??value.clientRecovery?.packet?.requestId??context.requestId});
   return {...value,clientRecovery:{...recovery,...(selected!==reason?{normalization:{ownerCode:reason,ownerCodeCoverage:'not_asserted'}}:{}),ownerRecoveryAvailable:!!(value.failure||value.clientRecovery?.ownerRecoveryAvailable)}};
 }

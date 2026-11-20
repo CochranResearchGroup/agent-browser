@@ -1,28 +1,29 @@
+import {withClientErrorRecovery} from './client-recovery.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
 /** HTTP adapters for the existing Remote View and Speech owner routes. */
 function endpoint(value) {
   const url=new URL(value);
   if(url.username || url.password || url.search || url.hash ||
-      !(url.protocol==='https:' || url.protocol==='http:' && ['127.0.0.1','localhost','[::1]'].includes(url.hostname))) throw new Error('teaching_endpoint_invalid');
+      !(url.protocol==='https:' || url.protocol==='http:' && ['127.0.0.1','localhost','[::1]'].includes(url.hostname))) throw withClientErrorRecovery(new Error('teaching_endpoint_invalid'),{source:"packages/client/src/teaching-evidence-http.js",owningFunction:"endpoint"},'teaching_endpoint_invalid');
   return url.href.replace(/\/$/,'');
 }
-function transport({url,token,fetch:fetcher=globalThis.fetch,maximumResponseBytes=1048576,origin}) {
+function transport({url,token,fetch:fetcher=globalThis.fetch,maximumResponseBytes=1048576,origin=undefined}) {
   const base=endpoint(url);
-  if(typeof token!=='string' || !token || /[\r\n]/.test(token)) throw new Error('teaching_authority_required');
+  if(typeof token!=='string' || !token || /[\r\n]/.test(token)) throw withClientErrorRecovery(new Error('teaching_authority_required'),{source:"packages/client/src/teaching-evidence-http.js",owningFunction:"transport"},'teaching_authority_required');
   return async(path,body)=>{
     let response;
     try {response=await fetcher(base+path,{method:body===undefined?'GET':'POST',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(origin?{Origin:origin}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(30000)});}
-    catch {throw new Error('teaching_owner_unavailable');}
+    catch {throw withClientErrorRecovery(new Error('teaching_owner_unavailable'),{source:"packages/client/src/teaching-evidence-http.js",owningFunction:"transport"},'teaching_owner_unavailable');}
     const chunks=[];let size=0;
     try {
       for await(const chunk of response.body ?? []) {
         size+=chunk.length;
-        if(size>maximumResponseBytes) throw new Error('teaching_owner_response_limit');
+        if(size>maximumResponseBytes) throw withClientErrorRecovery(new Error('teaching_owner_response_limit'),{source:"packages/client/src/teaching-evidence-http.js",owningFunction:"transport"},'teaching_owner_response_limit');
         chunks.push(Buffer.from(chunk));
       }
       let payload;
       try{payload=JSON.parse(Buffer.concat(chunks).toString('utf8'));}
-      catch{throw new Error('teaching_owner_response_invalid');}
+      catch{throw withClientErrorRecovery(new Error('teaching_owner_response_invalid'),{source:"packages/client/src/teaching-evidence-http.js",owningFunction:"transport"},'teaching_owner_response_invalid');}
       if(!response.ok||isResponseFailure(payload))throw Object.assign(responseFailureError(payload,`teaching_owner_rejected_${response.status}`,{source:'packages/client/src/teaching-evidence-http.js',owningFunction:'transport',localRecoveryCode:'client_teaching_owner_http_failure'}),{status:response.status});
       return payload;
     } finally {for(const chunk of chunks)chunk.fill(0);}
@@ -40,12 +41,12 @@ export function createTeachingRecordingReader({url,accessToken,fetch}) {
  */
 export function createTeachingSpeechAdapter({url,token,conversionLimits,origin,fetch}) {
   if(!conversionLimits || !Number.isSafeInteger(conversionLimits.maximumInputBytes) || conversionLimits.maximumInputBytes<1 ||
-      !Number.isSafeInteger(conversionLimits.maximumDurationMs) || conversionLimits.maximumDurationMs<1 || conversionLimits.maximumDurationMs>1800000) throw new Error('teaching_conversion_limits_required');
-  if(typeof origin!=='string' || new URL(origin).origin!==origin) throw new Error('teaching_speech_origin_required');
+      !Number.isSafeInteger(conversionLimits.maximumDurationMs) || conversionLimits.maximumDurationMs<1 || conversionLimits.maximumDurationMs>1800000) throw withClientErrorRecovery(new Error('teaching_conversion_limits_required'),{source:"packages/client/src/teaching-evidence-http.js",owningFunction:"createTeachingSpeechAdapter"},'teaching_conversion_limits_required');
+  if(typeof origin!=='string' || new URL(origin).origin!==origin) throw withClientErrorRecovery(new Error('teaching_speech_origin_required'),{source:"packages/client/src/teaching-evidence-http.js",owningFunction:"createTeachingSpeechAdapter"},'teaching_speech_origin_required');
   const limits=structuredClone(conversionLimits);
   const call=transport({url,token,fetch,origin,maximumResponseBytes:Math.ceil(limits.maximumDurationMs*32/3)*4+1048576});
   const operation=(id,suffix='')=>{
-    if(typeof id!=='string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(id)) throw new Error('teaching_operation_invalid');
+    if(typeof id!=='string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(id)) throw withClientErrorRecovery(new Error('teaching_operation_invalid'),{source:"packages/client/src/teaching-evidence-http.js",owningFunction:"createTeachingSpeechAdapter"},'teaching_operation_invalid');
     return `/v1/recordings/${encodeURIComponent(id)}${suffix}`;
   };
   return {

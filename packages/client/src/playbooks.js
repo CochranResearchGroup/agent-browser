@@ -1,3 +1,4 @@
+import {withClientErrorRecovery} from './client-recovery.js';
 import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
 // @ts-check
@@ -14,7 +15,7 @@ import { isResponseFailure, responseFailureError } from './response-failure.js';
 async function invoke(callTool, name, args) {
   const result = await callTool(name, args);
   const text = result?.content?.find(item => item.type === 'text')?.text;
-  if (typeof text !== 'string') throw new Error('playbook_response_invalid');
+  if (typeof text !== 'string') throw withClientErrorRecovery(new Error('playbook_response_invalid'),{source:"packages/client/src/playbooks.js",owningFunction:"invoke"},'playbook_response_invalid');
   const envelope = JSON.parse(text);
   if (/** @type {any} */ (result)?.isError || envelope.success !== true || isResponseFailure(envelope)) throw responseFailureError(envelope, 'playbook_request_failed');
   return envelope.data;
@@ -48,7 +49,7 @@ export function createPlaybookClient(callTool) {
      * @param {string} taskId @param {string} guideId */
     inspectTeachingDraft: async (taskId, guideId) => {
       const guide=await run(taskId,'inspect_guide',{guideId});
-      if(guide.teaching?.schemaVersion!=='agent-browser.teaching-draft.v1' || guide.teaching.state!=='draft') throw Error('teaching_draft_required');
+      if(guide.teaching?.schemaVersion!=='agent-browser.teaching-draft.v1' || guide.teaching.state!=='draft') throw withClientErrorRecovery(Error('teaching_draft_required'),{source:"packages/client/src/playbooks.js",owningFunction:"createPlaybookClient"},'teaching_draft_required');
       return guide;
     },
     /** Validate inert candidate shape/reference integrity; never review or execute it.

@@ -1,3 +1,4 @@
+import {withClientErrorRecovery} from './client-recovery.js';
 // Source-free installed composition host. All imports are packaged support assets.
 import {readFile,lstat} from 'node:fs/promises';
 import {join,isAbsolute} from 'node:path';
@@ -8,7 +9,7 @@ import {createWorkspaceSiteGuides} from './workspace-siteguides.js';
 import {createPlaybookClient} from './playbooks.js';
 import {createTeachingEvidenceClient} from './teaching-evidence.js';
 import {createTeachingRecordingReader,createTeachingSpeechAdapter} from './teaching-evidence-http.js';
-const fail=reason=>{throw Error(reason);};
+const fail=reason=>{throw withClientErrorRecovery(Error(reason),{source:"packages/client/src/workspace-siteguides-host.js",owningFunction:"module"},reason);};
 const shutdown=new AbortController();
 // The Rust owner signals the whole owned process group. Keep Node alive long
 // enough for ffmpeg's close/finally cleanup; abort outstanding owner HTTP reads.

@@ -1,3 +1,4 @@
+import {withClientResultRecovery} from './client-recovery.js';
 import {withClientErrorRecovery} from './client-recovery.js';
 import { callClientOwner } from './client-recovery.js';
 // @ts-check
@@ -25,19 +26,19 @@ export function createLoginDiscovery({client,readPermission}) {
       let discovery;
       try {
         const capabilities=await callClientOwner(client,'auth_capabilities',{},{source:"packages/client/src/login-discovery.js",owningFunction:"createLoginDiscovery.inspect"});
-        if(capabilities?.contractVersion!==1 || capabilities.credentialOperations!==true || capabilities.sharedOwnerAuthority!==true || capabilities.legacyCredentialEffects!==false)return {...base(),category:'capability_unavailable'};
+        if(capabilities?.contractVersion!==1 || capabilities.credentialOperations!==true || capabilities.sharedOwnerAuthority!==true || capabilities.legacyCredentialEffects!==false)return withClientResultRecovery(await ({...base(),category:'capability_unavailable'}),{source:"packages/client/src/login-discovery.js",owningFunction:"inspect"});
         if(intent.requestId) {
           request=await callClientOwner(client,'inspect_credential_request',{requestId:intent.requestId},{source:"packages/client/src/login-discovery.js",owningFunction:"createLoginDiscovery.inspect"});
           if(request?.requestId!==intent.requestId || request.origin!==intent.origin || typeof (request.recipientAccount??request.account)!=='string' || (request.recipientAccount??request.account).trim().toLowerCase()!==intent.accountHint.trim().toLowerCase()) {
-            request={requestId:intent.requestId};return {...base(),category:'request_binding_mismatch'};
+            request={requestId:intent.requestId};return withClientResultRecovery(await ({...base(),category:'request_binding_mismatch'}),{source:"packages/client/src/login-discovery.js",owningFunction:"inspect"});
           }
-          if(['denied','revoked','cancelled'].includes(request.state))return base();
+          if(['denied','revoked','cancelled'].includes(request.state))return withClientResultRecovery(await (base()),{source:"packages/client/src/login-discovery.js",owningFunction:"inspect"});
         }
         discovery=await callClientOwner(client,'discover_credentials',{origin:intent.origin,accountHint:intent.accountHint,credentialType:'password'},{source:"packages/client/src/login-discovery.js",owningFunction:"createLoginDiscovery.inspect"});
       } catch(error) {
-        return {...base(),category:error?.code==='auth_not_authorized'?'authority_denied':'capability_unavailable',...(error?.failure?{failure:error.failure}:{}),...(error?.clientRecovery?{clientRecovery:error.clientRecovery}:{}),dependencyFailure:{component:'auth_owner',code:typeof error?.code==='string'&&/^auth_[a-z0-9_]+$/.test(error.code)?error.code:'client_auth_owner_failure'}};
+        return withClientResultRecovery(await ({...base(),category:error?.code==='auth_not_authorized'?'authority_denied':'capability_unavailable',...(error?.failure?{failure:error.failure}:{}),...(error?.clientRecovery?{clientRecovery:error.clientRecovery}:{}),dependencyFailure:{component:'auth_owner',code:typeof error?.code==='string'&&/^auth_[a-z0-9_]+$/.test(error.code)?error.code:'client_auth_owner_failure'}}),{source:"packages/client/src/login-discovery.js",owningFunction:"inspect"});
       }
-      if(!discovery || !Array.isArray(discovery.candidates) || !Array.isArray(discovery.sources) || discovery.unavailable!==undefined && !Array.isArray(discovery.unavailable))return {...base(),category:'capability_unavailable'};
+      if(!discovery || !Array.isArray(discovery.candidates) || !Array.isArray(discovery.sources) || discovery.unavailable!==undefined && !Array.isArray(discovery.unavailable))return withClientResultRecovery(await ({...base(),category:'capability_unavailable'}),{source:"packages/client/src/login-discovery.js",owningFunction:"inspect"});
       const selected=discovery.state==='unique' && discovery.selected
         && reference(discovery.selected.sourceId) && reference(discovery.selected.recordId)
         && discovery.selected.origin===intent.origin
@@ -45,7 +46,7 @@ export function createLoginDiscovery({client,readPermission}) {
         && discovery.selected.account.trim().toLowerCase()===intent.accountHint.trim().toLowerCase()
         && discovery.candidates.some(candidate=>candidate?.sourceId===discovery.selected.sourceId && candidate.recordId===discovery.selected.recordId && candidate.origin===discovery.selected.origin && candidate.account===discovery.selected.account)
         ? {sourceId:discovery.selected.sourceId,recordId:discovery.selected.recordId}:undefined;
-      if(selected && request && (request.sourceId!==selected.sourceId || request.recordId!==selected.recordId))return {...base(),category:'request_binding_mismatch'};
+      if(selected && request && (request.sourceId!==selected.sourceId || request.recordId!==selected.recordId))return withClientResultRecovery(await ({...base(),category:'request_binding_mismatch'}),{source:"packages/client/src/login-discovery.js",owningFunction:"inspect"});
       const sourceAvailability=discovery.sources?.length
         ? discovery.sources.some(source=>reference(source?.sourceId) && !discovery.unavailable?.includes(source.sourceId))?'available':'unavailable'
         : 'unknown';
@@ -65,12 +66,12 @@ export function createLoginDiscovery({client,readPermission}) {
       const progress=base();
       if(['input_outcome_unknown','receiving_target_unavailable'].includes(progress.category))category=progress.category;
       if(permission.state==='denied')category='authority_denied';
-      return {
+      return withClientResultRecovery(await ({
         ...progress, category,
         extensionState:intent.extensionState ?? 'unknown', sourceAvailability,
         ...(selected?{selected}:{}),
         permission,
-      };
+      }),{source:"packages/client/src/login-discovery.js",owningFunction:"inspect"});
     },
   };
 }

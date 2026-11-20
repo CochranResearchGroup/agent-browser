@@ -1,3 +1,4 @@
+import {withClientResultRecovery} from './client-recovery.js';
 import {clientFailureError} from './client-recovery.js';
 import {createTeachingCapacity} from './teaching-capacity.js';
 // @ts-check
@@ -76,7 +77,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
   function prior(records,operationId,intentSha256) {
     const record=records.find(item=>item.guide.teaching?.lineage?.operationId===operationId);
     if(!record)return;
-    if(record.guide.teaching.lineage.intentSha256!==intentSha256)return {status:'conflict',reason:'operation_intent_changed',...receipt(record,'conflict')};
+    if(record.guide.teaching.lineage.intentSha256!==intentSha256)return withClientResultRecovery({status:'conflict',reason:'operation_intent_changed',...receipt(record,'conflict')},{source:"packages/client/src/teaching-review.js",owningFunction:"prior"});
     return {...receipt(record,'saved'),recoveredOriginal:true};
   }
   async function publish(guide) {
@@ -218,7 +219,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     const intentSha256=digest({taskId,guideId:name,expectedSha256,operationId,kind,data:intentData});
     const recovered=prior(records,operationId,intentSha256);if(recovered)return recovered;
     const head=records.at(-1);
-    if(base.sha256!==expectedSha256||head.guide.guideId!==name||head.sha256!==expectedSha256)return {status:'conflict',reason:'stale_revision',current:receipt(head,'saved'),ordinaryReuseAllowed:false};
+    if(base.sha256!==expectedSha256||head.guide.guideId!==name||head.sha256!==expectedSha256)return withClientResultRecovery({status:'conflict',reason:'stale_revision',current:receipt(head,'saved'),ordinaryReuseAllowed:false},{source:"packages/client/src/teaching-review.js",owningFunction:"mutate"});
     if(meta.revision>=capacity().policy.maximumLineageRevisions)error('teaching_review_lineage_capacity');
     const retained=acceptedReference(base);
     if(kind==='promote'&&retained){let observed;try{observed=await read(retained.guideId);}catch{error('teaching_accepted_version_changed');}if(observed.sha256!==retained.sha256)error('teaching_accepted_version_changed');}
@@ -231,7 +232,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
     if(validated.valid!==true||validated.guideId!==guide.guideId||validated.taskId!==taskId||validated.executionAllowed!==false||validated.operatorReviewQualified!==false)error('teaching_candidate_validation_failed');
     try {return receipt(await publish(guide),'saved');}
     catch(err) {
-      if(err.code!=='EEXIST')return {status:'unknown',reason:'publication_result_unconfirmed',rootGuideId:meta.rootGuideId,operationId,ordinaryReuseAllowed:false};
+      if(err.code!=='EEXIST')return withClientResultRecovery({status:'unknown',reason:'publication_result_unconfirmed',rootGuideId:meta.rootGuideId,operationId,ordinaryReuseAllowed:false},{source:"packages/client/src/teaching-review.js",owningFunction:"mutate"});
       const observed=await chain(meta.rootGuideId),result=prior(observed,operationId,intentSha256);
       return result??{status:'conflict',reason:'concurrent_revision',current:receipt(observed.at(-1),'saved'),ordinaryReuseAllowed:false};
     }
@@ -298,7 +299,7 @@ export function createTeachingReviewClient({candidateDirectory,browser,sourceSta
       if(result.status!=='saved')return result;
       const proof=await validation(await read(result.guideId));
       if(proof.state!=='verified')error('teaching_fresh_repeat_required');
-      return {...result,status:'promoted',ordinaryReuseAllowed:true,acceptedVersion:{guideId:proof.executedGuideId,sha256:proof.executedSha256}};
+      return withClientResultRecovery({...result,status:'promoted',ordinaryReuseAllowed:true,acceptedVersion:{guideId:proof.executedGuideId,sha256:proof.executedSha256}},{source:"packages/client/src/teaching-review.js",owningFunction:"createTeachingReviewClient.promote"});
     },
     async lookupOperation({rootGuideId,operationId}) {
       if(!id(operationId))error('teaching_review_request_invalid');

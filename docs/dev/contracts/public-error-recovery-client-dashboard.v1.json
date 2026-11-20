@@ -86,6 +86,8 @@
       "export": "createTeachingReviewClient",
       "kind": "client_export",
       "methods": [
+        "open",
+        "lookupOperation",
         "capacity"
       ]
     },
@@ -108,6 +110,27 @@
     "@agent-browser/client/teaching-evidence#createTeachingEvidenceClient": {
       "source": "packages/client/src/teaching-evidence.js",
       "export": "createTeachingEvidenceClient",
+      "kind": "client_export",
+      "methods": [
+        "inspect"
+      ]
+    },
+    "@agent-browser/client/hosted-auth-helper#connectHostedAuthHelper": {
+      "source": "packages/client/src/hosted-auth-helper.js",
+      "export": "connectHostedAuthHelper",
+      "kind": "client_export",
+      "methods": [
+        "helper"
+      ]
+    },
+    "@agent-browser/client/native-receiving-browser#createNativeReceivingBrowser": {
+      "source": "packages/client/src/native-receiving-browser.js",
+      "export": "createNativeReceivingBrowser",
+      "kind": "client_export"
+    },
+    "@agent-browser/client/login-playbook#createOwnerLoginPlaybook": {
+      "source": "packages/client/src/login-playbook.js",
+      "export": "createOwnerLoginPlaybook",
       "kind": "client_export"
     }
   },
@@ -957,6 +980,314 @@
       },
       "resumeCondition": "Fresh owner metadata establishes pinned retention or an independently owner-qualified lifecycle decision under the original read authority. Only the time-dependent source action pauses while unqualified; existing history/metadata inspection remains available.",
       "maximumAutomaticAttempts": 1
+    },
+    "clientAuthOwnerContinuation": {
+      "rationale": "Inspect the exact original Auth request through the existing helper. Use that owner response nextAction/reconciliation interface under the current grant. Pending/unknown stays non-replayable. Restore a failed configured SDK/transport dependency without substituting its identity or reissuing private input.",
+      "requiredActor": "original_authenticated_auth_owner_client",
+      "evidenceRequirement": "Exact original scope/identifiers and current owner evidence; no absent record or guest timestamp establishes permission, no-effect or replay authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/hosted-auth-helper#connectHostedAuthHelper",
+        "method": "helper",
+        "arguments": [
+          "inspect_credential_request",
+          {
+            "requestId": "$requestId"
+          }
+        ],
+        "precondition": "Use the already connected authenticated original owner helper instance. Constructor invocation or new scope is not authorized by this recipe; original request ID must come from retained owner history."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the exact original Auth request through the existing helper. Use that owner response nextAction/reconciliation interface under the current grant. Pending/unknown stays non-replayable. Restore a failed configured SDK/transport dependency without substituting its identity or reissuing private input.",
+          "precondition": "Preserve all original identifiers, uncertain input, owner decisions and effective authorization. Bind missing arguments only from retained trusted caller/owner context. This descriptive recipe does not execute automatically.",
+          "interface": "@agent-browser/client/hosted-auth-helper#connectHostedAuthHelper"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/hosted-auth-helper#connectHostedAuthHelper",
+        "method": "helper",
+        "arguments": [
+          "inspect_credential_request",
+          {
+            "requestId": "$requestId"
+          }
+        ],
+        "precondition": "Use the already connected authenticated original owner helper instance. Constructor invocation or new scope is not authorized by this recipe; original request ID must come from retained owner history."
+      },
+      "resumeCondition": "The original owner request has a verified disposition and its actual nextAction permits the intended continuation.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientAuthScopeCorrection": {
+      "rationale": "Read the original local contract and correct only the named missing/mismatched configuration or binding. Read current browser task and original Auth request before replacing any stale plan. Do not edit saved checkpoint fields into a successful state or adopt a different account.",
+      "requiredActor": "caller_with_original_scope",
+      "evidenceRequirement": "Exact original scope/identifiers and current owner evidence; no absent record or guest timestamp establishes permission, no-effect or replay authority.",
+      "inspect": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "kind": "source_reference",
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "precondition": "Read already returned error fields against this source qualification. This is not a file/tool availability claim and does not require a source checkout."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the original local contract and correct only the named missing/mismatched configuration or binding. Read current browser task and original Auth request before replacing any stale plan. Do not edit saved checkpoint fields into a successful state or adopt a different account.",
+          "precondition": "Preserve all original identifiers, uncertain input, owner decisions and effective authorization. Bind missing arguments only from retained trusted caller/owner context. This descriptive recipe does not execute automatically.",
+          "interface": "caller_argument_correction"
+        }
+      ],
+      "verification": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "kind": "source_reference",
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "precondition": "Read already returned error fields against this source qualification. This is not a file/tool availability claim and does not require a source checkout."
+      },
+      "resumeCondition": "The corrected same-scope contract passes, original owner state is reconciled and no unresolved private input remains.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientAuthReceivingObservation": {
+      "rationale": "Observe the same addressed browser task and revalidate the existing receiving plan using the configured receiving browser SDK. Obtain a fresh plan when the actual task/target changed; inspect the original Auth request first if private input may have occurred. A human handoff is required only if the actual owner requests it.",
+      "requiredActor": "caller_with_original_browser_task",
+      "evidenceRequirement": "Exact original scope/identifiers and current owner evidence; no absent record or guest timestamp establishes permission, no-effect or replay authority.",
+      "inspect": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "remediation": [
+        {
+          "instruction": "Observe the same addressed browser task and revalidate the existing receiving plan using the configured receiving browser SDK. Obtain a fresh plan when the actual task/target changed; inspect the original Auth request first if private input may have occurred. A human handoff is required only if the actual owner requests it.",
+          "precondition": "Preserve all original identifiers, uncertain input, owner decisions and effective authorization. Bind missing arguments only from retained trusted caller/owner context. This descriptive recipe does not execute automatically.",
+          "interface": "@agent-browser/client/native-receiving-browser#createNativeReceivingBrowser"
+        }
+      ],
+      "verification": {
+        "tool": "browser_command",
+        "arguments": {
+          "taskId": "$taskId",
+          "action": "task_briefing"
+        }
+      },
+      "resumeCondition": "The original receiving identity is freshly verified and current owner authorization admits continuation without replay.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientAuthLegacyContinuation": {
+      "rationale": "Inspect/reconcile the original legacy helper attempt without repeating it. For a distinct new explicit private intent, connect the supported current owner SDK and use createOwnerLoginPlaybook or the scoped factor continuation with current owner-qualified grant expiry. Guest timestamps and legacy local grant metadata cannot authorize new input.",
+      "requiredActor": "original_authenticated_auth_owner_client",
+      "evidenceRequirement": "Exact original scope/identifiers and current owner evidence; no absent record or guest timestamp establishes permission, no-effect or replay authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/hosted-auth-helper#connectHostedAuthHelper",
+        "method": "helper",
+        "arguments": [
+          "inspect_credential_request",
+          {
+            "requestId": "$requestId"
+          }
+        ],
+        "precondition": "Use the already connected authenticated original owner helper instance. Constructor invocation or new scope is not authorized by this recipe; original request ID must come from retained owner history."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect/reconcile the original legacy helper attempt without repeating it. For a distinct new explicit private intent, connect the supported current owner SDK and use createOwnerLoginPlaybook or the scoped factor continuation with current owner-qualified grant expiry. Guest timestamps and legacy local grant metadata cannot authorize new input.",
+          "precondition": "Preserve all original identifiers, uncertain input, owner decisions and effective authorization. Bind missing arguments only from retained trusted caller/owner context. This descriptive recipe does not execute automatically.",
+          "interface": "@agent-browser/client/login-playbook#createOwnerLoginPlaybook"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/hosted-auth-helper#connectHostedAuthHelper",
+        "method": "helper",
+        "arguments": [
+          "inspect_credential_request",
+          {
+            "requestId": "$requestId"
+          }
+        ],
+        "precondition": "Use the already connected authenticated original owner helper instance. Constructor invocation or new scope is not authorized by this recipe; original request ID must come from retained owner history."
+      },
+      "resumeCondition": "Historical uncertainty is reconciled; a separately explicit new intent uses current owner authority and expiry qualification.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientTeachingCallerContract": {
+      "rationale": "Correct only the named local selection/configuration/format/size field using the existing supported exported API contract. Preserve original source hashes, task, scope, lineage, operation ID and review authority. Lowering payload size or correcting configuration never authorizes source substitution or overwriting an existing intent.",
+      "requiredActor": "caller_with_existing_teaching_scope",
+      "evidenceRequirement": "Exact original scope/identifiers and current owner evidence; no absent record or guest timestamp establishes permission, no-effect or replay authority.",
+      "inspect": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "kind": "source_reference",
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "precondition": "Read already returned error fields against this source qualification. This is not a file/tool availability claim and does not require a source checkout."
+      },
+      "remediation": [
+        {
+          "instruction": "Correct only the named local selection/configuration/format/size field using the existing supported exported API contract. Preserve original source hashes, task, scope, lineage, operation ID and review authority. Lowering payload size or correcting configuration never authorizes source substitution or overwriting an existing intent.",
+          "precondition": "Preserve all original identifiers, uncertain input, owner decisions and effective authorization. Bind missing arguments only from retained trusted caller/owner context. This descriptive recipe does not execute automatically.",
+          "interface": "caller_argument_correction"
+        }
+      ],
+      "verification": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "kind": "source_reference",
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "precondition": "Read already returned error fields against this source qualification. This is not a file/tool availability claim and does not require a source checkout."
+      },
+      "resumeCondition": "Same-scope validation passes and original owner/readback evidence confirms any previous operation before continuation.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientTeachingOriginalReadback": {
+      "rationale": "Read lookupOperation for the original operation ID and open the current immutable revision in the existing review client. A lost acknowledgement, conflict or changed intent must be resolved from that readback; never overwrite lineage or replay publication. Use the observed current revision only for a separately explicit next revision.",
+      "requiredActor": "caller_with_original_teaching_review_scope",
+      "evidenceRequirement": "Exact original scope/identifiers and current owner evidence; no absent record or guest timestamp establishes permission, no-effect or replay authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/teaching-review#createTeachingReviewClient",
+        "method": "lookupOperation",
+        "arguments": {
+          "rootGuideId": "$rootGuideId",
+          "operationId": "$operationId"
+        },
+        "precondition": "Use the existing configured review client and exact retained original scope. No constructor/configuration or broader directory authority is inferred."
+      },
+      "remediation": [
+        {
+          "instruction": "Read lookupOperation for the original operation ID and open the current immutable revision in the existing review client. A lost acknowledgement, conflict or changed intent must be resolved from that readback; never overwrite lineage or replay publication. Use the observed current revision only for a separately explicit next revision.",
+          "precondition": "Preserve all original identifiers, uncertain input, owner decisions and effective authorization. Bind missing arguments only from retained trusted caller/owner context. This descriptive recipe does not execute automatically.",
+          "interface": "@agent-browser/client/teaching-review#createTeachingReviewClient"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/teaching-review#createTeachingReviewClient",
+        "method": "lookupOperation",
+        "arguments": {
+          "rootGuideId": "$rootGuideId",
+          "operationId": "$operationId"
+        },
+        "precondition": "Use the existing configured review client and exact retained original scope. No constructor/configuration or broader directory authority is inferred."
+      },
+      "resumeCondition": "Original operation outcome and current immutable revision are verified; unresolved publication remains non-replayable.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientTeachingSourceObservation": {
+      "rationale": "Re-read the exact retained source selection through the existing evidence owner adapters. Preserve binding/hash/range checks and actual read denial/deletion/revocation. Correct a wrong selection only from current owner evidence; unresolved imports use the same original import request readback. Keep independent history inspection available.",
+      "requiredActor": "existing_scoped_source_reader",
+      "evidenceRequirement": "Exact original scope/identifiers and current owner evidence; no absent record or guest timestamp establishes permission, no-effect or replay authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/teaching-evidence#createTeachingEvidenceClient",
+        "method": "inspect",
+        "arguments": [
+          "$selection"
+        ],
+        "precondition": "Use the existing configured evidence client and caller-retained exact selection as the single positional argument. No constructor invocation or new read grant is inferred."
+      },
+      "remediation": [
+        {
+          "instruction": "Re-read the exact retained source selection through the existing evidence owner adapters. Preserve binding/hash/range checks and actual read denial/deletion/revocation. Correct a wrong selection only from current owner evidence; unresolved imports use the same original import request readback. Keep independent history inspection available.",
+          "precondition": "Preserve all original identifiers, uncertain input, owner decisions and effective authorization. Bind missing arguments only from retained trusted caller/owner context. This descriptive recipe does not execute automatically.",
+          "interface": "@agent-browser/client/teaching-evidence#createTeachingEvidenceClient"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/teaching-evidence#createTeachingEvidenceClient",
+        "method": "inspect",
+        "arguments": [
+          "$selection"
+        ],
+        "precondition": "Use the existing configured evidence client and caller-retained exact selection as the single positional argument. No constructor invocation or new read grant is inferred."
+      },
+      "resumeCondition": "Current owner evidence verifies the exact source and any original import outcome. A new source is a separate explicit selection under existing authority.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientTeachingReviewAuthority": {
+      "rationale": "Read the current immutable teaching revision and original operation. Obtain the missing operator decision, clarification answer or fresh repeat from its already configured authenticated owner adapter, bound to this exact content/hash/task. Reuse the existing review workflow after evidence is verified; never forge receipts, acknowledge unavailable sources or publish without the actual configured authority.",
+      "requiredActor": "existing_authorized_review_or_repeat_actor",
+      "evidenceRequirement": "Exact original scope/identifiers and current owner evidence; no absent record or guest timestamp establishes permission, no-effect or replay authority.",
+      "inspect": {
+        "interface": "@agent-browser/client/teaching-review#createTeachingReviewClient",
+        "method": "lookupOperation",
+        "arguments": {
+          "rootGuideId": "$rootGuideId",
+          "operationId": "$operationId"
+        },
+        "precondition": "Use the existing configured review client and exact retained original scope. No constructor/configuration or broader directory authority is inferred."
+      },
+      "remediation": [
+        {
+          "instruction": "Read the current immutable teaching revision and original operation. Obtain the missing operator decision, clarification answer or fresh repeat from its already configured authenticated owner adapter, bound to this exact content/hash/task. Reuse the existing review workflow after evidence is verified; never forge receipts, acknowledge unavailable sources or publish without the actual configured authority.",
+          "precondition": "Preserve all original identifiers, uncertain input, owner decisions and effective authorization. Bind missing arguments only from retained trusted caller/owner context. This descriptive recipe does not execute automatically.",
+          "interface": "@agent-browser/client/teaching-review#createTeachingReviewClient"
+        }
+      ],
+      "verification": {
+        "interface": "@agent-browser/client/teaching-review#createTeachingReviewClient",
+        "method": "lookupOperation",
+        "arguments": {
+          "rootGuideId": "$rootGuideId",
+          "operationId": "$operationId"
+        },
+        "precondition": "Use the existing configured review client and exact retained original scope. No constructor/configuration or broader directory authority is inferred."
+      },
+      "resumeCondition": "Actual scoped review/repeat/clarification evidence verifies the current content and original operation before the intended workflow continues.",
+      "maximumAutomaticAttempts": 1
+    },
+    "clientTeachingTransportOwner": {
+      "rationale": "Inspect the original owner failure and the configured endpoint/adapter dependency. Restore the same reviewed owner transport/credential source using existing host configuration. Read the original recording or publication operation through that owner before continuation; do not log response bodies or credentials, assume authorization from connectivity, or retry an uncertain effect.",
+      "requiredActor": "configured_teaching_transport_owner",
+      "evidenceRequirement": "Exact original scope/identifiers and current owner evidence; no absent record or guest timestamp establishes permission, no-effect or replay authority.",
+      "inspect": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "kind": "source_reference",
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "precondition": "Read already returned error fields against this source qualification. This is not a file/tool availability claim and does not require a source checkout."
+      },
+      "remediation": [
+        {
+          "instruction": "Inspect the original owner failure and the configured endpoint/adapter dependency. Restore the same reviewed owner transport/credential source using existing host configuration. Read the original recording or publication operation through that owner before continuation; do not log response bodies or credentials, assume authorization from connectivity, or retry an uncertain effect.",
+          "precondition": "Preserve all original identifiers, uncertain input, owner decisions and effective authorization. Bind missing arguments only from retained trusted caller/owner context. This descriptive recipe does not execute automatically.",
+          "interface": "@agent-browser/client/teaching-evidence#createTeachingEvidenceClient"
+        }
+      ],
+      "verification": {
+        "interface": "caller_error",
+        "fields": [
+          "code",
+          "source",
+          "owningFunction",
+          "message"
+        ],
+        "kind": "source_reference",
+        "contract": "docs/dev/contracts/public-client-error-qualification.v1.json",
+        "precondition": "Read already returned error fields against this source qualification. This is not a file/tool availability claim and does not require a source checkout."
+      },
+      "resumeCondition": "The same owner responds under the original grant and original outcome is reconciled before resuming.",
+      "maximumAutomaticAttempts": 1
     }
   },
   "codes": {
@@ -965,6 +1296,10 @@
       "owningChecks": [
         {
           "path": "packages/client/src/task-briefing.js"
+        },
+        {
+          "path": "packages/client/src/task-briefing.js",
+          "owningFunction": "getTaskBriefing"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -976,6 +1311,10 @@
       "owningChecks": [
         {
           "path": "packages/client/src/task-briefing.js"
+        },
+        {
+          "path": "packages/client/src/task-briefing.js",
+          "owningFunction": "getTaskOperation"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -987,6 +1326,10 @@
       "owningChecks": [
         {
           "path": "packages/client/src/playbooks.js"
+        },
+        {
+          "path": "packages/client/src/playbooks.js",
+          "owningFunction": "invoke"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -2416,6 +2759,10 @@
       "owningChecks": [
         {
           "path": "packages/client/src/teaching-review.js"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "mutate"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -2427,6 +2774,10 @@
       "owningChecks": [
         {
           "path": "packages/client/src/teaching-draft.js"
+        },
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "createTeachingAgentSubmissionOwner.retainedContexts"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -2438,6 +2789,10 @@
       "owningChecks": [
         {
           "path": "packages/client/src/workspace-siteguides.js"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "records"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -2449,6 +2804,10 @@
       "owningChecks": [
         {
           "path": "packages/client/src/teaching-capacity.js"
+        },
+        {
+          "path": "packages/client/src/teaching-capacity.js",
+          "owningFunction": "createTeachingCapacity"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
@@ -2466,11 +2825,3389 @@
         },
         {
           "path": "packages/client/src/teaching-review.js"
+        },
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "inspect"
         }
       ],
       "policySource": "docs/dev/policies/0054-browser-product-contract.md",
       "evidenceFreshness": "not_observed_by_projection",
       "evidenceClass": "unknown"
+    },
+    "auth_sdk_invalid": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "ownedInstallationArtifact"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "auth_sdk_incompatible": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "installedAuthSdk"
+        },
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "connectHostedAuthHelper"
+        },
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "connectEnrolledAuthHelper"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "auth_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "installationFailure"
+        },
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_live_task_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "connectHostedAuthHelper"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_invalid_request": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "connectEnrolledAuthHelper"
+        },
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "ownerAuthHelper"
+        },
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "ownerAuthHelper.followLogin"
+        },
+        {
+          "path": "packages/client/src/login-discovery.js",
+          "owningFunction": "invalid"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "auth_authority_migration_required": {
+      "recipe": "clientAuthLegacyContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "ownerAuthHelper"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_channel_discovery_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/hosted-auth-helper.js",
+          "owningFunction": "ownerAuthHelper.discoverLoginChannels"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_not_authorized": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/hosted-login-receiver.js",
+          "owningFunction": "module"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "auth_input_unknown": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/hosted-login-receiver.js",
+          "owningFunction": "createHostedLoginReceiver.apply"
+        },
+        {
+          "path": "packages/client/src/native-receiving-browser.js",
+          "owningFunction": "module"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "login_continuation_unverified": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-continuation.js",
+          "owningFunction": "createLoginContinuation"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "capability_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-discovery.js",
+          "owningFunction": "createLoginDiscovery.inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "request_binding_mismatch": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-discovery.js",
+          "owningFunction": "createLoginDiscovery.inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "authority_denied": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-discovery.js",
+          "owningFunction": "createLoginDiscovery.inspect"
+        },
+        {
+          "path": "packages/client/src/login-progress.js",
+          "owningFunction": "summarizeLoginProgress"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "login_caller_invalid": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "login_reconciliation_invalid": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "hosted_caller_required_for_reconciliation": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "login_playbook_busy": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "login_scope_invalid": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "checkpoint_binding_mismatch": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        },
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "checkpoint_required_for_reconciliation": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "authentication_method_unsupported": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "receiving_binding_required": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "helper_unavailable": {
+      "recipe": "clientAuthLegacyContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "helper_binding_mismatch": {
+      "recipe": "clientAuthLegacyContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "approval_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "helper_attempt_released": {
+      "recipe": "clientAuthLegacyContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "helper_running_or_uncertain": {
+      "recipe": "clientAuthLegacyContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "helper_reconciliation_unavailable": {
+      "recipe": "clientAuthLegacyContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "private_capture_held": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "password_source_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "helper_state_invalid": {
+      "recipe": "clientAuthLegacyContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "task_target_changed": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "verifyReceiving"
+        },
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        },
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "prepared_plan_required": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "helper_grant_time_unqualified": {
+      "recipe": "clientAuthLegacyContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "createLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "destination_limit_exceeded": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "verifyReceiving"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "receiving_binding_changed": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "verifyReceiving"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "receiving_destination_ambiguous": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js",
+          "owningFunction": "verifyReceiving"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "login_recovery_unverified": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-recovery.js",
+          "owningFunction": "createLoginRecovery"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "verification_incomplete": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-verification.js",
+          "owningFunction": "createLoginVerifier.verify"
+        },
+        {
+          "path": "packages/client/src/login-progress.js",
+          "owningFunction": "summarizeLoginProgress"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "request_binding_unverified": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-verification.js",
+          "owningFunction": "createLoginVerifier.verify"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "completion_unverified": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-verification.js",
+          "owningFunction": "createLoginVerifier.verify"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "verification_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-verification.js",
+          "owningFunction": "createLoginVerifier.verify"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_receiving_changed": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/native-receiving-browser.js",
+          "owningFunction": "module"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "owner_login_options_invalid": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "owner_login_origin_invalid": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "owner_login_busy": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "receiving_unavailable": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        },
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "legacy_checkpoint_requires_reconciliation": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "credential_recipient_mismatch": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "request_required_for_reconciliation": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "owner_request_binding_mismatch": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "auth_reconciliation_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "authentication_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_no_effect_proof_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_reconciliation_pending": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "auth_outcome_uncertain": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "auth_review_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "notification_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        },
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_not_ready": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "owner_number_matching_options_invalid": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "owner_number_matching_busy": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "owner_checkpoint_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "private_attempt_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "challenge_reconciliation_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "number_matching_cancellation_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "authentication_failed": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "challenge_account_mismatch": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "number_matching_unsupported": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "number_matching_delivery_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "number_matching_response_unknown": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "number_matching_owner_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-number-matching.js",
+          "owningFunction": "createOwnerNumberMatchingContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "owner_totp_options_invalid": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "owner_totp_origin_invalid": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "owner_totp_busy": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "original_request_binding_mismatch": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "original_account_unavailable": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "authentication_observation_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "authentication_continuation_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "credential_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        },
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "factor_choice_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "factor_choice_invalid": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "owner_factor_binding_mismatch": {
+      "recipe": "clientAuthScopeCorrection",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "authentication_rejected": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "factor_outcome_unknown": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js",
+          "owningFunction": "createOwnerTotpContinuation.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "playbook_response_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/playbooks.js",
+          "owningFunction": "invoke"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_draft_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/playbooks.js",
+          "owningFunction": "createPlaybookClient"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.save"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "ownersFor"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_candidate_intent_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "writeTeachingDraftCandidate"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_candidate_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "writeTeachingDraftCandidate"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_candidate_directory_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "writeTeachingDraftCandidate"
+        },
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "paths"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_candidate_too_large": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "writeTeachingDraftCandidate"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "publish"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_candidate_exists": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "writeTeachingDraftCandidate"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_agent_scope_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "paths"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_agent_record_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "read"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_agent_result_too_large": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "publish"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_agent_intent_changed": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "checked"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "agentIntent"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_agent_result_changed": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "readOriginal"
+        },
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "createTeachingAgentSubmissionOwner.recordResult"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_agent_media_changed": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "readOriginal"
+        },
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "createTeachingAgentSubmissionOwner.bindMedia"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_agent_media_digest_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "readOriginal"
+        },
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "createTeachingAgentSubmissionOwner.bindMedia"
+        },
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "createTeachingAgentSubmissionOwner.recordResult"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_agent_input_digest_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "createTeachingAgentSubmissionOwner.begin"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_agent_context_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "createTeachingAgentSubmissionOwner.begin"
+        },
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "createTeachingAgentSubmissionOwner.retainedContexts"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_accepted_version_invalid": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-draft.js",
+          "owningFunction": "createTeachingAgentSubmissionOwner.begin"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_endpoint_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence-http.js",
+          "owningFunction": "endpoint"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_authority_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence-http.js",
+          "owningFunction": "transport"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_owner_unavailable": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence-http.js",
+          "owningFunction": "transport"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_owner_response_limit": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence-http.js",
+          "owningFunction": "transport"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_owner_response_invalid": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence-http.js",
+          "owningFunction": "transport"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_conversion_limits_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence-http.js",
+          "owningFunction": "createTeachingSpeechAdapter"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_speech_origin_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence-http.js",
+          "owningFunction": "createTeachingSpeechAdapter"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_operation_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence-http.js",
+          "owningFunction": "createTeachingSpeechAdapter"
+        },
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.transcribeSegment"
+        },
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.readTranscript"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_owner_adapters_required": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_artifact_invalid": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "artifact"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_artifact_changed": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "artifact"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_selection_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_binding_required": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_recording_ambiguous": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_binding_changed": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_recording_not_finalized_av": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_narration_unavailable": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_events_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_source_changed": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "current"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_saved_source_invalid": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "savedSource"
+        },
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.importNarration"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_sequence_invalid": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.inspectSequence"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_sequence_binding_changed": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.inspectSequence"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_gap_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.inspectSequence"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_import_request_required": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.reconcileNarration"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_import_unresolved": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.reconcileNarration"
+        },
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.importNarration"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "teaching_import_conflict": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.reconcileNarration"
+        },
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.importNarration"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_owned_source_required": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.importNarration"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_conversion_limit": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.importNarration"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_upload_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.importNarration"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_saved_source_required": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.segmentRanges"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_range_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.transcribeSegment"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_segment_binding_changed": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.readTranscript"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_transcript_source_changed": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.readTranscript"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_read_limit": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence.js",
+          "owningFunction": "createTeachingEvidenceClient.readVideoSlice"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_operator_answer_invalid": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "module"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_grilling_source_task_mismatch": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "base"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_useful_draft_required": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "base"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_questionnaire_exists": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.prepare"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_questions_invalid": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.prepare"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_question_source_invalid": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.prepare"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_question_stale_revision": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.readAnswerContext"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_operator_answer_authority_unconfigured": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.readAnswerContext"
+        },
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.answer"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_prior_answers_unverified": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.readAnswerContext"
+        },
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.answer"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_question_not_ready": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.readAnswerContext"
+        },
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.answer"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "stale_revision": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.answer"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "mutate"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_question_history_not_editable": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-grilling.js",
+          "owningFunction": "createTeachingGrillingClient.answer"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_frame_decoder_unavailable": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "decodeFrame"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_frame_decode_failed": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "decodeFrame"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_frame_empty": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "decodeFrame"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_media_context_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_transcript_required": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_transcript_unavailable": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_transcript_binding_changed": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_transcript_limit": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_media_source_changed": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_media_video_invalid": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_media_video_changed": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_frame_range_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_frame_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_frame_unavailable": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_media_packet_limit": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js",
+          "owningFunction": "loadTeachingMediaPacket"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_review_configuration_required": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_review_directory_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "directory"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "resolveTeachingAcceptedBaseline"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "records"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_review_guide_id_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "read"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_review_file_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "read"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "resolveTeachingAcceptedBaseline"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "records"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_review_identity_changed": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "read"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "records"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_review_root_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "chain"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_review_lineage_conflict": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "chain"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "operation_intent_changed": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "prior"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_accepted_version_conflict": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "acceptedReference"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_operator_decision_invalid": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "checkedDecision"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_operator_decision_unavailable": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "operatorDecision"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_operator_decision_changed": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "review"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_repeat_receipt_invalid": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "checkedRepeat"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_repeat_authority_unconfigured": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "repeatReceipt"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.recordFreshRepeat"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.promote"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_repeat_receipt_unavailable": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "repeatReceipt"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_open_questions_present": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "settled"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_clarification_authority_unconfigured": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "settled"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_clarification_answers_unverified": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "settled"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_fresh_dates_required": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "repeatRequest"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_fresh_task_required": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "repeatRequest"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_operator_review_required": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "validation"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.recordFreshRepeat"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.promote"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_repeat_content_changed": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "validation"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_repeat_receipt_changed": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "validation"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_review_request_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "mutate"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.lookupOperation"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_accepted_version_changed": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "mutate"
+        },
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "resolveTeachingAcceptedBaseline"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_candidate_validation_failed": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "mutate"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "publication_result_unconfirmed": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "mutate"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "concurrent_revision": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "mutate"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_review_readback_changed": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.open"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_review_metadata_not_editable": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.save"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_original_source_immutable": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.save"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_operator_decision_reference_required": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.recordDecision"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_operator_authority_unconfigured": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.recordDecision"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_source_unavailable_not_acknowledged": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.recordDecision"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_fresh_repeat_required": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "createTeachingReviewClient.promote"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_accepted_scope_required": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "resolveTeachingAcceptedBaseline"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_accepted_scope_mismatch": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "resolveTeachingAcceptedBaseline"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_prior_acceptance_unavailable": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "resolveTeachingAcceptedBaseline"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_prior_not_accepted": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-review.js",
+          "owningFunction": "resolveTeachingAcceptedBaseline"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "siteguides_configuration_path_required": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "readPrivateJson"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "siteguides_private_file_required": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "readPrivateJson"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_receipt_reference_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "readTeachingReceipt"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_receipt_authority_mismatch": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "readTeachingReceipt"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_receipt_content_mismatch": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "readTeachingReceipt"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "siteguides_node_18_required": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "siteguides_configuration_required": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "siteguides_token_unavailable": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "siteguides_existing_mcp_transport_required": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "siteguides_mcp_operation_denied": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "siteguides_existing_mcp_unavailable": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "siteguides_existing_mcp_rejected": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_source_context_mismatch": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "selection"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_speech_configuration_unavailable": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_known_site_origins_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_intended_identity_choice_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_repeat_verifier_unavailable": {
+      "recipe": "clientTeachingReviewAuthority",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_revision_private_path_refused": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "runInstalledSiteGuides"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "siteguides_request_too_large": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides-host.js",
+          "owningFunction": "main"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "siteguides_task_denied": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "allowed"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "teaching_source_configuration_unavailable": {
+      "recipe": "clientTeachingSourceObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "selection"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_stage_original_operation_required": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "agentIntent"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "siteguides_inspection_unavailable": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "agentIntent"
+        },
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "siteguides_request_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "siteguides_guide_unavailable": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_current_browser_required": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_receipt_authority_unconfigured": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_agent_result_invalid": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "teaching_agent_revision_identity_changed": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_site_origins_changed": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_agent_published_content_changed": {
+      "recipe": "clientTeachingOriginalReadback",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "siteguides_operation_unsupported": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/workspace-siteguides.js",
+          "owningFunction": "createWorkspaceSiteGuides.dispatch"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "request_expired": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-progress.js",
+          "owningFunction": "summarizeLoginProgress"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "input_outcome_unknown": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-progress.js",
+          "owningFunction": "summarizeLoginProgress"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "receiving_target_unavailable": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-progress.js",
+          "owningFunction": "summarizeLoginProgress"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "approval_submission_unknown": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-progress.js",
+          "owningFunction": "summarizeLoginProgress"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "uncertain"
+    },
+    "approval_not_submitted": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-progress.js",
+          "owningFunction": "summarizeLoginProgress"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "credential_selection_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-progress.js",
+          "owningFunction": "summarizeLoginProgress"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "discovery_incomplete": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-discovery.js",
+          "owningFunction": "createLoginDiscovery.inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "credential_choice_required": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-discovery.js",
+          "owningFunction": "createLoginDiscovery.inspect"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "account_ambiguous": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "credential_not_found": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "credential_source_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "credential_discovery_incomplete": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js",
+          "owningFunction": "createOwnerLoginPlaybook.advance"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "invalid"
+    },
+    "client_auth_owner_failure": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/client-recovery.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "client_application_verification_unavailable": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-verification.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "client_teaching_owner_http_failure": {
+      "recipe": "clientTeachingTransportOwner",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-evidence-http.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "task_briefing_identity_mismatch": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/task-briefing.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "task_operation_identity_mismatch": {
+      "recipe": "clientAuthReceivingObservation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/task-briefing.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "stale"
+    },
+    "teaching_frame_timeout": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "teaching_frame_limit": {
+      "recipe": "clientTeachingCallerContract",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/teaching-media.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_denied": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "auth_revoked": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "auth_cancelled": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-login-playbook.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "auth_expired": {
+      "recipe": "clientAuthOwnerContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/owner-totp-continuation.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
+    },
+    "helper_denied": {
+      "recipe": "clientAuthLegacyContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "helper_revoked": {
+      "recipe": "clientAuthLegacyContinuation",
+      "owningChecks": [
+        {
+          "path": "packages/client/src/login-playbook.js"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "denied"
+    },
+    "client_dashboard_owner_failure": {
+      "recipe": "clientTransportOwnerReadback",
+      "owningChecks": [
+        {
+          "path": "packages/dashboard/src/lib/response-failure.ts"
+        }
+      ],
+      "policySource": "docs/dev/policies/0054-browser-product-contract.md",
+      "evidenceFreshness": "not_observed_by_projection",
+      "evidenceClass": "unavailable"
     }
   },
   "externalToolContract": "docs/dev/contracts/client-external-owner-tools.v1.json"

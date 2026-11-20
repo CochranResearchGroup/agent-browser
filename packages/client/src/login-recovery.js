@@ -1,3 +1,4 @@
+import {withClientResultRecovery} from './client-recovery.js';
 import {withClientErrorRecovery} from './client-recovery.js';
 import { callClientOwner } from './client-recovery.js';
 // @ts-check
@@ -21,11 +22,11 @@ export function createLoginRecovery({client}) {
      * @param {{requestId:string}} options */
     async reconcile({requestId}) {
       const original=await inspect(requestId);
-      if(original.running===true)return summarizeLoginProgress(original);
-      if(original.state!=='unknown'&&!original.attemptId)return summarizeLoginProgress(original);
+      if(original.running===true)return withClientResultRecovery(await (summarizeLoginProgress(original)),{source:"packages/client/src/login-recovery.js",owningFunction:"reconcile"});
+      if(original.state!=='unknown'&&!original.attemptId)return withClientResultRecovery(await (summarizeLoginProgress(original)),{source:"packages/client/src/login-recovery.js",owningFunction:"reconcile"});
       const result=await callClientOwner(client,'reconcile_credential_request',{requestId},{source:"packages/client/src/login-recovery.js",owningFunction:"createLoginRecovery.reconcile"});
       if(result?.requestId!==requestId||result.attemptId!==original.attemptId)throw invalid();
-      return summarizeLoginProgress(result);
+      return withClientResultRecovery(await (summarizeLoginProgress(result)),{source:"packages/client/src/login-recovery.js",owningFunction:"reconcile"});
     },
     /** Record an observed business failure through Auth's completion contract.
      * Time and observation come from qualified caller evidence, never this host's clock.
@@ -37,8 +38,8 @@ export function createLoginRecovery({client}) {
       if(result?.requestId!==options.requestId||result.conflict||result.completion?.outcome!=='failed')throw invalid();
       const current=await callClientOwner(client,'inspect_authentication_completion',{requestId:options.requestId},{source:"packages/client/src/login-recovery.js",owningFunction:"createLoginRecovery.recordFailure"});
       if(current?.requestId!==options.requestId||current.state!=='completed'||current.completion?.outcome!=='failed')throw invalid();
-      return {requestId:options.requestId,previousInputOutcome:current.completion.previousState,
-        settlement:current.receivingSettlement?.status==='settled'?'settled':'held',retryAllowed:false};
+      return withClientResultRecovery(await ({requestId:options.requestId,previousInputOutcome:current.completion.previousState,
+        settlement:current.receivingSettlement?.status==='settled'?'settled':'held',retryAllowed:false}),{source:"packages/client/src/login-recovery.js",owningFunction:"recordFailure"});
     },
     /** Ask the owner to prepare a distinct challenge after settled business failure.
      * The owner validates current receiving readiness, permission and request time.
@@ -55,7 +56,7 @@ export function createLoginRecovery({client}) {
       if(typeof request?.requestId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9:._-]{0,199}$/.test(request.requestId)||request.requestId===previousRequestId||request.origin!==original.origin||request.targetId!==original.targetId||(request.recipientAccount??request.account)!==account)throw invalid();
       // Preparation may produce review, denial, or an already attempted original
       // for this idempotency key. Preserve that owner's result, never repeat use.
-      return {...summarizeLoginProgress(prepared),previousRequestId};
+      return withClientResultRecovery(await ({...summarizeLoginProgress(prepared),previousRequestId}),{source:"packages/client/src/login-recovery.js",owningFunction:"prepareFresh"});
     },
   };
 }

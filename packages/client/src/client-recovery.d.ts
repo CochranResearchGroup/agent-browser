@@ -1,5 +1,5 @@
 export interface ClientRecoveryRead {
-  tool?:string;interface?:string;method?:string;arguments?:Record<string,unknown>;
+  tool?:string;interface?:string;method?:string;arguments?:Record<string,unknown>|unknown[];
   fields?:string[];kind?:string;contract?:string;precondition?:string;
 }
 /** Local adapter guidance. The original owner's failure and plan are authoritative. */

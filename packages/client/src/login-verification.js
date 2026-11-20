@@ -1,3 +1,4 @@
+import {withClientResultRecovery} from './client-recovery.js';
 import {withClientErrorRecovery} from './client-recovery.js';
 import { callClientOwner, clientRecoveryFor } from './client-recovery.js';
 import { clientArgumentError } from './client-argument-error.js';
@@ -25,22 +26,22 @@ export function createLoginVerifier({client,verifyAccess,callerTaskId}) {
     let dependencyComponent='auth_owner';
     try {
       const before=structuredClone(await callClientOwner(client,'inspect_credential_request',args,{source:"packages/client/src/login-verification.js",owningFunction:"createLoginVerifier.verify"}));
-      if(!matches(before))return {...result,category:'request_binding_unverified'};
+      if(!matches(before))return withClientResultRecovery(await ({...result,category:'request_binding_unverified'}),{source:"packages/client/src/login-verification.js",owningFunction:"verify"});
       dependencyComponent='application_verifier';
       const proof=structuredClone(await verifyAccess(context));
-      if(proof?.state!=='verified'||proof.accountMatched!==true||context.expectedOrganization!==undefined&&proof.organizationMatched!==true||proof.applicationOrigin!==context.applicationOrigin||!bindingFields.every(key=>proof[key]===context.binding[key])||!reference(proof.evidenceRef))return result;
+      if(proof?.state!=='verified'||proof.accountMatched!==true||context.expectedOrganization!==undefined&&proof.organizationMatched!==true||proof.applicationOrigin!==context.applicationOrigin||!bindingFields.every(key=>proof[key]===context.binding[key])||!reference(proof.evidenceRef))return withClientResultRecovery(await (result),{source:"packages/client/src/login-verification.js",owningFunction:"verify"});
       result.qualification.applicationAccess='verified';result.evidenceReferences=[proof.evidenceRef];
       dependencyComponent='auth_owner';
       const record=await callClientOwner(client,'inspect_authentication_completion',args,{source:"packages/client/src/login-verification.js",owningFunction:"createLoginVerifier.verify"}),completion=record?.completion;
-      if(record?.requestId!==context.requestId||record.state!=='completed'||record.conflict||completion?.outcome!=='succeeded'||completion.evidenceAuthority!=='caller_observed'||completion.actor?.taskId!==callerTaskId||!reference(before.clientId)||completion.actor.clientId!==before.clientId||completion.observation?.applicationOrigin!==context.applicationOrigin||!identity(completion.observation.accountEvidence)||!reference(completion.returnId)||!Array.isArray(completion.observation.evidenceRefs)||!completion.observation.evidenceRefs.includes(proof.evidenceRef))return {...result,category:'completion_unverified'};
+      if(record?.requestId!==context.requestId||record.state!=='completed'||record.conflict||completion?.outcome!=='succeeded'||completion.evidenceAuthority!=='caller_observed'||completion.actor?.taskId!==callerTaskId||!reference(before.clientId)||completion.actor.clientId!==before.clientId||completion.observation?.applicationOrigin!==context.applicationOrigin||!identity(completion.observation.accountEvidence)||!reference(completion.returnId)||!Array.isArray(completion.observation.evidenceRefs)||!completion.observation.evidenceRefs.includes(proof.evidenceRef))return withClientResultRecovery(await ({...result,category:'completion_unverified'}),{source:"packages/client/src/login-verification.js",owningFunction:"verify"});
       const after=await callClientOwner(client,'inspect_credential_request',args,{source:"packages/client/src/login-verification.js",owningFunction:"createLoginVerifier.verify"});
-      if(!matches(after)||after.state!=='completed')return {...result,category:'request_binding_unverified'};
+      if(!matches(after)||after.state!=='completed')return withClientResultRecovery(await ({...result,category:'request_binding_unverified'}),{source:"packages/client/src/login-verification.js",owningFunction:"verify"});
       result.qualification.authCompletion='caller_observed';
       result.receivingSettlement=['settled','held'].includes(record.receivingSettlement?.status)?record.receivingSettlement.status:'unverified';
-      return {...result,outcome:'verified',category:'verified_access',nextAction:null,evidenceReferences:[proof.evidenceRef,completion.returnId]};
+      return withClientResultRecovery(await ({...result,outcome:'verified',category:'verified_access',nextAction:null,evidenceReferences:[proof.evidenceRef,completion.returnId]}),{source:"packages/client/src/login-verification.js",owningFunction:"verify"});
     } catch(error) {
       const code=typeof error?.code==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(error.code)?error.code:'client_application_verification_unavailable';
-      return {...result,category:'verification_unavailable',dependencyFailure:{component:dependencyComponent,code,...(typeof error?.failure?.occurrenceId==='string'?{occurrenceId:error.failure.occurrenceId}:{})},...(error?.failure?{failure:error.failure}:{}),clientRecovery:error?.clientRecovery??clientRecoveryFor('client_application_verification_unavailable',{source:'packages/client/src/login-verification.js',owningFunction:'createLoginVerifier.verify',requestId:context.requestId})};
+      return withClientResultRecovery(await ({...result,category:'verification_unavailable',dependencyFailure:{component:dependencyComponent,code,...(typeof error?.failure?.occurrenceId==='string'?{occurrenceId:error.failure.occurrenceId}:{})},...(error?.failure?{failure:error.failure}:{}),clientRecovery:error?.clientRecovery??clientRecoveryFor('client_application_verification_unavailable',{source:'packages/client/src/login-verification.js',owningFunction:'createLoginVerifier.verify',requestId:context.requestId})}),{source:"packages/client/src/login-verification.js",owningFunction:"verify"});
     }
   }};
 }

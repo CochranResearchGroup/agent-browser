@@ -20,6 +20,7 @@ export function responseFailureError(response, fallback, context={}) {
   const code = typeof candidate === 'string' && /^[a-z][a-z0-9_]{0,127}$/.test(candidate) ? candidate : fallback;
   return Object.assign(new Error(code), {
     code, failure,
+    ...Object.fromEntries(["recoveryPlan","executableNextAction","recoveryRegistry","uncertainty"].map(key=>[key,response?.[key]??response?.data?.[key]??response?.error?.data?.[key]]).filter(([,value])=>value!==undefined)),
     clientRecovery: {...clientRecoveryFor(context.localRecoveryCode??fallback,context),ownerRecoveryAvailable:failure!==null},
     occurrenceId: failure?.occurrenceId ?? response?.data?.occurrenceId ?? response?.occurrenceId ?? null,
     requestId: response?.id ?? response?.error?.data?.requestId ?? null,

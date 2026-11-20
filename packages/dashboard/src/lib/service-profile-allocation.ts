@@ -1,3 +1,4 @@
+import {dashboardResponseFailureError,responseFailureMetadata} from "./response-failure.ts";
 export type ServiceProfileAllocationLookupPayload<TAllocation> = {
   success?: boolean;
   data?: {
@@ -22,8 +23,8 @@ export function profileAllocationFromLookupPayload<TAllocation>(
   payload: ServiceProfileAllocationLookupPayload<TAllocation>,
   fallback: TAllocation,
 ): TAllocation {
-  if (!payload.success) {
-    throw new Error(payload.error || "Service profile allocation lookup failed");
+  if (!payload.success || responseFailureMetadata(payload)) {
+    throw dashboardResponseFailureError(payload, "service_profile_allocation_failed");
   }
   return payload.data?.profileAllocation ?? fallback;
 }

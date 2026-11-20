@@ -1,3 +1,4 @@
+import {withClientErrorRecovery} from './client-recovery.js';
 import { clientArgumentError } from './client-argument-error.js';
 import { isResponseFailure, responseFailureError } from './response-failure.js';
 // @ts-check
@@ -12,7 +13,7 @@ export async function getTaskBriefing({ baseUrl, taskId, headers, signal, fetch 
   const payload = await response.json();
   if (!response.ok || isResponseFailure(payload)) throw responseFailureError(payload, 'task_briefing_read_failed');
   if (payload?.success !== true || payload.data?.schemaVersion !== 'agent-browser.task-briefing.v1' || payload.data.taskId !== taskId) {
-    throw new Error('task briefing identity or response mismatch');
+    throw withClientErrorRecovery(new Error('task briefing identity or response mismatch'),{source:"packages/client/src/task-briefing.js",owningFunction:"getTaskBriefing"},"task_briefing_identity_mismatch");
   }
   return payload.data;
 }
@@ -31,7 +32,7 @@ export async function getTaskOperation({ baseUrl, taskId, requestId, headers, si
   if (!response.ok || isResponseFailure(payload)) throw responseFailureError(payload, 'task_operation_read_failed');
   if (payload?.success !== true || payload.data?.schemaVersion !== 'agent-browser.task-operation.v1' ||
       payload.data.operation?.taskId !== taskId || payload.data.operation.requestId !== requestId) {
-    throw new Error('task operation identity or response mismatch');
+    throw withClientErrorRecovery(new Error('task operation identity or response mismatch'),{source:"packages/client/src/task-briefing.js",owningFunction:"getTaskOperation"},"task_operation_identity_mismatch");
   }
   return payload.data;
 }
