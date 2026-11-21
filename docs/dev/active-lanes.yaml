@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: INITIAL-LAUNCH-RECOVERY-778
+    product_lane: PL-BUGFIX
+    objective: Recover an original initial launch after external close or owner-host reboot
+    plan: docs/dev/plans/0308-2026-11-21-initial-launch-recovery-778.md
+    branch: fix/initial-launch-recovery778
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#778, CochranResearchGroup/agent-browser#779, CochranResearchGroup/agent-browser#780, CochranResearchGroup/agent-browser#781]
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Coordinator owns shared contracts and docs. Dependent workers operate serially after validation."]
+    validation_status: Local initial launch status work in progress
+    updated_at: 2026-11-21
   - id: AUTH-APPROVAL-RECOURSE-771
     product_lane: PL-BUGFIX
     objective: Preserve approval transport failure as operational recourse on the original request

@@ -1077,18 +1077,20 @@ impl<
             .effects
             .reconcile_profile_browser(profile, browser, tabs, navigation)?
         else {
-            if browser.is_none()
-                && self
+            if browser.is_none() {
+                let records = self
                     .store
                     .unpublished_launch_records()
-                    .map_err(|_| "remote_view_session_launch_readback_required")?
+                    .map_err(|_| "remote_view_session_launch_readback_required")?;
+                let mut claims = records
                     .iter()
-                    .any(|record| record.intent.profile_id == profile.id)
-            {
-                // A missing current attachment is not proof that an attempted
-                // initial launch had no effect. Explicit exact-absence settlement
-                // must precede a new launch through the original operation.
-                return Err("remote_view_session_launch_readback_required".into());
+                    .filter(|record| record.intent.profile_id == profile.id);
+                if let Some(record) = claims.next() {
+                    if claims.next().is_some() {
+                        return Err("remote_view_session_launch_readback_required: multiple claims for the profile; original launch identity is ambiguous".into());
+                    }
+                    return Err(initial_launch_readback(&record.intent));
+                }
             }
             return Ok(None);
         };
@@ -1595,7 +1597,21 @@ impl<
                 self.pending = None;
                 reason
             }
-            _ => "remote_view_session_launch_readback_required".to_string(),
+            _ => self
+                .store
+                .unpublished_launch_records()
+                .ok()
+                .and_then(|records| {
+                    let mut matches = records
+                        .iter()
+                        .filter(|record| record.intent.profile_id == profile.id);
+                    let record = matches.next()?;
+                    matches
+                        .next()
+                        .is_none()
+                        .then(|| initial_launch_readback(&record.intent))
+                })
+                .unwrap_or_else(|| "remote_view_session_launch_readback_required".into()),
         })?;
         // Preserve the selected descriptive label for the ordinary manager's
         // full-value comparison. Coordinator custody already qualified UUID and
@@ -2288,4 +2304,11 @@ impl<
         self.pending = Some((intent, true));
         Ok(BrowserRecovery { launch, target_ids })
     }
+}
+
+fn initial_launch_readback(intent: &BrowserLaunchIntent) -> String {
+    format!(
+        "remote_view_session_launch_readback_required: profileId={}; launchId={}; inspect with browser_command action=launch_status params.launchId={}",
+        intent.profile_id, intent.intent_id, intent.intent_id
+    )
 }

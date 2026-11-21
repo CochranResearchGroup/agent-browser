@@ -4,6 +4,8 @@
 
 # agent-browser
 
+Inspect an unfinished initial launch with `browser_command` using `action: "launch_status"` and `params.launchId` from the Open failure. This read works before a task exists. If Chrome occupies the profile, keep it open or close that exact window.
+
 ### Task operation capacity
 
 Inspect or update capacity through the existing task-operation interface:

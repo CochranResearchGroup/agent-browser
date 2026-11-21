@@ -625,7 +625,112 @@ fn published_launch_records(
     Ok(records)
 }
 
+fn initial_launch_worker_path(database: &std::path::Path, launch_id: &str) -> std::path::PathBuf {
+    use sha2::{Digest, Sha256};
+    database.with_file_name(format!(
+        "initial-launch-worker-{:x}.lock",
+        Sha256::digest(launch_id.as_bytes())
+    ))
+}
+
+fn initial_launch_worker_active(database: &std::path::Path, launch_id: &str) -> Option<bool> {
+    let worker = std::fs::File::open(initial_launch_worker_path(database, launch_id)).ok()?;
+    match worker.try_lock_shared() {
+        Ok(()) => Some(false),
+        Err(std::fs::TryLockError::WouldBlock) => Some(true),
+        Err(std::fs::TryLockError::Error(_)) => None,
+    }
+}
+
+/// Inspect one original launch without attaching or publishing an effect.
+pub(crate) fn initial_launch_status(launch_id: &str) -> Result<serde_json::Value, String> {
+    let path = BrowserSessionSqliteStore::default_sqlite_path()?;
+    let mut store = BrowserSessionSqliteStore::open_read_only(&path)?;
+    let records = ledger(store.remote_view_mutation_connection())
+        .map_err(|_| "remote_view_session_launch_readback_required")?;
+    let record = records
+        .records
+        .get(launch_id)
+        .ok_or("browser_session_launch_record_missing")?;
+    let profile_id = &record.intent.profile_id;
+    let status = if record.published {
+        "published"
+    } else if records.reconciled_absent.contains(launch_id) {
+        "settled_absent"
+    } else if initial_launch_worker_active(&path, launch_id) == Some(true) {
+        "in_flight"
+    } else {
+        "outcome_unresolved"
+    };
+    let state = store.load_session_state()?;
+    let catalog = store.load_profile_catalog()?.catalog;
+    let profile = catalog.profiles.get(profile_id).or_else(|| {
+        state
+            .disposable_profiles
+            .get(profile_id)
+            .map(|row| &row.profile)
+    });
+    #[cfg(target_os = "linux")]
+    let occupant = profile.map(|profile| {
+        super::browser_session_profile_reuse::current_profile_browser_identity(
+            std::path::Path::new(&profile.user_data_dir),
+        )
+    });
+    #[cfg(not(target_os = "linux"))]
+    let occupant: Option<
+        Result<Option<crate::process_identity::ObservedProcessIdentity>, String>,
+    > = profile.map(|_| Err("browser_session_profile_process_identity_unavailable".into()));
+    let (profile_status, pid, evidence_error) = match occupant {
+        Some(Ok(Some(identity))) => ("occupied", Some(identity.pid), None),
+        Some(Ok(None)) => ("no_current_lock_holder", None, None),
+        Some(Err(error)) => ("unverified", None, Some(error)),
+        None => (
+            "unverified",
+            None,
+            Some("browser_session_recovery_profile_missing".into()),
+        ),
+    };
+    Ok(serde_json::json!({
+        "launchId": launch_id,
+        "profileId": profile_id,
+        "launchStatus": status,
+        "profileStatus": profile_status,
+        "occupantPid": pid,
+        "evidenceError": evidence_error,
+        "nextAction": if profile_status == "occupied" {
+            "Keep the current browser open, or close that exact window and check this launch again."
+        } else {
+            "Inspect the original launch with the browser owner. This observation does not settle the claim."
+        }
+    }))
+}
+
 impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
+    fn hold_initial_launch_worker(
+        &mut self,
+        intent: &BrowserLaunchIntent,
+    ) -> Result<Box<dyn std::any::Any + Send>, LaunchCustodyStoreError> {
+        let database = self
+            .remote_view_mutation_connection()
+            .path()
+            .map(std::path::Path::new)
+            .ok_or(LaunchCustodyStoreError::Unavailable)?;
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+        let worker = options
+            .open(initial_launch_worker_path(database, &intent.intent_id))
+            .map_err(|_| LaunchCustodyStoreError::Unavailable)?;
+        worker
+            .try_lock()
+            .map_err(|_| LaunchCustodyStoreError::Conflict)?;
+        Ok(Box::new(worker))
+    }
+
     fn retain_owner_released_assignment(
         &mut self,
         browser: &agent_browser_service_model::ManagedBrowserInstance,

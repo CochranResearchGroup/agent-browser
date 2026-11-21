@@ -922,12 +922,12 @@ fn unresolved_initial_launch_readback_never_authorizes_implicit_second_launch() 
         user_data_dir: "/synthetic/destination".into(),
         kind: BrowserProfileKind::Named,
     };
-    assert_eq!(
-        effects
-            .reconcile_profile_browser(&profile, None, &[], &[])
-            .unwrap_err(),
-        "remote_view_session_launch_readback_required"
-    );
+    let error = effects
+        .reconcile_profile_browser(&profile, None, &[], &[])
+        .unwrap_err();
+    assert!(error.starts_with("remote_view_session_launch_readback_required:"));
+    assert!(error.contains("66666666-6666-4666-8666-666666666666"));
+    assert!(error.contains("launch_status"));
     assert!(evidence.borrow().effects.is_empty());
     assert_eq!(
         evidence.borrow().pending.as_ref().unwrap().intent.intent_id,

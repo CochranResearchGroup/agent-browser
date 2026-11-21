@@ -97,6 +97,9 @@ pub fn launch_remote_view_browser<T: RemoteViewApplicationTransport>(
     process
         .preflight_launch(profile)
         .map_err(Error::Preflight)?;
+    let _worker = store
+        .hold_initial_launch_worker(intent)
+        .map_err(Error::Store)?;
     match store
         .admit_launch_intent(intent, expected)
         .map_err(Error::Store)?

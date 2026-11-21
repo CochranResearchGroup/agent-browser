@@ -113,6 +113,7 @@ const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
     "failure_recovery",
     "failure_log",
+    "launch_status",
     "task_operation",
     "task_retirement",
     "mode",
@@ -5714,6 +5715,18 @@ fn call_service_mcp_tool_inner(
             return Err(original_failure);
         }
         validate_browser_command_action(arguments)?;
+        if arguments["action"] == "launch_status" {
+            let id = required_string_argument(&arguments["params"], "launchId")?;
+            let status = crate::native::browser_launch_custody_store::initial_launch_status(id)
+                .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            return Ok(tool_response_from_payload(
+                "browser_command",
+                session,
+                json!({}),
+                status,
+                false,
+            ));
+        }
         if arguments["action"] == "failure_recovery" {
             return failure_recovery::call(arguments, session, configured_service_state);
         }
