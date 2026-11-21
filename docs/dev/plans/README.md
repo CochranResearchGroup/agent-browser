@@ -1,5 +1,6 @@
 # Active plan index
 
+[P308 initial launch recovery](0308-2026-11-21-initial-launch-recovery-778.md), spec778. PL-BUGFIX.
 [P307 recoverable browser work](0307-2026-11-19-recoverable-work749.md), spec749:750–758/760–769, source accepted through PR759: configured capacity, actionable logged refusal recovery, Native activity coordination and measured latency. One review/one remediation; no deployment.
 
 [P306 evidence-backed login progress](0306-2026-11-18-login-progress-739.md), spec739:740 owns the public result contract;741–745 follow the validated dependency frontier. Source-only; no live login or installation.

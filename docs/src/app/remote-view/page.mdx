@@ -762,6 +762,12 @@ inspection recourse; it must not be treated as an automatic convergence retry.
 
 ## Remote View application runtime
 
+Inspect an unfinished initial launch with `browser_command` using `action: "launch_status"` and `params.launchId` from the Open failure. This read works before a task exists. If Chrome occupies the profile, keep it open or close that exact window. Launch status reports the original worker boot evidence. A verified owner-host reboot clears prior-boot workers. Recovery still checks that the profile is vacant, since Chrome may have opened again after boot.
+
+For MCP `browser_open`, supply an optional `requestId` when you need durable launch readback. Reuse the same arguments and request ID to check the original launch without dispatching another Open. Use a fresh request ID for a distinct Open.
+
+For Native application-pool `remote_view_open`, use the top-level `openRequestId` for an initial Open. An identical retry returns launch readback. Existing-target selection uses its existing continuation.
+
 Native cold launches require an absolute profile directory. Invalid relative catalog paths return `browser_session_profile_path_not_absolute`; select an existing managed profile or register the intended absolute directory instead of guessing a replacement. Local capacity failures return `browser_launch_resource_pressure:<reason>`. These preflight failures occur before durable launch custody and may be retried after correcting the cause. Failures after custody admission still require readback; an empty recorded PID does not prove process absence.
 
 With origin and pool configured, `remote-view open` uses the managed browser

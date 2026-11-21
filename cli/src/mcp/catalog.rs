@@ -62,7 +62,7 @@ pub(super) fn tools() -> Vec<Value> {
             "description":"Run supported task operation. Discover names/arguments with browser_discover. Retired authority is unavailable.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"},"action":{"type":"string"},
-                    "params":{"type":"object"},"policyOverrideId":{"type":"string"},"requestId":{"type":"string"}},"required":["action"],"anyOf":[{"required":["taskId"]},{"properties":{"action":{"enum":["profile_duplicate","browser_build","failure_recovery"]}},"required":["params"]},{"properties":{"action":{"const":"failure_log"},"params":{"required":["occurrenceId"]}},"required":["params"]}]}}),
+                    "params":{"type":"object"},"policyOverrideId":{"type":"string"},"requestId":{"type":"string"}},"required":["action"],"anyOf":[{"required":["taskId"]},{"properties":{"action":{"enum":["profile_duplicate","browser_build","failure_recovery","launch_status"]}},"required":["params"]},{"properties":{"action":{"const":"failure_log"},"params":{"required":["occurrenceId"]}},"required":["params"]}]}}),
         json!({"name":"browser_discover","title":"Discover advanced operations",
             "description":"Discover operation schemas and CLI/API guidance for browser, diagnostics or administration.",
             "inputSchema":{"type":"object","additionalProperties":false,
@@ -107,7 +107,7 @@ pub(super) fn discover(arguments: &Value, session: &str) -> Result<Value, super:
         let schema = operation_schema(category, operation)?;
         json!({"category":category,"operation":operation,"inputSchema":schema,
             "execution":if category == "browser" {json!({"tool":"browser_command","action":operation,
-                "arguments":if operation=="browser_build" {"Supply params.profileId or taskId. inspect needs no operationId; open_selected continues a confirmed selection and requires serviceName, agentName and taskName."} else if operation == "profile_duplicate" {"Supply params.sourceProfileId, or taskId to bind the source profile. Supply params.operationId except for choice inspect, which lists matching operations. For dispose_copy, omit taskId and use only the original completed operationId with ownerConfirmed; the owner derives its destination."} else {"Place these page arguments in params and supply taskId."}})}
+                "arguments":if operation=="browser_build" {"Supply params.profileId or taskId. inspect needs no operationId; open_selected continues a confirmed selection and requires serviceName, agentName and taskName."} else if operation == "profile_duplicate" {"Supply params.sourceProfileId, or taskId to bind the source profile. Supply params.operationId except for choice inspect, which lists matching operations. For dispose_copy, omit taskId and use only the original completed operationId with ownerConfirmed; the owner derives its destination."} else if operation == "launch_status" {"Supply the original params.launchId. A task ID is optional."} else {"Place these page arguments in params and supply taskId."}})}
                 else {service_execution(operation)}})
     } else {
         json!({"category":category,"operations":names,"next":"Request one operation for its argument schema."})
@@ -205,6 +205,8 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                 "properties":{"choice":{"enum":["inspect","retire","status"]},"operationId":{"type":"string","minLength":1,"maxLength":160},"expectedBindingRef":{"type":"string","pattern":"^[a-fA-F0-9]{64}$"}},"required":["choice"],
                 "oneOf":[{"properties":{"choice":{"const":"inspect"}},"not":{"anyOf":[{"required":["operationId"]},{"required":["expectedBindingRef"]}]}},{"properties":{"choice":{"const":"status"}},"required":["operationId"],"not":{"required":["expectedBindingRef"]}},{"properties":{"choice":{"const":"retire"}},"required":["operationId","expectedBindingRef"]}]})),
             "failure_recovery" => Some(super::failure_recovery::parameters_schema()),
+            "launch_status" => Some(json!({"type":"object","additionalProperties":false,
+                "properties":{"launchId":{"type":"string","minLength":1}},"required":["launchId"]})),
             "failure_log" => Some(json!({"type":"object","additionalProperties":false,
                 "properties":{"occurrenceId":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":1000}}})),
             "task_operation" => Some(json!({"type":"object","additionalProperties":false,

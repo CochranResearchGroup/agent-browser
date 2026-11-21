@@ -4,6 +4,8 @@ use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[derive(Default)]
 struct Evidence {
+    initial_profile_vacant: bool,
+    initial_attachment_error: bool,
     pending: Option<BrowserLaunchCustodyRecord>,
     effects: Vec<String>,
     prior: Option<RemoteViewAssignmentRecord>,
@@ -104,6 +106,22 @@ impl BrowserLaunchCustodyStore for Store {
             executable_path: Some("/synthetic/chrome".into()),
             browser_family: None,
         }))
+    }
+
+    fn reconcile_absent_initial_launch(
+        &mut self,
+        claim: &BrowserLaunchCustodyRecord,
+        _expected: &BrowserSessionState,
+        profile: &BrowserProfileCatalogEntry,
+    ) -> Result<bool, LaunchCustodyStoreError> {
+        let mut evidence = self.0.borrow_mut();
+        assert_eq!(evidence.pending.as_ref(), Some(claim));
+        assert_eq!(claim.intent.profile_id, profile.id);
+        if !evidence.initial_profile_vacant {
+            return Ok(false);
+        }
+        evidence.pending = None;
+        Ok(true)
     }
 
     fn unpublished_launch_records(
@@ -354,6 +372,19 @@ impl RemoteViewBrowserProcessEffects for Runtime {
     }
 }
 impl BrowserSessionEffects for Runtime {
+    fn reconcile_profile_browser(
+        &mut self,
+        _profile: &BrowserProfileCatalogEntry,
+        browser: Option<&ManagedBrowserInstance>,
+        _tabs: &[ManagedBrowserTab],
+        _navigation: &[BrowserNavigationRecord],
+    ) -> Result<Option<BrowserRecovery>, String> {
+        if browser.is_none() && self.evidence.borrow().initial_attachment_error {
+            return Err("browser_session_profile_debug_endpoint_unavailable".into());
+        }
+        Ok(None)
+    }
+
     fn observe_idle_retirement_effect(
         &mut self,
         scope: &BrowserIdleRetirementScope,
@@ -922,17 +953,38 @@ fn unresolved_initial_launch_readback_never_authorizes_implicit_second_launch() 
         user_data_dir: "/synthetic/destination".into(),
         kind: BrowserProfileKind::Named,
     };
-    assert_eq!(
-        effects
-            .reconcile_profile_browser(&profile, None, &[], &[])
-            .unwrap_err(),
-        "remote_view_session_launch_readback_required"
-    );
+    let error = effects
+        .reconcile_profile_browser(&profile, None, &[], &[])
+        .unwrap_err();
+    assert!(error.starts_with("remote_view_session_launch_readback_required:"));
+    assert!(error.contains("66666666-6666-4666-8666-666666666666"));
+    assert!(error.contains("launch_status"));
     assert!(evidence.borrow().effects.is_empty());
     assert_eq!(
         evidence.borrow().pending.as_ref().unwrap().intent.intent_id,
         "66666666-6666-4666-8666-666666666666"
     );
+    {
+        let mut state = evidence.borrow_mut();
+        state.initial_profile_vacant = true;
+        state.initial_attachment_error = true;
+    }
+    let error = effects
+        .reconcile_profile_browser(&profile, None, &[], &[])
+        .unwrap_err();
+    assert!(
+        error.contains("66666666-6666-4666-8666-666666666666"),
+        "{error}"
+    );
+    assert!(evidence.borrow().pending.is_some());
+    evidence.borrow_mut().initial_attachment_error = false;
+    evidence.borrow_mut().initial_profile_vacant = true;
+    assert!(effects
+        .reconcile_profile_browser(&profile, None, &[], &[])
+        .unwrap()
+        .is_none());
+    assert!(evidence.borrow().pending.is_none());
+    assert!(evidence.borrow().effects.is_empty());
     let peer = BrowserProfileCatalogEntry {
         id: "unrelated-profile".into(),
         ..profile

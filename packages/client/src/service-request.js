@@ -2181,10 +2181,13 @@ export async function requestServiceRemoteViewOpen({ baseUrl, fetch = globalThis
   });
   // Preserve structured operation refusal before validating viewer readiness.
   requireServiceRequestSuccess(response);
+  const data = serviceRemoteViewOpenData(response);
+  if (requestFields.openRequestId !== undefined && data?.replayed === true && data.status === 'launch_readback') {
+    return response;
+  }
   requireServiceRemoteViewOpenOperatorVisible(response, {
     allowInfrastructureOnlyReadiness,
   });
-  const data = serviceRemoteViewOpenData(response);
   if (data?.dryRun !== true && allowInfrastructureOnlyReadiness !== true && allowRawProviderUrl !== true) {
     requireServiceRemoteViewHandoffUrl(response);
   }

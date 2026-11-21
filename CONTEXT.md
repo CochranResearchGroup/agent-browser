@@ -375,6 +375,27 @@ cache authority across passes; effect admission and publication retain their
 independent current-state checks.
 _Avoid_: Global runtime lock, browser readiness, profile access policy
 
+**Initial launch recovery**:
+Inspection and reconciliation of the original launch by profile and launch ID
+before a managed task exists. An occupied profile can be reused when the exact
+live browser is attachable and existing policy authorizes attachment. Otherwise
+the operator can keep it open or close the exact blocking window. Closure
+outside Agent Browser is valid evidence when the owner verifies that the
+profile is now vacant and the original launch can no longer start. The owner
+verifies both conditions under the same launch admission guard, settles the
+original claim, and preserves its history. The next Open request runs this
+reconciliation automatically and continues if admission succeeds. Background
+reconciliation may settle the claim and leave the profile vacant until an Open
+is requested. An original launch still in flight returns its launch ID and a
+supported status check. A claim's age does not resolve it. A verified reboot of
+the host that owned the attempt ends its prior-boot worker and process
+instances. The owner still checks current profile occupancy before settling the
+claim because a browser can start again after boot. A service restart alone
+does not establish that the browser or an earlier launch worker exited.
+Retrying the same Open joins the original launch or returns its recorded
+outcome. A distinct Open can launch after the earlier claim is settled and
+current admission succeeds.
+
 **Native idle retirement fence**:
 The provider's durable exclusion of new native viewer admission during one
 exact application retirement operation. Its monotonic slot revision and

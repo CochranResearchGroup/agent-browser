@@ -10,6 +10,12 @@ Change operation, artifact, reconnect and lane budgets live: [capacity guide](re
 
 For recovery, capacity and owner continuation, see [continuation](references/cli-and-service.md#continue-after-a-refusal).
 
+Inspect an unfinished initial launch with `browser_command` using `action: "launch_status"` and `params.launchId` from the Open failure. This read works before a task exists. If Chrome occupies the profile, keep it open or close that exact window. Launch status reports the original worker boot evidence. A verified owner-host reboot clears prior-boot workers. Recovery still checks that the profile is vacant, since Chrome may have opened again after boot.
+
+For MCP `browser_open`, supply an optional `requestId` when you need durable launch readback. Reuse the same arguments and request ID to check the original launch without dispatching another Open. Use a fresh request ID for a distinct Open.
+
+For Native application-pool `remote_view_open`, use the top-level `openRequestId` for an initial Open. An identical retry returns launch readback. Existing-target selection uses its existing continuation.
+
 For public refusal occurrence IDs and no-launch task error-log readback, see [the CLI and service reference](references/cli-and-service.md#recover-a-public-refusal).
 
 Authelia supplies access; dashboard login, enrollment and roles are disabled.

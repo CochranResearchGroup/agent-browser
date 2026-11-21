@@ -97,6 +97,9 @@ pub fn launch_remote_view_browser<T: RemoteViewApplicationTransport>(
     process
         .preflight_launch(profile)
         .map_err(Error::Preflight)?;
+    let mut worker = store
+        .hold_initial_launch_worker(intent)
+        .map_err(Error::Store)?;
     match store
         .admit_launch_intent(intent, expected)
         .map_err(Error::Store)?
@@ -104,6 +107,9 @@ pub fn launch_remote_view_browser<T: RemoteViewApplicationTransport>(
         LaunchCustodyAdmission::New => (),
         LaunchCustodyAdmission::Existing(_) => return Err(Error::ReadbackRequired),
     }
+    store
+        .record_initial_launch_worker(worker.as_mut())
+        .map_err(Error::Store)?;
     let environment = adapter
         .launch_environment(&intent.assignment)
         .map_err(Error::Provider)?;

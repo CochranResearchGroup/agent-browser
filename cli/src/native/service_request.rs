@@ -150,6 +150,7 @@ impl ServiceRequestFieldSpec {
 const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::structural("action", FieldKind::String, true),
     ServiceRequestFieldSpec::structural("params", FieldKind::Object, false),
+    ServiceRequestFieldSpec::field("openRequestId", FieldKind::String, true, false, false),
     ServiceRequestFieldSpec::field(
         "jobTimeoutMs",
         FieldKind::PositiveInteger,
@@ -810,6 +811,9 @@ pub(crate) fn normalize_service_request(
                     | "profileChildAccess"
                     | "operatorFocusProofToken"
                     | "operatorTabCloseProofToken"
+                    | "openRequestId"
+                    | "initialOpenCallerScope"
+                    | "initialOpenIntentFingerprint"
             ) {
                 command[key] = value.clone();
             }
@@ -852,6 +856,78 @@ pub(crate) fn normalize_service_request(
         if spec.trace {
             trace[spec.name] = value.clone();
         }
+    }
+
+    if let Some(open_id) = request.get("openRequestId") {
+        if command["dryRun"] == true
+            || (command.get("url").is_none()
+                && command.get("browserId").is_some()
+                && command.get("targetId").is_some())
+        {
+            return Err(issue(ServiceRequestIssueKind::InvalidRequest,
+                "openRequestId addresses a browser launch. Use dry run or the existing target handoff without an Open request ID"));
+        }
+        if action != "remote_view_open"
+            || open_id.as_str().is_none_or(|id| {
+                id.trim().is_empty() || id.len() > 128 || id.chars().any(char::is_control)
+            })
+        {
+            return Err(issue(ServiceRequestIssueKind::InvalidRequest,
+                "openRequestId is a nonempty request identity of up to 128 bytes for remote_view_open"));
+        }
+        // Caller labels are descriptive. Use only the identity supplied by
+        // authenticated ingress or the existing trusted local service client.
+        let principal = input
+            .authenticated_principal
+            .filter(|principal| principal.provenance != ServicePrincipalProvenance::UnprovenLegacy)
+            .map(|principal| {
+                (
+                    principal.provenance.as_str(),
+                    principal.principal_id.as_str(),
+                )
+            })
+            .or_else(|| {
+                input
+                    .fallback_principal
+                    .filter(|fallback| {
+                        matches!(
+                            fallback.source,
+                            ServiceRequestPrincipalSource::AuthenticatedDashboard
+                                | ServiceRequestPrincipalSource::LocalProcess
+                        )
+                    })
+                    .map(|fallback| (fallback.source.as_str(), fallback.principal))
+            })
+            .ok_or_else(|| {
+                issue(ServiceRequestIssueKind::MissingAccountablePrincipal,
+                "Open replay requires an authenticated service identity or a trusted local caller")
+            })?;
+        let profile = command["runtimeProfile"]
+            .as_str()
+            .or_else(|| command["profileId"].as_str())
+            .filter(|profile| !profile.trim().is_empty())
+            .ok_or_else(|| {
+                issue(
+                    ServiceRequestIssueKind::InvalidRequest,
+                    "Open replay requires the exact configured runtime profile ID",
+                )
+            })?;
+        let task = command["sessionName"]
+            .as_str()
+            .or_else(|| command["session"].as_str())
+            .or(input.effective_session)
+            .unwrap_or_default();
+        // Capture caller intent before live route hints can select a different
+        // session alias after the original launch created its managed task.
+        let scope = serde_json::to_vec(&("native-application-pool", principal, profile, task))
+            .expect("scope tuple serializes");
+        command["initialOpenCallerScope"] = json!(format!("{:x}", Sha256::digest(scope)));
+        let mut canonical = input.request.clone();
+        canonical.sort_all_objects();
+        command["initialOpenIntentFingerprint"] = json!(format!(
+            "{:x}",
+            Sha256::digest(canonical.to_string().as_bytes())
+        ));
     }
 
     if action == "remote_view_open" {
@@ -2761,6 +2837,43 @@ mod tests {
             .is_ok(),
             "sharing an existing task must not rewrite creation provenance"
         );
+    }
+
+    #[test]
+    fn native_initial_open_identity_is_stable_under_transport_id_changes() {
+        let request = json!({"action":"remote_view_open","runtimeProfile":"accounting",
+            "openRequestId":"open-1","sessionName":"initial-work",
+            "serviceName":"codex","agentName":"Codex","taskName":"Open accounting",
+            "params":{"url":"https://example.test/","originKind":"agent",
+                "initialOpenCallerScope":"forged","initialOpenIntentFingerprint":"forged"}});
+        let normalize_request = |request_id, fallback_principal| {
+            normalize_service_request(ServiceRequestNormalization {
+                request: &request,
+                service_state: None,
+                authenticated_principal: None,
+                fallback_principal,
+                request_id,
+                effective_session: Some("test-normalizer"),
+            })
+        };
+        let local = Some(ServiceRequestFallbackPrincipal {
+            source: ServiceRequestPrincipalSource::LocalProcess,
+            principal: "local:test-normalizer",
+        });
+        let first = normalize_request("transport-1", local).unwrap().command;
+        let retry = normalize_request("transport-2", local).unwrap().command;
+        assert_eq!(first["openRequestId"], "open-1");
+        assert_eq!(
+            first["initialOpenCallerScope"],
+            retry["initialOpenCallerScope"]
+        );
+        assert_eq!(
+            first["initialOpenIntentFingerprint"],
+            retry["initialOpenIntentFingerprint"]
+        );
+        assert_ne!(first["initialOpenCallerScope"], "forged");
+        assert_ne!(first["initialOpenIntentFingerprint"], "forged");
+        assert!(normalize_request("transport-3", None).is_err());
     }
 
     #[test]

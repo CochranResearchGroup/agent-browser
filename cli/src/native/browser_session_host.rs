@@ -194,6 +194,10 @@ pub(crate) async fn execute_shared_remote_view_open(
     name: String,
     mut command: serde_json::Value,
 ) -> Result<Option<serde_json::Value>, String> {
+    use super::browser_launch_custody_store::{
+        initial_open_readback, pending_initial_open_outcome, InitialOpenAdmission,
+        InitialOpenOutcome,
+    };
     command["humanHandoff"] = serde_json::json!(true);
     pending_human_retention(&command)?;
     tokio::task::spawn_blocking(move || {
@@ -211,9 +215,30 @@ pub(crate) async fn execute_shared_remote_view_open(
         super::browser_host_policy::prepare_command(&host.state, &name, &mut command)?;
         super::browser_host_policy::check_state(&host.state, &name, &command)?;
         if command.get("url").is_none() && command.get("browserId").is_some() && command.get("targetId").is_some() {
+            if command.get("openRequestId").is_some() {
+                return Err("openRequestId addresses a browser launch. Use the existing target handoff without an Open request ID.".into());
+            }
             return host.prepare_existing_task_handoff(&name, &command).map(Some);
         }
         validate_handoff_ttl(&command, current_unix_ms(), &agent_browser_service_model::BrowserRetentionPolicy::default())?;
+        let initial_open = if let Some(request_id) = optional_string(&command, "openRequestId") {
+            let scope = required_string(&command, "initialOpenCallerScope")?;
+            let fingerprint = required_string(&command, "initialOpenIntentFingerprint")?;
+            let owner_request_id = required_string(&command, "id")?;
+            // Ordinary Open policy checks above also apply to original readback.
+            match host.persistence.admit_initial_open_request(
+                scope, request_id, fingerprint, Some(owner_request_id),
+            )? {
+                InitialOpenAdmission::New(_) => Some((scope.to_owned(), request_id.to_owned(), fingerprint.to_owned())),
+                InitialOpenAdmission::Existing { owner_request_id, outcome } => {
+                    return Ok(Some(serde_json::json!({
+                        "initialOpenReadback":initial_open_readback(request_id, &owner_request_id, outcome)
+                    })));
+                }
+            }
+        } else {
+            None
+        };
         if command["browserBuild"] == "cdp_free_headed" {
             command["manualLogin"] = serde_json::json!(true);
         }
@@ -298,7 +323,26 @@ pub(crate) async fn execute_shared_remote_view_open(
                 host.commit_state()?;
             }
         }
-        let mut response = host.execute_managed_command(&name, &command)?;
+        let response = host.execute_managed_command(&name, &command);
+        if let Some((scope, request_id, fingerprint)) = initial_open {
+            let outcome = match &response {
+                Ok(Some(response)) if response["success"] == true => {
+                    let identity = &response["browserSession"];
+                    Some(InitialOpenOutcome::Opened {
+                        task_id: required_string(identity, "sessionId")?.into(),
+                        profile_id: required_string(identity, "profileId")?.into(),
+                        browser_id: required_string(identity, "browserId")?.into(),
+                    })
+                }
+                Ok(Some(response)) => response["error"].as_str().and_then(pending_initial_open_outcome),
+                Err(error) => pending_initial_open_outcome(error),
+                Ok(None) => None,
+            };
+            if let Some(outcome) = outcome {
+                host.persistence.record_initial_open_outcome(&scope, &request_id, &fingerprint, outcome)?;
+            }
+        }
+        let mut response = response?;
         if let Some(response) = response
             .as_mut()
             .filter(|response| response["success"] == true)
@@ -468,6 +512,8 @@ pub(crate) fn reap_shared_browser_sessions(
         .maintenance
         .lock()
         .map_err(|_| "browser_session_host_lock_poisoned")?;
+    // Initial launch recovery has no TTL requirement and must run for a vacant owner.
+    let _ = super::browser_launch_custody_store::reap_initial_launch_claims();
     reap_browser_session_host(&mut host, || {
         let state = BrowserSessionSqliteStore::default_sqlite()?.load_session_state()?;
         if state.browsers.is_empty() && state.disposable_profiles.is_empty() {

@@ -7,6 +7,9 @@ use sha2::{Digest, Sha256};
 
 use super::{optional_string_argument, required_string_argument, JsonRpcError};
 use crate::connection::{ensure_daemon_with_latency, send_command, DaemonOptions};
+use crate::native::browser_launch_custody_store::{
+    initial_open_readback, pending_initial_open_outcome, InitialOpenAdmission, InitialOpenOutcome,
+};
 use crate::native::browser_session_store::BrowserSessionSqliteStore;
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::load_default_service_state_snapshot;
@@ -34,6 +37,7 @@ pub(super) fn tools() -> Vec<Value> {
                     "mode":{"type":"string","enum":["automation","manual_login"],"description":"Omit to retain mode (new: automation). manual_login: native_capture/native_input, no CDP. DOM requires automation."},
                     "buildSelectionOperationId":{"type":"string","description":"Retained build selection."},
                     "taskKey":{"type":"string","description":"Reuse to continue; distinct keys get separate tabs."},
+                    "requestId":{"type":"string","minLength":1,"maxLength":128,"description":"Optional Open request identity for launch outcome readback without redispatch. Reuse the same arguments. Separate from taskKey."},
                 "url":{"type":"string","description":"Initial URL; replay preserves the current page."},
                     "serviceName":{"type":"string"},"agentName":{"type":"string"},"taskName":{"type":"string"},
                     "taskPolicy":{"type":"object","additionalProperties":false,"properties":{"version":{"const":1},"deniedActions":{"type":"array","items":{"type":"string"}},"artifactDestinations":{"type":"object","additionalProperties":{"type":"string"}}},"required":["version"]},
@@ -463,7 +467,16 @@ pub(super) fn open(
     transport_session: &str,
     configured: &ServiceState,
 ) -> Result<Value, JsonRpcError> {
+    let request_id = optional_string_argument(arguments, "requestId")?;
+    if request_id.is_some_and(|id| id.len() > 128 || id.chars().any(char::is_control)) {
+        return Err(issue(
+            "Open requestId must have at most 128 bytes without control characters",
+        ));
+    }
     if arguments.get("attachment").is_some() {
+        if request_id.is_some() {
+            return Err(issue("Open requestId is available for browser launches. Attachment uses the existing taskKey."));
+        }
         if optional_string_argument(arguments, "mode")?.unwrap_or("automation") != "automation" {
             return Err(issue("manual_login_requires_owned_browser: attachment cannot remove an existing CDP listener"));
         }
@@ -546,12 +559,61 @@ pub(super) fn open(
     }
     .expect("string tuple serializes");
     let session_name = format!("workflow-{}", hex::encode(Sha256::digest(identity)));
+    let receipt = if let Some(request_id) = request_id {
+        let mut store = BrowserSessionSqliteStore::default_sqlite().map_err(issue)?;
+        if let Some(binding) = &hosted {
+            // A saved launch receipt does not bypass current app policy.
+            let host =
+                crate::native::browser_host_context::configured_host(binding).map_err(issue)?;
+            let mut request = arguments.clone();
+            request["sessionName"] = json!(session_name);
+            request["action"] = json!("browser_session_open");
+            crate::native::browser_host_policy::check_open(
+                &store.load_session_state().map_err(issue)?,
+                binding,
+                host.policy_defaults.as_ref(),
+                &request,
+            )
+            .map_err(issue)?;
+        }
+        // Standalone Open uses the existing single-user runtime and its scoped
+        // workflow identity. Hosted Open also includes the validated app binding.
+        let scope = session_name.clone();
+        let mut canonical = arguments.clone();
+        canonical.sort_all_objects();
+        let fingerprint = format!("{:x}", Sha256::digest(canonical.to_string().as_bytes()));
+        match store
+            .admit_initial_open_request(&scope, request_id, &fingerprint, None)
+            .map_err(issue)?
+        {
+            InitialOpenAdmission::New(owner_request_id) => {
+                Some((store, scope, fingerprint, request_id, owner_request_id))
+            }
+            InitialOpenAdmission::Existing {
+                owner_request_id,
+                outcome,
+            } => {
+                return Ok(super::tool_response_from_payload(
+                    "browser_open",
+                    transport_session,
+                    json!({}),
+                    initial_open_readback(request_id, &owner_request_id, outcome),
+                    false,
+                ));
+            }
+        }
+    } else {
+        None
+    };
     if mode == "persistent" && copied_profile.is_none() {
         cli(&["runtime", "create", profile.expect("profile validated")])?;
     }
     let mut command = json!({"id":uuid::Uuid::new_v4().to_string(),
         "action":"browser_session_open","sessionName":session_name,
         "url":url,"serviceName":service,"agentName":agent,"taskName":task,"originKind":"agent"});
+    if let Some((_, _, _, _, owner_request_id)) = &receipt {
+        command["id"] = json!(owner_request_id);
+    }
     command["manualLogin"] = json!(manual);
     if let Some(receipt) = optional_string_argument(arguments, "buildSelectionOperationId")? {
         command["buildSelectionOperationId"] = json!(receipt);
@@ -605,7 +667,45 @@ pub(super) fn open(
     }
     // Opening verifies/reuses the existing managed browser before reading its task.
     // A retained current tab is live task state; navigation history is not a replay gate.
-    let opened = execute(command.clone(), transport_session)?;
+    let opened = execute(command.clone(), transport_session);
+    if let Some((mut store, scope, fingerprint, request_id, owner_request_id)) = receipt {
+        let outcome = match &opened {
+            Ok(result) => Some(InitialOpenOutcome::Opened {
+                task_id: required_string_argument(result, "sessionId")?.into(),
+                profile_id: required_string_argument(result, "profileId")?.into(),
+                browser_id: required_string_argument(result, "browserId")?.into(),
+            }),
+            Err(error) => error.data.as_ref().and_then(|data| {
+                // A lost transport reply leaves the original claim pending.
+                data["requestId"]
+                    .as_str()
+                    .filter(|id| *id == owner_request_id)?;
+                if data["failure"]["effectState"] == "no_effect" {
+                    let code = data["failure"]["code"]
+                        .as_str()
+                        .filter(|code| {
+                            code.len() <= 128
+                                && code.bytes().all(|b| {
+                                    b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'
+                                })
+                        })
+                        .map(str::to_owned);
+                    return Some(InitialOpenOutcome::Refused { code });
+                }
+                data["message"]
+                    .as_str()
+                    .and_then(pending_initial_open_outcome)
+            }),
+        };
+        if let Some(outcome) = outcome {
+            store
+                .record_initial_open_outcome(&scope, request_id, &fingerprint, outcome)
+                .map_err(issue)?;
+        }
+        // Initial navigation has separate effects and uses a separate identity.
+        command["id"] = json!(uuid::Uuid::new_v4().to_string());
+    }
+    let opened = opened?;
     let session_id = opened["sessionId"]
         .as_str()
         .ok_or_else(|| issue("browser_task_identity_missing"))?;

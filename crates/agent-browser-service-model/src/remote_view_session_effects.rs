@@ -1073,24 +1073,43 @@ impl<
             .ok_or("remote_view_session_operation_baseline_missing")?
             .clone();
         self.reconcile_native_retirements(&expected, Some(&profile.id), None)?;
-        let Some(mut recovered) = self
+        let (recovered, attachment_error) = match self
             .effects
-            .reconcile_profile_browser(profile, browser, tabs, navigation)?
-        else {
-            if browser.is_none()
-                && self
+            .reconcile_profile_browser(profile, browser, tabs, navigation)
+        {
+            Ok(recovered) => (recovered, None),
+            Err(error) if browser.is_none() => (None, Some(error)),
+            Err(error) => return Err(error),
+        };
+        let Some(mut recovered) = recovered else {
+            if browser.is_none() {
+                let records = self
                     .store
                     .unpublished_launch_records()
-                    .map_err(|_| "remote_view_session_launch_readback_required")?
+                    .map_err(|_| "remote_view_session_launch_readback_required")?;
+                let mut claims = records
                     .iter()
-                    .any(|record| record.intent.profile_id == profile.id)
-            {
-                // A missing current attachment is not proof that an attempted
-                // initial launch had no effect. Explicit exact-absence settlement
-                // must precede a new launch through the original operation.
-                return Err("remote_view_session_launch_readback_required".into());
+                    .filter(|record| record.intent.profile_id == profile.id);
+                if let Some(record) = claims.next() {
+                    if claims.next().is_some() {
+                        return Err("remote_view_session_launch_readback_required: multiple claims for the profile; original launch identity is ambiguous".into());
+                    }
+                    // An attachment failure can still identify the original claim,
+                    // but only the ordinary absence path or manual readback may settle it.
+                    if attachment_error
+                        .as_deref()
+                        .is_none_or(|error| error == "manual_login_launch_readback_required")
+                        && self
+                            .store
+                            .reconcile_absent_initial_launch(record, &expected, profile)
+                            .map_err(|_| initial_launch_readback(&record.intent))?
+                    {
+                        return Ok(None);
+                    }
+                    return Err(initial_launch_readback(&record.intent));
+                }
             }
-            return Ok(None);
+            return attachment_error.map_or(Ok(None), Err);
         };
         // Physical reuse does not inherit an old presentation location. Join
         // only current native window evidence for this exact browser process.
@@ -1595,7 +1614,21 @@ impl<
                 self.pending = None;
                 reason
             }
-            _ => "remote_view_session_launch_readback_required".to_string(),
+            _ => self
+                .store
+                .unpublished_launch_records()
+                .ok()
+                .and_then(|records| {
+                    let mut matches = records
+                        .iter()
+                        .filter(|record| record.intent.profile_id == profile.id);
+                    let record = matches.next()?;
+                    matches
+                        .next()
+                        .is_none()
+                        .then(|| initial_launch_readback(&record.intent))
+                })
+                .unwrap_or_else(|| "remote_view_session_launch_readback_required".into()),
         })?;
         // Preserve the selected descriptive label for the ordinary manager's
         // full-value comparison. Coordinator custody already qualified UUID and
@@ -2288,4 +2321,11 @@ impl<
         self.pending = Some((intent, true));
         Ok(BrowserRecovery { launch, target_ids })
     }
+}
+
+fn initial_launch_readback(intent: &BrowserLaunchIntent) -> String {
+    format!(
+        "remote_view_session_launch_readback_required: profileId={}; launchId={}; inspect with browser_command action=launch_status params.launchId={}",
+        intent.profile_id, intent.intent_id, intent.intent_id
+    )
 }
