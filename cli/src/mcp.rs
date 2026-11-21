@@ -13031,7 +13031,7 @@ mod tests {
             "unused-transport",
         ).unwrap();
         assert!(
-            reply["error"]["message"]
+            reply["error"]["data"]["message"]
                 .as_str()
                 .unwrap()
                 .contains("launchId"),
