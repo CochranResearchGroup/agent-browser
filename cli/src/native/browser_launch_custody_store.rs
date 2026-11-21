@@ -3,6 +3,7 @@
 mod ordinary_handoff_recovery;
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::process_identity::{boot_epoch_status, current_boot_epoch, BootEpochStatus};
 use agent_browser_service_model::{
     prepare_remote_view_application_cleanup, BrowserLaunch, BrowserLaunchCustodyRecord,
     BrowserLaunchCustodyStore, BrowserLaunchIntent, BrowserReleaseCustodyStore,
@@ -817,6 +818,68 @@ fn initial_launch_worker_path(database: &std::path::Path, launch_id: &str) -> st
 
 // This marker is written through the held descriptor only after new custody commits.
 const INITIAL_WORKER_ADMITTED: &[u8] = b"agent-browser.initial-launch-worker-admitted.v1\n";
+const INITIAL_WORKER_BOOT_PREFIX: &str = "agent-browser.initial-launch-worker-admitted.v2\n";
+
+struct InitialLaunchBoot {
+    host: String,
+    epoch: String,
+}
+
+impl InitialLaunchBoot {
+    fn current() -> Option<Self> {
+        use sha2::{Digest, Sha256};
+        let machine = std::fs::read_to_string("/etc/machine-id").ok()?;
+        let machine = machine.trim();
+        if machine.len() != 32
+            || !machine.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || machine.bytes().all(|byte| byte == b'0')
+        {
+            return None;
+        }
+        let epoch = current_boot_epoch()?;
+        uuid::Uuid::parse_str(epoch.strip_prefix("linux:")?).ok()?;
+        Some(Self {
+            host: format!(
+                "{:x}",
+                Sha256::digest(machine.to_ascii_lowercase().as_bytes())
+            ),
+            epoch,
+        })
+    }
+
+    fn marker(&self) -> String {
+        format!(
+            "{INITIAL_WORKER_BOOT_PREFIX}{}\n{}\n",
+            self.host, self.epoch
+        )
+    }
+}
+
+fn initial_worker_boot_status(
+    worker: &std::fs::File,
+    current: Option<&InitialLaunchBoot>,
+) -> Option<BootEpochStatus> {
+    use std::io::Read;
+    let mut marker = Vec::new();
+    worker.take(256).read_to_end(&mut marker).ok()?;
+    if marker == INITIAL_WORKER_ADMITTED {
+        return Some(BootEpochStatus::Missing);
+    }
+    let marker = std::str::from_utf8(&marker).ok()?;
+    let (host, epoch) = marker
+        .strip_prefix(INITIAL_WORKER_BOOT_PREFIX)?
+        .strip_suffix('\n')?
+        .split_once('\n')?;
+    if host.len() != 64 || !host.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    uuid::Uuid::parse_str(epoch.strip_prefix("linux:")?).ok()?;
+    let current = current.filter(|current| current.host == host);
+    Some(boot_epoch_status(
+        Some(epoch),
+        current.map(|boot| boot.epoch.as_str()),
+    ))
+}
 
 fn open_initial_launch_worker(
     database: &std::path::Path,
@@ -842,16 +905,14 @@ fn hold_finished_initial_launch_worker(
     database: &std::path::Path,
     launch_id: &str,
 ) -> Option<std::fs::File> {
-    use std::io::Read;
-    let mut worker = open_initial_launch_worker(database, launch_id).ok()?;
+    let worker = open_initial_launch_worker(database, launch_id).ok()?;
     worker.try_lock_shared().ok()?;
-    let mut marker = [0; INITIAL_WORKER_ADMITTED.len()];
-    worker.read_exact(&mut marker).ok()?;
-    let mut extra = [0];
-    if marker == INITIAL_WORKER_ADMITTED && worker.read(&mut extra).ok()? == 0 {
-        Some(worker)
-    } else {
-        None
+    let boot = InitialLaunchBoot::current();
+    match initial_worker_boot_status(&worker, boot.as_ref())? {
+        BootEpochStatus::Current | BootEpochStatus::Prior | BootEpochStatus::Missing => {
+            Some(worker)
+        }
+        BootEpochStatus::Unavailable => None,
     }
 }
 
@@ -894,12 +955,25 @@ pub(super) fn reap_initial_launch_claims() -> Result<(), String> {
     Ok(())
 }
 
-fn initial_launch_worker_active(database: &std::path::Path, launch_id: &str) -> Option<bool> {
-    let worker = open_initial_launch_worker(database, launch_id).ok()?;
+fn inspect_initial_launch_worker(
+    database: &std::path::Path,
+    launch_id: &str,
+) -> (bool, BootEpochStatus) {
+    let worker = match open_initial_launch_worker(database, launch_id) {
+        Ok(worker) => worker,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return (false, BootEpochStatus::Missing);
+        }
+        Err(_) => return (false, BootEpochStatus::Unavailable),
+    };
     match worker.try_lock_shared() {
-        Ok(()) => Some(false),
-        Err(std::fs::TryLockError::WouldBlock) => Some(true),
-        Err(std::fs::TryLockError::Error(_)) => None,
+        Ok(()) => (
+            false,
+            initial_worker_boot_status(&worker, InitialLaunchBoot::current().as_ref())
+                .unwrap_or(BootEpochStatus::Unavailable),
+        ),
+        Err(std::fs::TryLockError::WouldBlock) => (true, BootEpochStatus::Unavailable),
+        Err(std::fs::TryLockError::Error(_)) => (false, BootEpochStatus::Unavailable),
     }
 }
 
@@ -914,11 +988,12 @@ pub(crate) fn initial_launch_status(launch_id: &str) -> Result<serde_json::Value
         .get(launch_id)
         .ok_or("browser_session_launch_record_missing")?;
     let profile_id = &record.intent.profile_id;
+    let (worker_active, worker_boot) = inspect_initial_launch_worker(&path, launch_id);
     let status = if record.published {
         "published"
     } else if records.reconciled_absent.contains(launch_id) {
         "settled_absent"
-    } else if initial_launch_worker_active(&path, launch_id) == Some(true) {
+    } else if worker_active {
         "in_flight"
     } else {
         "outcome_unresolved"
@@ -956,10 +1031,13 @@ pub(crate) fn initial_launch_status(launch_id: &str) -> Result<serde_json::Value
         "profileId": profile_id,
         "launchStatus": status,
         "profileStatus": profile_status,
+        "workerBootStatus": worker_boot,
         "occupantPid": pid,
         "evidenceError": evidence_error,
         "nextAction": if profile_status == "occupied" {
             "Keep the current browser open, or close that exact window and check this launch again."
+        } else if status == "outcome_unresolved" && worker_boot == BootEpochStatus::Prior {
+            "A distinct Open can recheck current profile vacancy and reconcile this prior-boot launch."
         } else {
             "Inspect the original launch with the browser owner. This observation does not settle the claim."
         }
@@ -1000,8 +1078,13 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         let worker = worker
             .downcast_mut::<std::fs::File>()
             .ok_or(LaunchCustodyStoreError::InvalidRecord)?;
+        let marker = InitialLaunchBoot::current().map(|boot| boot.marker());
         worker
-            .write_all(INITIAL_WORKER_ADMITTED)
+            .write_all(
+                marker
+                    .as_deref()
+                    .map_or(INITIAL_WORKER_ADMITTED, str::as_bytes),
+            )
             .and_then(|()| worker.sync_data())
             .map_err(|_| LaunchCustodyStoreError::Unavailable)
     }
@@ -1616,8 +1699,69 @@ mod tests {
             Err(LaunchCustodyStoreError::LaunchPending)
         );
         drop(worker);
-        // Use a fresh connection to model owner restart and preserve original history.
+        // A service restart retains the same boot. An exact prior boot still
+        // needs a fresh, vacant profile before it can release its claim.
+        let database = fixture.0.join("runtime.sqlite3");
+        let marker = initial_launch_worker_path(&database, &retained.intent_id);
+        let boot = InitialLaunchBoot::current().expect("Linux boot identity for custody test");
+        assert_eq!(
+            initial_worker_boot_status(&std::fs::File::open(&marker).unwrap(), Some(&boot)),
+            Some(BootEpochStatus::Current)
+        );
         let mut store = fixture.open(false);
+        let prior_epoch = format!("linux:{}", uuid::Uuid::new_v4());
+        let foreign = InitialLaunchBoot {
+            host: "f".repeat(64),
+            epoch: prior_epoch.clone(),
+        };
+        std::fs::write(&marker, foreign.marker()).unwrap();
+        assert_eq!(
+            store.reconcile_absent_initial_launch(&claim, &expected, &profile),
+            Ok(false)
+        );
+        let prior = InitialLaunchBoot {
+            host: boot.host.clone(),
+            epoch: prior_epoch,
+        };
+        std::fs::write(&marker, prior.marker()).unwrap();
+        assert_eq!(
+            initial_worker_boot_status(&std::fs::File::open(&marker).unwrap(), Some(&boot)),
+            Some(BootEpochStatus::Prior)
+        );
+        let mut occupied = expected.clone();
+        occupied.browsers.insert(
+            "post-boot-browser".into(),
+            ManagedBrowserInstance {
+                id: "post-boot-browser".into(),
+                profile_id: profile.id.clone(),
+                pid: 42,
+                cdp_endpoint: "ws://127.0.0.1:9222".into(),
+                desktop: None,
+                active_session_ids: Vec::new(),
+            },
+        );
+        save_document(
+            store.remote_view_mutation_connection(),
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+            &occupied,
+        )
+        .unwrap();
+        assert_eq!(
+            store.reconcile_absent_initial_launch(&claim, &occupied, &profile),
+            Err(LaunchCustodyStoreError::Conflict)
+        );
+        assert_eq!(
+            store.unpublished_launch_records().unwrap(),
+            vec![claim.clone()]
+        );
+        save_document(
+            store.remote_view_mutation_connection(),
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+            &expected,
+        )
+        .unwrap();
         assert_eq!(
             store.reconcile_absent_initial_launch(&claim, &expected, &profile),
             Ok(true)
