@@ -8,6 +8,8 @@ Inspect an unfinished initial launch with `browser_command` using `action: "laun
 
 For MCP `browser_open`, supply an optional `requestId` when you need durable launch readback. Reuse the same arguments and request ID to check the original launch without dispatching another Open. Use a fresh request ID for a distinct Open.
 
+For Native application-pool `remote_view_open`, use the top-level `openRequestId` for an initial Open. An identical retry returns launch readback. Existing-target selection uses its existing continuation.
+
 ### Task operation capacity
 
 Inspect or update capacity through the existing task-operation interface:
