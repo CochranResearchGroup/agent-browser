@@ -5641,7 +5641,13 @@ fn call_service_mcp_tool_inner(
         && !(name == "browser_command"
             && matches!(
                 arguments["action"].as_str(),
-                Some("profile_duplicate" | "browser_build" | "failure_log" | "failure_recovery")
+                Some(
+                    "profile_duplicate"
+                        | "browser_build"
+                        | "failure_log"
+                        | "failure_recovery"
+                        | "launch_status"
+                )
             ))
     {
         required_string_argument(arguments, "taskId")?;
@@ -13016,6 +13022,21 @@ mod tests {
             }
         }
         remove_fixture(&directory);
+    }
+
+    #[test]
+    fn initial_launch_status_reaches_validation_without_a_task() {
+        let reply = handle_jsonrpc_line(
+            r#"{"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"browser_command","arguments":{"action":"launch_status","params":{}}}}"#,
+            "unused-transport",
+        ).unwrap();
+        assert!(
+            reply["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("launchId"),
+            "{reply}"
+        );
     }
 
     #[test]
