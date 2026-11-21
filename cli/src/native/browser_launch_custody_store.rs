@@ -20,6 +20,44 @@ use super::browser_session_store::{
 
 const DOCUMENT: &str = "browser_launch_custody";
 const SCHEMA: &str = "agent-browser.browser-launch-custody.v1";
+const OPEN_REQUEST_SCHEMA: &str = "agent-browser.initial-open-request.v1";
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InitialOpenRequest {
+    fingerprint: String,
+    owner_request_id: String,
+    outcome: Option<InitialOpenOutcome>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "launchStatus",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub(crate) enum InitialOpenOutcome {
+    Opened {
+        task_id: String,
+        profile_id: String,
+        browser_id: String,
+    },
+    Refused {
+        code: Option<String>,
+    },
+    Pending {
+        launch_id: String,
+    },
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum InitialOpenAdmission {
+    New(String),
+    Existing {
+        owner_request_id: String,
+        outcome: Option<InitialOpenOutcome>,
+    },
+}
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -242,6 +280,79 @@ fn published_process_has_exited(
                 })
         }
         _ => false,
+    }
+}
+
+fn initial_open_request_kind(scope: &str, request_id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let identity = serde_json::to_vec(&(scope, request_id)).expect("string tuple serializes");
+    format!("initial_open_request:{:x}", Sha256::digest(identity))
+}
+
+impl BrowserSessionSqliteStore {
+    /// Publish the caller's exact Open intent before profile registration or dispatch.
+    pub(crate) fn admit_initial_open_request(
+        &mut self,
+        scope: &str,
+        request_id: &str,
+        fingerprint: &str,
+    ) -> Result<InitialOpenAdmission, String> {
+        let kind = initial_open_request_kind(scope, request_id);
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| "Cannot check original Open custody")?;
+        let existing: Option<InitialOpenRequest> =
+            load_optional_document(&transaction, &kind, OPEN_REQUEST_SCHEMA)?;
+        if let Some(existing) = existing {
+            if existing.fingerprint != fingerprint {
+                return Err("This requestId already identifies a different Open. Reuse the original arguments to inspect its outcome.".into());
+            }
+            return Ok(InitialOpenAdmission::Existing {
+                owner_request_id: existing.owner_request_id,
+                outcome: existing.outcome,
+            });
+        }
+        let owner_request_id = uuid::Uuid::new_v4().to_string();
+        let request = InitialOpenRequest {
+            fingerprint: fingerprint.into(),
+            owner_request_id: owner_request_id.clone(),
+            outcome: None,
+        };
+        save_document(&transaction, &kind, OPEN_REQUEST_SCHEMA, &request)?;
+        transaction
+            .commit()
+            .map_err(|_| "Cannot reserve original Open custody")?;
+        Ok(InitialOpenAdmission::New(owner_request_id))
+    }
+
+    /// Record only launch metadata, without page URLs, viewer links or credentials.
+    pub(crate) fn record_initial_open_outcome(
+        &mut self,
+        scope: &str,
+        request_id: &str,
+        fingerprint: &str,
+        outcome: InitialOpenOutcome,
+    ) -> Result<(), String> {
+        let kind = initial_open_request_kind(scope, request_id);
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| "Cannot check original Open custody")?;
+        let previous: Option<InitialOpenRequest> =
+            load_optional_document(&transaction, &kind, OPEN_REQUEST_SCHEMA)?;
+        let Some(mut request) = previous
+            .filter(|request| request.fingerprint == fingerprint && request.outcome.is_none())
+        else {
+            return Err(
+                "Original Open receipt changed. Inspect it with the same requestId.".into(),
+            );
+        };
+        request.outcome = Some(outcome);
+        save_document(&transaction, &kind, OPEN_REQUEST_SCHEMA, &request)?;
+        transaction
+            .commit()
+            .map_err(|_| "Cannot publish original Open outcome".into())
     }
 }
 
@@ -1511,6 +1622,49 @@ mod tests {
             store.admit_launch_intent(&fresh, &expected).unwrap(),
             LaunchCustodyAdmission::New
         );
+    }
+
+    #[test]
+    fn original_initial_open_replays_pending_or_recorded_outcome_after_restart() {
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let InitialOpenAdmission::New(owner_request_id) = store
+            .admit_initial_open_request("actor-and-profile", "open-1", "intent")
+            .unwrap()
+        else {
+            panic!("first Open must be admitted");
+        };
+        drop(store);
+        let mut store = fixture.open(false);
+        assert_eq!(
+            store.admit_initial_open_request("actor-and-profile", "open-1", "intent"),
+            Ok(InitialOpenAdmission::Existing {
+                owner_request_id: owner_request_id.clone(),
+                outcome: None,
+            })
+        );
+        assert!(store
+            .admit_initial_open_request("actor-and-profile", "open-1", "another-intent")
+            .is_err());
+        let outcome = InitialOpenOutcome::Opened {
+            browser_id: "browser-original".into(),
+            profile_id: "profile-original".into(),
+            task_id: "task-original".into(),
+        };
+        store
+            .record_initial_open_outcome("actor-and-profile", "open-1", "intent", outcome.clone())
+            .unwrap();
+        assert_eq!(
+            store.admit_initial_open_request("actor-and-profile", "open-1", "intent"),
+            Ok(InitialOpenAdmission::Existing {
+                owner_request_id,
+                outcome: Some(outcome),
+            })
+        );
+        assert!(matches!(
+            store.admit_initial_open_request("other-scope", "open-1", "intent"),
+            Ok(InitialOpenAdmission::New(_)),
+        ));
     }
 
     fn release_evidence(
