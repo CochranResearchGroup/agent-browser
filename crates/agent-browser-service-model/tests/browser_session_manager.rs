@@ -1703,6 +1703,45 @@ fn disposable_profiles_are_session_scoped_reused_and_reaped() {
 }
 
 #[test]
+fn qualified_disposable_expiry_releases_browser_before_profile_cleanup() {
+    let catalog = catalog_with_disposable_policy();
+    let mut state = BrowserSessionState::default();
+    state.retention_policy.disposable_inactivity_ms = 30;
+    let mut effects = FixtureEffects::default();
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 300_000,
+        remote_view_desktops: Vec::new(),
+    };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("alice", "default", 100))
+        .unwrap();
+
+    let mut sweep = |state: &mut BrowserSessionState, earliest, latest| {
+        let time =
+            agent_browser_service_model::ServiceTimeOrigin::new("fixture".into(), earliest, latest)
+                .unwrap();
+        state.observe_expiry_sources(&time);
+        let mut manager = BrowserSessionManager::new(state, &catalog, &mut effects, config.clone());
+        manager.use_qualified_expiry();
+        manager.reap(earliest).unwrap()
+    };
+
+    assert!(sweep(&mut state, 1_000, 1_002)
+        .closed_browser_ids
+        .is_empty());
+    assert!(sweep(&mut state, 1_031, 1_033)
+        .closed_browser_ids
+        .is_empty());
+    let closed = sweep(&mut state, 1_032, 1_034);
+    assert_eq!(closed.closed_browser_ids, [opened.browser_id]);
+    assert!(closed.deleted_disposable_profile_ids.is_empty());
+    assert_eq!(
+        sweep(&mut state, 1_035, 1_035).deleted_disposable_profile_ids,
+        [opened.profile_id]
+    );
+}
+
+#[test]
 fn disposable_count_quota_evicts_oldest_unprotected_session_before_admission() {
     let mut catalog = catalog_with_disposable_policy();
     catalog

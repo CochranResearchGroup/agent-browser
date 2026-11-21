@@ -1314,6 +1314,8 @@ Tab inactivity and unused retention have separate saves in Policies. Tab expiry
 uses the task's last activity; unused retention starts a new wait-for-human window
 when saved. Choose finite seconds or keep the unused task until used. A current
 wait appears as Awaiting use; Inspect preserves the original first-use timestamp.
+The owner observes inactivity through StableTime. Once observed, the window
+survives restart. Legacy records start a fresh window at their first observation.
 
 Delete link asks for confirmation and revokes only the selected link. Its browser
 and tabs stay open; Cancel has no effect. Unconfirmed deletion keeps the record
