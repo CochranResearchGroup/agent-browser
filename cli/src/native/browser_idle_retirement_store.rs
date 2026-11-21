@@ -1,6 +1,7 @@
 //! Idle retirement custody in the existing Browser Runtime SQLite owner.
 use super::browser_session_store::{
-    load_optional_document, save_document, BrowserSessionSqliteStore, SESSION_STATE_DOCUMENT,
+    load_optional_document, save_document, BrowserSessionSqliteStore,
+    BROWSER_RUNTIME_DATABASE_MAX_SCHEMA, SESSION_STATE_DOCUMENT,
 };
 use agent_browser_service_model::*;
 use rusqlite::{Connection, TransactionBehavior};
@@ -57,10 +58,14 @@ fn ledger(connection: &Connection) -> Result<Ledger> {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|_| Error::Unavailable)?;
-    if !ledger.records.is_empty() && !(2..=5).contains(&version) {
+    // These are document introduction floors. Other browser features can
+    // promote the shared database without changing either custody document.
+    if !ledger.records.is_empty() && !(2..=BROWSER_RUNTIME_DATABASE_MAX_SCHEMA).contains(&version) {
         return Err(Error::InvalidRecord);
     }
-    if !ledger.activities.is_empty() && !(3..=5).contains(&version) {
+    if !ledger.activities.is_empty()
+        && !(3..=BROWSER_RUNTIME_DATABASE_MAX_SCHEMA).contains(&version)
+    {
         return Err(Error::InvalidRecord);
     }
     for (id, activity) in &ledger.activities {
@@ -979,8 +984,28 @@ mod tests {
                 &intent.scopes[0].browser,
                 &state
             ),
-            Err(BrowserIdleRetirementStoreError::Conflict)
+            Err(BrowserIdleRetirementStoreError::ActivityAdmission(
+                BrowserActivityAdmissionConflict::RetirementActive,
+            ))
         );
+    }
+
+    #[test]
+    fn activity_readback_survives_finite_handoff_schema_promotion() {
+        let fixture = Fixture::new();
+        let mut owner = fixture.open(true);
+        let (state, intent, _) = setup(&mut owner);
+        let id = uuid::Uuid::new_v4().to_string();
+        owner
+            .admit_browser_activity(&id, &intent.scopes[0].browser, &state)
+            .unwrap();
+        let before = owner.browser_activity_records().unwrap();
+        assert_eq!(before.len(), 1);
+        owner
+            .remote_view_mutation_connection()
+            .pragma_update(None, "user_version", 8)
+            .unwrap();
+        assert_eq!(owner.browser_activity_records().unwrap(), before);
     }
 
     #[test]
