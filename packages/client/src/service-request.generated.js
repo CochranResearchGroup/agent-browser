@@ -143,6 +143,7 @@ export const SERVICE_REQUEST_STRING_FIELDS = [
   "viewStreamProvider",
   "controlInputProvider",
   "displayIsolation",
+  "openRequestId",
   "serviceName",
   "agentName",
   "taskName",

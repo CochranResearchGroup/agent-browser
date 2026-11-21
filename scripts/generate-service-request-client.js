@@ -951,6 +951,13 @@ export interface ServiceViewTakeoverData {
 
 export interface ServiceRemoteViewRouteMutationData {
   status: string;
+  launchStatus?: "pending" | "opened" | "refused";
+  requestId?: string;
+  ownerRequestId?: string;
+  launchId?: string;
+  taskId?: string;
+  profileId?: string;
+  replayed?: boolean;
   handoffId?: string;
   handoffUrl?: string;
   createdAtMs?: number | null;

@@ -59,6 +59,41 @@ pub(crate) enum InitialOpenAdmission {
     },
 }
 
+pub(crate) fn initial_open_readback(
+    request_id: &str,
+    owner_request_id: &str,
+    outcome: Option<InitialOpenOutcome>,
+) -> serde_json::Value {
+    use serde_json::json;
+    let mut data = outcome.map_or_else(
+        || json!({"launchStatus":"pending", "nextAction":"Check the original Open again with the same request ID. A pending receipt does not authorize another launch."}),
+        |outcome| serde_json::to_value(outcome).expect("launch outcome serializes"),
+    );
+    if let Some(launch_id) = data["launchId"].as_str() {
+        data["nextAction"] = json!({
+            "tool":"browser_command", "action":"launch_status",
+            "params":{"launchId":launch_id}
+        });
+    }
+    data["requestId"] = json!(request_id);
+    data["ownerRequestId"] = json!(owner_request_id);
+    data["replayed"] = json!(true);
+    data
+}
+
+pub(crate) fn pending_initial_open_outcome(message: &str) -> Option<InitialOpenOutcome> {
+    if !message.starts_with("remote_view_session_launch_readback_required:") {
+        return None;
+    }
+    message
+        .split("; ")
+        .find_map(|field| field.strip_prefix("launchId="))
+        .filter(|id| uuid::Uuid::parse_str(id).is_ok())
+        .map(|id| InitialOpenOutcome::Pending {
+            launch_id: id.into(),
+        })
+}
+
 #[derive(Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Ledger {
@@ -296,6 +331,7 @@ impl BrowserSessionSqliteStore {
         scope: &str,
         request_id: &str,
         fingerprint: &str,
+        owner_request_id: Option<&str>,
     ) -> Result<InitialOpenAdmission, String> {
         let kind = initial_open_request_kind(scope, request_id);
         let transaction = self
@@ -313,7 +349,8 @@ impl BrowserSessionSqliteStore {
                 outcome: existing.outcome,
             });
         }
-        let owner_request_id = uuid::Uuid::new_v4().to_string();
+        let owner_request_id =
+            owner_request_id.map_or_else(|| uuid::Uuid::new_v4().to_string(), str::to_owned);
         let request = InitialOpenRequest {
             fingerprint: fingerprint.into(),
             owner_request_id: owner_request_id.clone(),
@@ -1629,7 +1666,7 @@ mod tests {
         let fixture = Fixture::new();
         let mut store = fixture.open(true);
         let InitialOpenAdmission::New(owner_request_id) = store
-            .admit_initial_open_request("actor-and-profile", "open-1", "intent")
+            .admit_initial_open_request("actor-and-profile", "open-1", "intent", None)
             .unwrap()
         else {
             panic!("first Open must be admitted");
@@ -1637,14 +1674,14 @@ mod tests {
         drop(store);
         let mut store = fixture.open(false);
         assert_eq!(
-            store.admit_initial_open_request("actor-and-profile", "open-1", "intent"),
+            store.admit_initial_open_request("actor-and-profile", "open-1", "intent", None),
             Ok(InitialOpenAdmission::Existing {
                 owner_request_id: owner_request_id.clone(),
                 outcome: None,
             })
         );
         assert!(store
-            .admit_initial_open_request("actor-and-profile", "open-1", "another-intent")
+            .admit_initial_open_request("actor-and-profile", "open-1", "another-intent", None)
             .is_err());
         let outcome = InitialOpenOutcome::Opened {
             browser_id: "browser-original".into(),
@@ -1655,14 +1692,14 @@ mod tests {
             .record_initial_open_outcome("actor-and-profile", "open-1", "intent", outcome.clone())
             .unwrap();
         assert_eq!(
-            store.admit_initial_open_request("actor-and-profile", "open-1", "intent"),
+            store.admit_initial_open_request("actor-and-profile", "open-1", "intent", None),
             Ok(InitialOpenAdmission::Existing {
                 owner_request_id,
                 outcome: Some(outcome),
             })
         );
         assert!(matches!(
-            store.admit_initial_open_request("other-scope", "open-1", "intent"),
+            store.admit_initial_open_request("other-scope", "open-1", "intent", None),
             Ok(InitialOpenAdmission::New(_)),
         ));
     }

@@ -7,7 +7,9 @@ use sha2::{Digest, Sha256};
 
 use super::{optional_string_argument, required_string_argument, JsonRpcError};
 use crate::connection::{ensure_daemon_with_latency, send_command, DaemonOptions};
-use crate::native::browser_launch_custody_store::{InitialOpenAdmission, InitialOpenOutcome};
+use crate::native::browser_launch_custody_store::{
+    initial_open_readback, pending_initial_open_outcome, InitialOpenAdmission, InitialOpenOutcome,
+};
 use crate::native::browser_session_store::BrowserSessionSqliteStore;
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::load_default_service_state_snapshot;
@@ -581,7 +583,7 @@ pub(super) fn open(
         canonical.sort_all_objects();
         let fingerprint = format!("{:x}", Sha256::digest(canonical.to_string().as_bytes()));
         match store
-            .admit_initial_open_request(&scope, request_id, &fingerprint)
+            .admit_initial_open_request(&scope, request_id, &fingerprint, None)
             .map_err(issue)?
         {
             InitialOpenAdmission::New(owner_request_id) => {
@@ -591,24 +593,11 @@ pub(super) fn open(
                 owner_request_id,
                 outcome,
             } => {
-                let mut value = outcome.map_or_else(
-                    || json!({"launchStatus":"pending", "nextAction":"Check the original Open again with the same requestId. A pending receipt does not authorize another launch."}),
-                    |outcome| serde_json::to_value(outcome).expect("launch outcome serializes"),
-                );
-                if let Some(launch_id) = value["launchId"].as_str() {
-                    value["nextAction"] = json!({
-                        "tool":"browser_command", "action":"launch_status",
-                        "params":{"launchId":launch_id}
-                    });
-                }
-                value["requestId"] = json!(request_id);
-                value["ownerRequestId"] = json!(owner_request_id);
-                value["replayed"] = json!(true);
                 return Ok(super::tool_response_from_payload(
                     "browser_open",
                     transport_session,
                     json!({}),
-                    value,
+                    initial_open_readback(request_id, &owner_request_id, outcome),
                     false,
                 ));
             }
@@ -691,18 +680,6 @@ pub(super) fn open(
                 data["requestId"]
                     .as_str()
                     .filter(|id| *id == owner_request_id)?;
-                let launch_id = data["message"]
-                    .as_str()
-                    .filter(|message| {
-                        message.starts_with("remote_view_session_launch_readback_required:")
-                    })
-                    .and_then(|message| {
-                        message
-                            .split("; ")
-                            .find_map(|field| field.strip_prefix("launchId="))
-                    })
-                    .filter(|id| uuid::Uuid::parse_str(id).is_ok())
-                    .map(str::to_owned);
                 if data["failure"]["effectState"] == "no_effect" {
                     let code = data["failure"]["code"]
                         .as_str()
@@ -715,7 +692,9 @@ pub(super) fn open(
                         .map(str::to_owned);
                     return Some(InitialOpenOutcome::Refused { code });
                 }
-                launch_id.map(|launch_id| InitialOpenOutcome::Pending { launch_id })
+                data["message"]
+                    .as_str()
+                    .and_then(pending_initial_open_outcome)
             }),
         };
         if let Some(outcome) = outcome {

@@ -3432,6 +3432,26 @@ async function main() {
     /service tab handle is stale: target_missing/,
   );
 
+  const originalLaunch = createFetchRecorder({
+    success: true,
+    data: {
+      status: 'launch_readback',
+      launchStatus: 'pending',
+      requestId: 'open-accounting-1',
+      ownerRequestId: 'original-job',
+      replayed: true,
+    },
+  });
+  const originalLaunchResponse = await requestServiceRemoteViewOpen({
+    baseUrl: 'http://127.0.0.1:4849',
+    fetch: originalLaunch.fetch,
+    profileId: 'accounting',
+    openRequestId: 'open-accounting-1',
+  });
+  assert.equal(originalLaunch.calls[0].body.openRequestId, 'open-accounting-1');
+  assert.equal(originalLaunchResponse.data.ownerRequestId, 'original-job');
+  assert.equal(isServiceRemoteViewOpenOperatorVisibleReady(originalLaunchResponse), false);
+
   const rawOnlyRemoteViewOpenWorkflow = createFetchRecorder({
     success: true,
     data: {

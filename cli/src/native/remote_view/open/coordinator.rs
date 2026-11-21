@@ -378,6 +378,11 @@ pub(crate) fn rolled_back_outcome(
 /// Project the same managed-owner result for direct existing-tab selection and
 /// queued acquisition. An owner refusal never becomes an embeddable success.
 pub(crate) fn managed_remote_view_open_result(response: Value) -> Result<Value, String> {
+    if let Some(readback) = response.get("initialOpenReadback") {
+        let mut result = readback.clone();
+        result["status"] = json!("launch_readback");
+        return Ok(result);
+    }
     if response.get("success").and_then(Value::as_bool) != Some(true) {
         return Err(response
             .get("error")
@@ -442,6 +447,9 @@ pub(crate) async fn handle_remote_view_open(
         .await?
         .ok_or("browser_session_managed_open_not_selected")?;
         return managed_remote_view_open_result(response);
+    }
+    if cmd.get("openRequestId").is_some() {
+        return Err("Open replay is available for the Native application pool. Inspect the requested route before continuing.".into());
     }
     let invocation =
         RouteBoundOpenInvocation::direct(RouteBoundDirectOpenRequest::from_compatibility_command(
