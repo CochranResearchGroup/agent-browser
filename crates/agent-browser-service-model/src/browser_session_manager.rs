@@ -4107,6 +4107,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         let mut projected_count = target_count;
         let mut projected_bytes = target_bytes;
         let mut selected = Vec::new();
+        let mut observation_error = None;
         for (_, _, profile_id, bytes, protected) in candidates {
             if projected_count <= policy.maximum_retained_profiles
                 && projected_bytes <= policy.maximum_total_bytes
@@ -4127,12 +4128,21 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .collect::<Vec<_>>();
             let mut permitted = true;
             for browser in browsers {
-                if self.state.shared_browser_ids.contains(&browser.id)
-                    || !self.effects.permits_idle_browser_close(&browser)?
-                {
+                if self.state.shared_browser_ids.contains(&browser.id) {
                     permitted = false;
                     break;
                 }
+                match self.effects.permits_idle_browser_close(&browser) {
+                    Ok(true) => continue,
+                    Ok(false) => {}
+                    Err(error) => {
+                        // Missing custody disqualifies this candidate. Preserve the
+                        // cause if other eligible profiles cannot satisfy the quota.
+                        observation_error.get_or_insert(error);
+                    }
+                }
+                permitted = false;
+                break;
             }
             if !permitted {
                 continue;
@@ -4142,10 +4152,12 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             selected.push(profile_id);
         }
         if projected_count > policy.maximum_retained_profiles {
-            return Err("browser_disposable_profile_count_quota_protected".to_string());
+            return Err(observation_error
+                .unwrap_or_else(|| "browser_disposable_profile_count_quota_protected".into()));
         }
         if projected_bytes > policy.maximum_total_bytes {
-            return Err("browser_disposable_profile_bytes_quota_protected".to_string());
+            return Err(observation_error
+                .unwrap_or_else(|| "browser_disposable_profile_bytes_quota_protected".into()));
         }
 
         // Qualify the complete pressure effect group before retiring any candidate.

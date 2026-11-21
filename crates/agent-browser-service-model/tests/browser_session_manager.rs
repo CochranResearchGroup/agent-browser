@@ -2699,6 +2699,50 @@ fn scheduled_profile_cleanup_retains_activity_exclusion_through_deletion() {
 }
 
 #[test]
+fn disposable_open_uses_eligible_capacity_when_older_browser_custody_is_unavailable() {
+    let mut catalog = catalog_with_disposable_policy();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 2;
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..Default::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    );
+    let older = manager
+        .open(OpenBrowserSession::disposable("older", "default", 1_000))
+        .unwrap();
+    let orphan = manager
+        .open(OpenBrowserSession::disposable("finished", "default", 2_000))
+        .unwrap();
+    manager
+        .close_session(&orphan.session_id, SessionEndReason::ExplicitClose, 2_001)
+        .unwrap();
+    effects.closes.clear();
+    effects.idle_retirement_error_browser = Some(older.browser_id.clone());
+
+    BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .open(OpenBrowserSession::disposable("new", "default", 3_000))
+    .unwrap();
+    assert!(state.sessions.contains_key(&older.session_id));
+    assert!(effects.closes.is_empty());
+    assert_eq!(effects.disposable_deletions, [orphan.profile_id]);
+}
+
+#[test]
 fn quota_preserves_orphan_profile_when_cleanup_authority_denies() {
     let mut catalog = catalog_with_disposable_policy();
     catalog
