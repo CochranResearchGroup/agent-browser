@@ -1073,14 +1073,12 @@ impl<
             .ok_or("remote_view_session_operation_baseline_missing")?
             .clone();
         self.reconcile_native_retirements(&expected, Some(&profile.id), None)?;
-        let (recovered, manual_readback) = match self
+        let (recovered, attachment_error) = match self
             .effects
             .reconcile_profile_browser(profile, browser, tabs, navigation)
         {
             Ok(recovered) => (recovered, None),
-            Err(error) if browser.is_none() && error == "manual_login_launch_readback_required" => {
-                (None, Some(error))
-            }
+            Err(error) if browser.is_none() => (None, Some(error)),
             Err(error) => return Err(error),
         };
         let Some(mut recovered) = recovered else {
@@ -1096,17 +1094,22 @@ impl<
                     if claims.next().is_some() {
                         return Err("remote_view_session_launch_readback_required: multiple claims for the profile; original launch identity is ambiguous".into());
                     }
-                    if self
-                        .store
-                        .reconcile_absent_initial_launch(record, &expected, profile)
-                        .map_err(|_| initial_launch_readback(&record.intent))?
+                    // An attachment failure can still identify the original claim,
+                    // but only the ordinary absence path or manual readback may settle it.
+                    if attachment_error
+                        .as_deref()
+                        .is_none_or(|error| error == "manual_login_launch_readback_required")
+                        && self
+                            .store
+                            .reconcile_absent_initial_launch(record, &expected, profile)
+                            .map_err(|_| initial_launch_readback(&record.intent))?
                     {
                         return Ok(None);
                     }
                     return Err(initial_launch_readback(&record.intent));
                 }
             }
-            return manual_readback.map_or(Ok(None), Err);
+            return attachment_error.map_or(Ok(None), Err);
         };
         // Physical reuse does not inherit an old presentation location. Join
         // only current native window evidence for this exact browser process.

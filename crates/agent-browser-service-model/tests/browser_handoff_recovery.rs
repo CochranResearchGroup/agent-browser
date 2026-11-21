@@ -5,6 +5,7 @@ use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 #[derive(Default)]
 struct Evidence {
     initial_profile_vacant: bool,
+    initial_attachment_error: bool,
     pending: Option<BrowserLaunchCustodyRecord>,
     effects: Vec<String>,
     prior: Option<RemoteViewAssignmentRecord>,
@@ -371,6 +372,19 @@ impl RemoteViewBrowserProcessEffects for Runtime {
     }
 }
 impl BrowserSessionEffects for Runtime {
+    fn reconcile_profile_browser(
+        &mut self,
+        _profile: &BrowserProfileCatalogEntry,
+        browser: Option<&ManagedBrowserInstance>,
+        _tabs: &[ManagedBrowserTab],
+        _navigation: &[BrowserNavigationRecord],
+    ) -> Result<Option<BrowserRecovery>, String> {
+        if browser.is_none() && self.evidence.borrow().initial_attachment_error {
+            return Err("browser_session_profile_debug_endpoint_unavailable".into());
+        }
+        Ok(None)
+    }
+
     fn observe_idle_retirement_effect(
         &mut self,
         scope: &BrowserIdleRetirementScope,
@@ -950,6 +964,20 @@ fn unresolved_initial_launch_readback_never_authorizes_implicit_second_launch() 
         evidence.borrow().pending.as_ref().unwrap().intent.intent_id,
         "66666666-6666-4666-8666-666666666666"
     );
+    {
+        let mut state = evidence.borrow_mut();
+        state.initial_profile_vacant = true;
+        state.initial_attachment_error = true;
+    }
+    let error = effects
+        .reconcile_profile_browser(&profile, None, &[], &[])
+        .unwrap_err();
+    assert!(
+        error.contains("66666666-6666-4666-8666-666666666666"),
+        "{error}"
+    );
+    assert!(evidence.borrow().pending.is_some());
+    evidence.borrow_mut().initial_attachment_error = false;
     evidence.borrow_mut().initial_profile_vacant = true;
     assert!(effects
         .reconcile_profile_browser(&profile, None, &[], &[])
