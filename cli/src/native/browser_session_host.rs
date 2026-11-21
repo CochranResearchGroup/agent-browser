@@ -468,6 +468,8 @@ pub(crate) fn reap_shared_browser_sessions(
         .maintenance
         .lock()
         .map_err(|_| "browser_session_host_lock_poisoned")?;
+    // Initial launch recovery has no TTL requirement and must run for a vacant owner.
+    let _ = super::browser_launch_custody_store::reap_initial_launch_claims();
     reap_browser_session_host(&mut host, || {
         let state = BrowserSessionSqliteStore::default_sqlite()?.load_session_state()?;
         if state.browsers.is_empty() && state.disposable_profiles.is_empty() {

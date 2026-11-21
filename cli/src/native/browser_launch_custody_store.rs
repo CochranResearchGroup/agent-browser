@@ -254,6 +254,16 @@ impl BrowserSessionSqliteStore {
         expected: &BrowserSessionState,
         expected_browser: Option<&agent_browser_service_model::ManagedBrowserInstance>,
     ) -> Result<(), LaunchCustodyStoreError> {
+        self.settle_profile_launch_absence(profile, expected, expected_browser, None)
+    }
+
+    fn settle_profile_launch_absence(
+        &mut self,
+        profile: &agent_browser_service_model::BrowserProfileCatalogEntry,
+        expected: &BrowserSessionState,
+        expected_browser: Option<&agent_browser_service_model::ManagedBrowserInstance>,
+        exact_claim: Option<&BrowserLaunchCustodyRecord>,
+    ) -> Result<(), LaunchCustodyStoreError> {
         use LaunchCustodyStoreError as Error;
         let transaction = self
             .remote_view_mutation_connection()
@@ -296,8 +306,6 @@ impl BrowserSessionSqliteStore {
         {
             return Err(Error::Conflict);
         }
-        super::browser_session_runtime::prove_profile_launch_absence(profile)
-            .map_err(|_| Error::Unavailable)?;
         let mut records = ledger(&transaction)?;
         let claims = records
             .records
@@ -309,9 +317,35 @@ impl BrowserSessionSqliteStore {
             })
             .cloned()
             .collect::<Vec<_>>();
-        if claims.len() > 1 {
+        if claims.len() > 1
+            || exact_claim.is_some_and(|claim| claims.as_slice() != std::slice::from_ref(claim))
+        {
             return Err(Error::Conflict);
         }
+        // Explicit legacy recovery must also respect a currently held worker
+        // lock when the claim was admitted through the guarded path.
+        let _worker_guard = if exact_claim.is_none() {
+            if let [claim] = claims.as_slice() {
+                let path = transaction
+                    .path()
+                    .map(std::path::Path::new)
+                    .ok_or(Error::Unavailable)?;
+                match open_initial_launch_worker(path, &claim.intent.intent_id) {
+                    Ok(worker) => {
+                        worker.try_lock_shared().map_err(|_| Error::LaunchPending)?;
+                        Some(worker)
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(_) => return Err(Error::Unavailable),
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        super::browser_session_runtime::prove_profile_launch_absence(profile)
+            .map_err(|_| Error::Unavailable)?;
         for record in claims {
             if expected_browser.is_some_and(|browser| {
                 record
@@ -633,8 +667,87 @@ fn initial_launch_worker_path(database: &std::path::Path, launch_id: &str) -> st
     ))
 }
 
+// This marker is written through the held descriptor only after new custody commits.
+const INITIAL_WORKER_ADMITTED: &[u8] = b"agent-browser.initial-launch-worker-admitted.v1\n";
+
+fn open_initial_launch_worker(
+    database: &std::path::Path,
+    launch_id: &str,
+) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let worker = options.open(initial_launch_worker_path(database, launch_id))?;
+    if !worker.metadata()?.is_file() {
+        return Err(std::io::Error::other(
+            "launch worker guard is not a regular file",
+        ));
+    }
+    Ok(worker)
+}
+
+fn hold_finished_initial_launch_worker(
+    database: &std::path::Path,
+    launch_id: &str,
+) -> Option<std::fs::File> {
+    use std::io::Read;
+    let mut worker = open_initial_launch_worker(database, launch_id).ok()?;
+    worker.try_lock_shared().ok()?;
+    let mut marker = [0; INITIAL_WORKER_ADMITTED.len()];
+    worker.read_exact(&mut marker).ok()?;
+    let mut extra = [0];
+    if marker == INITIAL_WORKER_ADMITTED && worker.read(&mut extra).ok()? == 0 {
+        Some(worker)
+    } else {
+        None
+    }
+}
+
+/// Recheck qualified initial claims without admitting or starting a browser.
+pub(super) fn reap_initial_launch_claims() -> Result<(), String> {
+    let path = BrowserSessionSqliteStore::default_sqlite_path()?;
+    if !path.is_file() {
+        return Ok(());
+    }
+    let Some(directory) = path.parent() else {
+        return Ok(());
+    };
+    let mut store = BrowserSessionSqliteStore::open(directory)?;
+    let records = store
+        .unpublished_launch_records()
+        .map_err(|_| "remote_view_session_launch_readback_required")?
+        .into_iter()
+        .filter(|claim| {
+            hold_finished_initial_launch_worker(&path, &claim.intent.intent_id).is_some()
+        })
+        .collect::<Vec<_>>();
+    if records.is_empty() {
+        return Ok(());
+    }
+    let state = store.load_session_state()?;
+    let catalog = store.load_profile_catalog()?.catalog;
+    for record in records {
+        let id = &record.intent.profile_id;
+        let profile = catalog.profiles.get(id).or_else(|| {
+            state
+                .disposable_profiles
+                .get(id)
+                .map(|allocation| &allocation.profile)
+        });
+        if let Some(profile) = profile {
+            // Occupied, disputed and unverified claims remain available for exact Open readback.
+            let _ = store.reconcile_absent_initial_launch(&record, &state, profile);
+        }
+    }
+    Ok(())
+}
+
 fn initial_launch_worker_active(database: &std::path::Path, launch_id: &str) -> Option<bool> {
-    let worker = std::fs::File::open(initial_launch_worker_path(database, launch_id)).ok()?;
+    let worker = open_initial_launch_worker(database, launch_id).ok()?;
     match worker.try_lock_shared() {
         Ok(()) => Some(false),
         Err(std::fs::TryLockError::WouldBlock) => Some(true),
@@ -729,6 +842,39 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             .try_lock()
             .map_err(|_| LaunchCustodyStoreError::Conflict)?;
         Ok(Box::new(worker))
+    }
+
+    fn record_initial_launch_worker(
+        &mut self,
+        worker: &mut (dyn std::any::Any + Send),
+    ) -> Result<(), LaunchCustodyStoreError> {
+        use std::io::Write;
+        let worker = worker
+            .downcast_mut::<std::fs::File>()
+            .ok_or(LaunchCustodyStoreError::InvalidRecord)?;
+        worker
+            .write_all(INITIAL_WORKER_ADMITTED)
+            .and_then(|()| worker.sync_data())
+            .map_err(|_| LaunchCustodyStoreError::Unavailable)
+    }
+
+    fn reconcile_absent_initial_launch(
+        &mut self,
+        claim: &BrowserLaunchCustodyRecord,
+        expected: &BrowserSessionState,
+        profile: &agent_browser_service_model::BrowserProfileCatalogEntry,
+    ) -> Result<bool, LaunchCustodyStoreError> {
+        let database = self
+            .remote_view_mutation_connection()
+            .path()
+            .map(std::path::Path::new)
+            .ok_or(LaunchCustodyStoreError::Unavailable)?;
+        let Some(_guard) = hold_finished_initial_launch_worker(database, &claim.intent.intent_id)
+        else {
+            return Ok(false);
+        };
+        self.settle_profile_launch_absence(profile, expected, None, Some(claim))?;
+        Ok(true)
     }
 
     fn retain_owner_released_assignment(
@@ -1307,7 +1453,31 @@ mod tests {
         .unwrap();
         let expected = current(store.remote_view_mutation_connection()).unwrap();
         let retained = intent();
+        let mut worker = store.hold_initial_launch_worker(&retained).unwrap();
         store.admit_launch_intent(&retained, &expected).unwrap();
+        let claim = store.unpublished_launch_records().unwrap().pop().unwrap();
+        store.record_initial_launch_worker(worker.as_mut()).unwrap();
+        assert_eq!(
+            fixture
+                .open(false)
+                .reconcile_absent_initial_launch(&claim, &expected, &profile),
+            Ok(false)
+        );
+        assert_eq!(
+            store.settle_unpublished_profile_launch_absence(&profile, &expected, None),
+            Err(LaunchCustodyStoreError::LaunchPending)
+        );
+        drop(worker);
+        // Use a fresh connection to model owner restart and preserve original history.
+        let mut store = fixture.open(false);
+        assert_eq!(
+            store.reconcile_absent_initial_launch(&claim, &expected, &profile),
+            Ok(true)
+        );
+        assert!(matches!(
+            store.admit_launch_intent(&retained, &expected),
+            Ok(LaunchCustodyAdmission::Existing(original)) if original.as_ref() == &claim
+        ));
         let mut stale = expected.clone();
         stale
             .profile_operation_ids

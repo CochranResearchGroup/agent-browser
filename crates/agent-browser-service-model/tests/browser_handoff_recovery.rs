@@ -4,6 +4,7 @@ use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[derive(Default)]
 struct Evidence {
+    initial_profile_vacant: bool,
     pending: Option<BrowserLaunchCustodyRecord>,
     effects: Vec<String>,
     prior: Option<RemoteViewAssignmentRecord>,
@@ -104,6 +105,22 @@ impl BrowserLaunchCustodyStore for Store {
             executable_path: Some("/synthetic/chrome".into()),
             browser_family: None,
         }))
+    }
+
+    fn reconcile_absent_initial_launch(
+        &mut self,
+        claim: &BrowserLaunchCustodyRecord,
+        _expected: &BrowserSessionState,
+        profile: &BrowserProfileCatalogEntry,
+    ) -> Result<bool, LaunchCustodyStoreError> {
+        let mut evidence = self.0.borrow_mut();
+        assert_eq!(evidence.pending.as_ref(), Some(claim));
+        assert_eq!(claim.intent.profile_id, profile.id);
+        if !evidence.initial_profile_vacant {
+            return Ok(false);
+        }
+        evidence.pending = None;
+        Ok(true)
     }
 
     fn unpublished_launch_records(
@@ -933,6 +950,13 @@ fn unresolved_initial_launch_readback_never_authorizes_implicit_second_launch() 
         evidence.borrow().pending.as_ref().unwrap().intent.intent_id,
         "66666666-6666-4666-8666-666666666666"
     );
+    evidence.borrow_mut().initial_profile_vacant = true;
+    assert!(effects
+        .reconcile_profile_browser(&profile, None, &[], &[])
+        .unwrap()
+        .is_none());
+    assert!(evidence.borrow().pending.is_none());
+    assert!(evidence.borrow().effects.is_empty());
     let peer = BrowserProfileCatalogEntry {
         id: "unrelated-profile".into(),
         ..profile

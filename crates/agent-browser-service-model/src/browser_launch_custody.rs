@@ -196,6 +196,24 @@ pub trait BrowserLaunchCustodyStore {
         Ok(Box::new(()))
     }
 
+    /// Record that this exact, held worker guard admitted a new initial launch.
+    fn record_initial_launch_worker(
+        &mut self,
+        _worker: &mut (dyn std::any::Any + Send),
+    ) -> Result<(), LaunchCustodyStoreError> {
+        Ok(())
+    }
+
+    /// Settle only the selected initial claim after guarded worker and profile vacancy.
+    fn reconcile_absent_initial_launch(
+        &mut self,
+        _claim: &BrowserLaunchCustodyRecord,
+        _expected: &BrowserSessionState,
+        _profile: &crate::BrowserProfileCatalogEntry,
+    ) -> Result<bool, LaunchCustodyStoreError> {
+        Ok(false)
+    }
+
     /// Only durable joined release completion permits recovery on a new
     /// assignment. Missing provider inventory is insufficient evidence.
     fn assignment_release_confirmed(
