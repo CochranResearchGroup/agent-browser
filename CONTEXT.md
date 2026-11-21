@@ -403,6 +403,8 @@ attempts and conclusive settlements. Duplicate attempts require original
 readback. Session publication and custody commit together before native fence
 completion. The first claim atomically promotes the private database to schema 2
 so a schema-1-only reader cannot ignore this obligation.
+Later supported database promotions preserve existing retirement and activity
+records. Each custody feature keeps its own minimum schema version.
 Pending scopes fence conflicting SQLite publications and launch/recovery
 admission in the same writer transaction; unrelated profiles remain usable.
 Physical attempt admission reads the current durable record atomically; a
