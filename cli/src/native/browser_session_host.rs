@@ -3481,10 +3481,7 @@ where
         let session_id = match matching_ids.as_slice() {
             [] if automatic && exact_task_id.is_none() => {
                 if self.state.managed_tab_requests.values().any(|request| {
-                    request.response.is_none()
-                        && (request.session_name == session_name
-                            || profile_id
-                                .is_some_and(|id| request.profile_id.as_deref() == Some(id)))
+                    request.response.is_none() && request.session_name == session_name
                 }) {
                     return Err("browser_session_tab_creation_readback_required".into());
                 }
@@ -3891,13 +3888,12 @@ where
                 return Err("browser_session_browser_selector_conflict".into());
             }
         }
-        if self.state.managed_tab_requests.values().any(|request| {
-            request.response.is_none()
-                && (request.session_name == session_name
-                    || profile
-                        .as_ref()
-                        .is_some_and(|id| request.profile_id.as_ref() == Some(id)))
-        }) {
+        if self
+            .state
+            .managed_tab_requests
+            .values()
+            .any(|request| request.response.is_none() && request.session_name == session_name)
+        {
             return Err("browser_session_tab_creation_readback_required".into());
         }
         self.state.managed_tab_requests.insert(

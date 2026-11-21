@@ -3423,12 +3423,21 @@ fn ordinary_tab_creation_replays_exact_result_and_retains_unknown_outcome_across
             .unwrap_err(),
         "browser_session_tab_creation_readback_required"
     );
-    assert_eq!(
-        restarted.execute_managed_command("Bob", &next).unwrap_err(),
-        "browser_session_tab_creation_readback_required"
-    );
     assert_eq!(fixture.store(false).load_session_state().unwrap(), pending);
     assert_eq!(calls.get(), 1);
+
+    let independent = serde_json::json!({
+        "id": "independent-tab", "action": "tab_new", "runtimeProfile": "profile-a",
+        "sessionName": "Bob", "activityAtMs": 103
+    });
+    let opened = restarted
+        .execute_managed_command("Bob", &independent)
+        .unwrap()
+        .unwrap();
+    assert_eq!(opened["success"], true);
+    assert!(restarted.state().managed_tab_requests["tab-unknown"]
+        .response
+        .is_none());
 }
 
 #[test]
