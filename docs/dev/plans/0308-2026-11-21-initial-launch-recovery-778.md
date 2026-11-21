@@ -21,3 +21,6 @@ Use existing model and SQLite recovery tests, then one candidate for installed a
 - #779 GREEN: `scripts/ci/cargo-safe.sh test -p agent-browser-service-model --test browser_handoff_recovery --test remote_view_browser_launch` passed all 13. Strict workspace Clippy and Remote View handoff documentation checks passed locally.
 - #780 checkpoint: worker commit `11911635d` integrated as `7bdd94a48`. Thirteen launch and handoff model tests pass. Native SQLite verification and durable public Open replay are pending.
 - Installed gate: the isolated development presentation provider reports unconfigured and development readiness is false. A new release build cannot qualify that environment.
+- #779 dispatcher: the pinned CLI response reached `launchId` validation without a task. The regression initially asserted the outer JSON-RPC message; the detail-field correction is `c6e5eff20`. Rerun is pending.
+- #780 native SQLite: `scripts/ci/rust-tests.sh --focused exact_absent_unpublished_launch_settlement_preserves_history_and_checks_state` passed with the guarded settlement checkpoint.
+- #780 MCP replay: worker `a5aebaa8d` integrated as `e6f4e9481`. Cargo check passed on the worker source. Combined regression and Native request parity remain pending.

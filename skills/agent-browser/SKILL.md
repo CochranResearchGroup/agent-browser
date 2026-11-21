@@ -12,6 +12,8 @@ For recovery, capacity and owner continuation, see [continuation](references/cli
 
 Inspect an unfinished initial launch with `browser_command` using `action: "launch_status"` and `params.launchId` from the Open failure. This read works before a task exists. If Chrome occupies the profile, keep it open or close that exact window.
 
+For MCP `browser_open`, supply an optional `requestId` when you need durable launch readback. Reuse the same arguments and request ID to check the original launch without dispatching another Open. Use a fresh request ID for a distinct Open.
+
 For public refusal occurrence IDs and no-launch task error-log readback, see [the CLI and service reference](references/cli-and-service.md#recover-a-public-refusal).
 
 Authelia supplies access; dashboard login, enrollment and roles are disabled.
