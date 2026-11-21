@@ -78,7 +78,9 @@ Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sha
 ## Sharing a profile between tasks
 
 Use a separate task/session and tab per workflow. Shared profiles share login and
-persistent site state. Read [sharing and continuity](references/cli-and-service.md#shared-profile-workflow-continuity)
+persistent site state. Successful activity refreshes the addressed task and tab.
+The owner tracks inactivity across restarts and automatically reclaims eligible
+idle browsers and unreferenced disposable profiles. Read [sharing and continuity](references/cli-and-service.md#shared-profile-workflow-continuity)
 before coordinating peers, foreground input or lifecycle effects.
 
 ## CLI fallback

@@ -888,31 +888,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         hosted: Option<agent_browser_service_model::BrowserHostBinding>,
         task_policy: Option<&serde_json::Value>,
     ) -> Result<OpenBrowserSessionResult, String> {
-        let existing_task = self
-            .state
-            .sessions
-            .values()
-            .any(|session| session.name == request.session_name);
-        let existing_profile = match &request.profile_intent {
-            agent_browser_service_model::BrowserProfileIntent::Exact { profile_id } => self
-                .state
-                .browsers
-                .values()
-                .any(|browser| browser.profile_id == *profile_id),
-            _ => false,
-        };
-        if !existing_task
-            && !existing_profile
-            && super::browser_launch_admission::observe_browser_launch_admission(
-                Path::new("."),
-                None,
-            )
-            .is_memory_pressure_only()
-        {
-            // Reuse only the owner reaper's established idle/expiry eligibility.
-            // Existing task/profile continuation is never reclaimed here.
-            self.defer_unqualified_expiry();
-        }
         let result = match self.manager()?.open(request.clone()) {
             Err(error)
                 if error.starts_with("browser_session_retirement_publication_required:")
@@ -1398,15 +1373,24 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         &mut self,
         now_ms: u64,
         borrowed_only: bool,
+        qualified: bool,
         protected: &BTreeSet<String>,
     ) -> Result<ReapBrowserSessionsResult, String> {
-        let result = if borrowed_only {
+        let manager = if borrowed_only {
             self.borrowed_retirement_manager()
-                .and_then(|mut manager| manager.reap_borrowed_task_tabs(now_ms))
         } else {
             self.manager()
-                .and_then(|mut manager| manager.reap_with_protected_sessions(now_ms, protected))
         };
+        let result = manager.and_then(|mut manager| {
+            if qualified {
+                manager.use_qualified_expiry();
+            }
+            if borrowed_only {
+                manager.reap_borrowed_task_tabs(now_ms)
+            } else {
+                manager.reap_with_protected_sessions(now_ms, protected)
+            }
+        });
         match result.and_then(|result| {
             self.commit_state()?;
             Ok(result)
@@ -1425,28 +1409,19 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }
     }
 
-    // Persisted idle, tab and retention timestamps were minted from the guest
-    // clock. A current qualified UTC observation cannot qualify those starts.
-    // Keep scoped inspection and explicit close available, but never destroy
-    // browser/profile custody solely because that legacy clock jumped forward.
-    fn defer_unqualified_expiry(&self) -> ReapBrowserSessionsResult {
-        ReapBrowserSessionsResult {
-            deferred_browser_errors: self.state.browsers.keys().map(|id| (
-                id.clone(),
-                "browser_session_expiry_start_unqualified: automatic expiry deferred; inspect the scoped session and use explicit close only under current authority".to_string(),
-            )).collect(),
-            ..ReapBrowserSessionsResult::default()
-        }
+    #[cfg(test)]
+    pub(crate) fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
+        self.reap_at(now_ms, false)
     }
 
-    // Explicit injected time remains available to deterministic owner tests;
-    // production entrypoints use defer_unqualified_expiry until starts carry
-    // supported time evidence. This function is not a public clock override.
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
+    fn reap_at(
+        &mut self,
+        now_ms: u64,
+        qualified: bool,
+    ) -> Result<ReapBrowserSessionsResult, String> {
         // Borrowed targets have no Native operation journal to recover. Publish
         // their qualified outcomes before unrelated Native/viewer/profile work.
-        let mut result = self.reap_phase(now_ms, true, &BTreeSet::new())?;
+        let mut result = self.reap_phase(now_ms, true, qualified, &BTreeSet::new())?;
         let deferred_sessions = self
             .state
             .sessions
@@ -1497,7 +1472,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 Err(reason) => observation_error = Some(reason),
             }
         }
-        let maintenance = self.reap_phase(now_ms, false, &deferred_sessions)?;
+        let maintenance = self.reap_phase(now_ms, false, qualified, &deferred_sessions)?;
         result.expired_tab_ids.extend(maintenance.expired_tab_ids);
         result
             .expired_session_ids
@@ -1652,7 +1627,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
 
     pub(crate) fn reap_current(&mut self) -> Result<ReapBrowserSessionsResult, String> {
         self.refresh_before_ordinary_command()?;
-        Ok(self.defer_unqualified_expiry())
+        if self.state.browsers.is_empty() && self.state.disposable_profiles.is_empty() {
+            return Ok(ReapBrowserSessionsResult::default());
+        }
+        let current = crate::connection::stable_time::authority_now()?.service_origin()?;
+        self.state.observe_expiry_sources(&current);
+        self.reap_at(current.earliest_utc_ms, true)
     }
 
     pub(crate) fn handle_command(&mut self, command: &serde_json::Value) -> serde_json::Value
@@ -2371,7 +2351,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 }))
             }
             "browser_session_reap" => {
-                let reaped = self.defer_unqualified_expiry();
+                let reaped = self.reap_current()?;
                 Ok(serde_json::json!({
                     "expiredSessionIds": reaped.expired_session_ids,
                     "expiredTabIds": reaped.expired_tab_ids,
@@ -2379,13 +2359,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "closedBrowserIds": reaped.closed_browser_ids,
                     "deletedDisposableProfileIds": reaped.deleted_disposable_profile_ids,
                     "deferredBrowserErrors": reaped.deferred_browser_errors,
-                    "maintenanceEvidence": {
-                        "state": "unqualified_legacy_start",
-                        "automaticExpiry": "deferred",
-                        "automaticProfileDeletion": "deferred",
-                        "inspectionAvailable": true,
-                        "explicitCloseRequiresCurrentAuthority": true
-                    },
                 }))
             }
             "browser_session_status" => {
@@ -5479,7 +5452,7 @@ mod tests {
     }
 
     #[test]
-    fn startup_reaper_retains_unqualified_legacy_sessions_without_a_client_request() {
+    fn startup_reaper_preserves_alice_when_bob_expires_and_closes_after_renewed_deadline() {
         let directory = TempDirectory::new();
         let legacy_path = directory.0.join("state.json");
         fs::write(&legacy_path, serde_json::json!({"profiles":{"work":{"id":"work","name":"Work","userDataDir":directory.0.join("work"),"profileClass":"durable_named"}}}).to_string()).unwrap();
@@ -5490,8 +5463,14 @@ mod tests {
             exact_url_history_maximum_bytes: 1024,
         };
         let mut initial = BrowserSessionHost::load(
-            BrowserSessionJsonStore::new(&directory.0),
-            BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+            BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy_path)
+                .unwrap()
+                .0,
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                initial_tabs: true,
+                ..FixtureRuntime::default()
+            }),
             &legacy_path,
             config.clone(),
         )
@@ -5499,24 +5478,39 @@ mod tests {
         let opened = initial
             .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
             .unwrap();
-        let tab = initial
-            .manager()
+        let tab_id = initial
+            .tab_for_navigation(&opened.session_id, 1_000)
             .unwrap()
-            .new_tab(&opened.session_id, 1_000)
-            .unwrap();
+            .tab_id;
         agent_browser_service_model::retain_remote_view_tab_handoff(
             &mut initial.state,
             "startup-handoff",
             &opened.session_id,
-            &tab.tab_id,
+            &tab_id,
         )
         .unwrap();
         initial.commit_state().unwrap();
+        let bob = initial
+            .open(OpenBrowserSession::exact_profile("bob", "work", 1_001))
+            .unwrap();
+        assert_eq!(opened.browser_id, bob.browser_id);
+        let bob_tab = initial.tab_for_navigation(&bob.session_id, 1_001).unwrap();
         drop(initial);
+        use crate::connection::stable_time::{fixture_stamp, Fixture};
+        let now = std::rc::Rc::new(std::cell::Cell::new(1_000_000));
+        let source = now.clone();
+        let _time = Fixture::observe_with(move || {
+            let utc = source.get();
+            let mut stamp = fixture_stamp(utc);
+            if utc >= 1_300_001 {
+                stamp.epoch = "22222222-2222-4222-8222-222222222222".into();
+            }
+            Ok(stamp)
+        });
         let mut restarted = None;
-        reap_browser_session_host(&mut restarted, || {
+        let observed = reap_browser_session_host(&mut restarted, || {
             BrowserSessionHost::load(
-                BrowserSessionJsonStore::new(&directory.0),
+                BrowserSessionSqliteStore::open(&directory.0).unwrap(),
                 BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
                 &legacy_path,
                 config,
@@ -5532,11 +5526,8 @@ mod tests {
             .idle_closed_browsers
             .contains_key(&opened.browser_id));
         assert!(host.state.sessions.contains_key(&opened.session_id));
-        let deferred = host.defer_unqualified_expiry();
-        assert!(deferred.closed_browser_ids.is_empty());
-        assert!(deferred.deleted_disposable_profile_ids.is_empty());
-        assert!(deferred.deferred_browser_errors[&opened.browser_id]
-            .starts_with("browser_session_expiry_start_unqualified:"));
+        assert!(observed.expired_session_ids.is_empty());
+        assert!(observed.closed_browser_ids.is_empty());
         assert!(
             agent_browser_service_model::resolve_remote_view_tab_handoff(
                 &host.state,
@@ -5545,10 +5536,51 @@ mod tests {
             .is_ok()
         );
         assert_eq!(
-            BrowserSessionJsonStore::new(&directory.0)
+            BrowserSessionSqliteStore::open(&directory.0)
+                .unwrap()
                 .load_session_state()
                 .unwrap(),
             host.state
+        );
+        let mut host = restarted.take().unwrap();
+        now.set(1_200_000);
+        host.manager()
+            .unwrap()
+            .record_navigation(&opened.session_id, "https://example.test", 2_000)
+            .unwrap();
+        host.commit_state().unwrap();
+        let observed = host.handle_command(&serde_json::json!({
+            "action": "browser_session_reap", "activityAtMs": u64::MAX
+        }));
+        assert_eq!(observed["success"], true, "{observed}");
+        assert_eq!(observed["data"]["expiredSessionIds"], serde_json::json!([]));
+        drop(host);
+        now.set(1_300_001);
+        let result = reap_browser_session_host(&mut restarted, || {
+            BrowserSessionHost::load(
+                BrowserSessionSqliteStore::open(&directory.0).unwrap(),
+                BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+                &legacy_path,
+                BrowserSessionHostConfig {
+                    session_idle_timeout_ms: 300_000,
+                    remote_view_desktops: vec![],
+                    default_disposable_policy: None,
+                    exact_url_history_maximum_bytes: 1024,
+                },
+            )
+            .map(Some)
+        })
+        .unwrap();
+        assert_eq!(result.expired_session_ids, [bob.session_id]);
+        assert!(result.closed_browser_ids.is_empty());
+        let host = restarted.as_mut().unwrap();
+        assert!(host.state.sessions.contains_key(&opened.session_id));
+        assert!(host.state.tabs.contains_key(&tab_id));
+        assert!(!host.state.tabs.contains_key(&bob_tab.tab_id));
+        now.set(1_500_001);
+        assert_eq!(
+            host.reap_current().unwrap().closed_browser_ids,
+            [opened.browser_id]
         );
     }
 

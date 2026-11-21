@@ -1001,6 +1001,15 @@ pub struct BrowserSessionRetentionClaim {
     pub expires_at_ms: u64,
     pub released: bool,
 }
+/// A service observation of an unchanged inactivity source. Legacy timestamps
+/// identify changes to the source but are never compared with service UTC.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserExpiryObservation {
+    activity_token: u64,
+    observed_latest_utc_ms: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
@@ -1029,6 +1038,8 @@ pub struct BrowserSessionState {
     /// App context retained under the logical task session identifier.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub host_bindings: BTreeMap<String, crate::BrowserHostTaskBinding>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub expiry_observations: BTreeMap<String, BrowserExpiryObservation>,
     pub schema_version: String,
     pub retention_policy: crate::BrowserRetentionPolicy,
     /// Last native placement, advanced only by a successful independent launch.
@@ -1083,6 +1094,7 @@ impl Default for BrowserSessionState {
             profile_operation_ids: BTreeMap::new(),
             hosted_continuity: BTreeMap::new(),
             host_policies: crate::BrowserHostPolicies::default(),
+            expiry_observations: BTreeMap::new(),
             schema_version: BROWSER_SESSION_STATE_SCHEMA_V1.to_string(),
             retention_policy: crate::BrowserRetentionPolicy::default(),
             last_remote_view_desktop_id: None,
@@ -1117,6 +1129,54 @@ impl Default for BrowserSessionState {
 }
 
 impl BrowserSessionState {
+    /// Bind current activity generations to a trusted observation. Retaining
+    /// the first observation keeps the grace window intact across restarts.
+    pub fn observe_expiry_sources(&mut self, current: &crate::ServiceTimeOrigin) {
+        let mut previous = std::mem::take(&mut self.expiry_observations);
+        let sources = self
+            .sessions
+            .iter()
+            .map(|(id, session)| ("session", id, session.last_activity_at_ms))
+            .chain(
+                self.tabs
+                    .iter()
+                    .map(|(id, tab)| ("tab", id, tab.last_activity_at_ms)),
+            )
+            .chain(
+                self.pending_human_tabs
+                    .iter()
+                    .map(|(id, hold)| ("hold", id, hold.requested_at_ms)),
+            )
+            .chain(
+                self.retention_claims
+                    .iter()
+                    .filter(|(_, claim)| !claim.released)
+                    .map(|(id, claim)| ("claim", id, claim.expires_at_ms)),
+            )
+            .chain(
+                self.disposable_profiles
+                    .iter()
+                    .filter_map(|(id, allocation)| {
+                        allocation
+                            .cleanup_eligible_at_ms
+                            .map(|token| ("profile", id, token))
+                    }),
+            );
+        self.expiry_observations = sources
+            .map(|(scope, id, activity_token)| {
+                let key = format!("{scope}:{id}");
+                let observation = previous
+                    .remove(&key)
+                    .filter(|observation| observation.activity_token == activity_token)
+                    .unwrap_or(BrowserExpiryObservation {
+                        activity_token,
+                        observed_latest_utc_ms: current.latest_utc_ms,
+                    });
+                (key, observation)
+            })
+            .collect();
+    }
+
     /// Keep exact navigation rows within the configured serialized-byte budget
     /// while preserving deterministic daily identity summaries.
     pub fn compact_navigation_history(
@@ -1300,6 +1360,7 @@ pub struct BrowserSessionManager<'a, E> {
     config: BrowserSessionManagerConfig,
     protected_session_ids: BTreeSet<String>,
     externally_protected_session_ids: BTreeSet<String>,
+    qualified_reap: bool,
     maximum_retention_claims: usize,
     maximum_popup_admissions: usize,
     admission_policy_source: String,
@@ -1343,6 +1404,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             config,
             protected_session_ids,
             externally_protected_session_ids: leave_open_session_ids,
+            qualified_reap: false,
             maximum_retention_claims: 4096,
             maximum_popup_admissions: 64,
             admission_policy_source: "model_default".into(),
@@ -3328,11 +3390,93 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.reap_with_protected_sessions(now_ms, &BTreeSet::new())
     }
 
+    /// Production maintenance compares qualified UTC bounds only.
+    pub fn use_qualified_expiry(&mut self) {
+        self.qualified_reap = true;
+    }
+
+    fn inactivity_elapsed(
+        &self,
+        scope: &str,
+        id: &str,
+        activity_token: u64,
+        duration_ms: u64,
+        now_ms: u64,
+    ) -> bool {
+        if !self.qualified_reap {
+            return now_ms.saturating_sub(activity_token) >= duration_ms;
+        }
+        self.state
+            .expiry_observations
+            .get(&format!("{scope}:{id}"))
+            .filter(|observation| observation.activity_token == activity_token)
+            .and_then(|observation| observation.observed_latest_utc_ms.checked_add(duration_ms))
+            .is_some_and(|deadline| now_ms >= deadline)
+    }
+
+    fn session_inactive(
+        &self,
+        session: &ManagedBrowserSession,
+        duration_ms: u64,
+        now_ms: u64,
+    ) -> bool {
+        self.inactivity_elapsed(
+            "session",
+            &session.id,
+            session.last_activity_at_ms,
+            duration_ms,
+            now_ms,
+        )
+    }
+
+    fn session_idle(&self, session: &ManagedBrowserSession, now_ms: u64) -> bool {
+        if !self.qualified_reap {
+            return session.expires_at_ms <= now_ms;
+        }
+        self.session_inactive(session, self.config.session_idle_timeout_ms, now_ms)
+    }
+
+    fn retention_sessions(&self, now_ms: u64) -> BTreeSet<String> {
+        if !self.qualified_reap {
+            return active_retention_sessions(self.state, now_ms);
+        }
+        self.state
+            .retention_claims
+            .values()
+            .filter(|claim| {
+                !claim.released
+                    && !self.inactivity_elapsed(
+                        "claim",
+                        &claim.claim_id,
+                        claim.expires_at_ms,
+                        300_000,
+                        now_ms,
+                    )
+                    && retention_generation(self.state, &claim.session_id).as_deref()
+                        == Some(claim.generation.as_str())
+            })
+            .map(|claim| claim.session_id.clone())
+            .collect()
+    }
+
     fn tab_awaits_human_use(&self, tab_id: &str, now_ms: u64) -> bool {
         self.state
             .pending_human_tabs
             .get(tab_id)
-            .is_some_and(|hold| hold.expires_at_ms.is_none_or(|deadline| now_ms < deadline))
+            .is_some_and(|hold| {
+                hold.expires_at_ms.is_none_or(|deadline| {
+                    if !self.qualified_reap {
+                        return now_ms < deadline;
+                    }
+                    !self.inactivity_elapsed(
+                        "hold",
+                        tab_id,
+                        hold.requested_at_ms,
+                        deadline.saturating_sub(hold.requested_at_ms),
+                        now_ms,
+                    )
+                })
+            })
     }
 
     fn tab_lifetime_expired(&self, tab: &ManagedBrowserTab, now_ms: u64) -> bool {
@@ -3343,7 +3487,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .tab_lifetimes
             .get(&tab.id)
             .and_then(|lifetime| lifetime.inactivity_ms)
-            .is_some_and(|ttl| now_ms.saturating_sub(tab.last_activity_at_ms) >= ttl)
+            .is_some_and(|ttl| {
+                self.inactivity_elapsed("tab", &tab.id, tab.last_activity_at_ms, ttl, now_ms)
+            })
     }
 
     fn session_has_retained_tab_lifetime(&self, session_id: &str, now_ms: u64) -> bool {
@@ -3444,7 +3590,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         disposable_maintenance: bool,
     ) -> Result<ReapBrowserSessionsResult, String> {
         let mut result = ReapBrowserSessionsResult::default();
-        let retention_sessions = active_retention_sessions(self.state, now_ms);
+        let retention_sessions = self.retention_sessions(now_ms);
         let protected_session_ids = protected_session_ids
             .union(&retention_sessions)
             .cloned()
@@ -3474,16 +3620,16 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     && browser.active_session_ids.iter().any(|id| {
                         self.state.sessions.get(id).is_some_and(|session| {
                             (!self.state.shared_browser_ids.contains(&browser.id)
-                                && (session.expires_at_ms <= now_ms
+                                && (self.session_idle(session, now_ms)
                                     || (self
                                         .state
                                         .disposable_profiles
                                         .contains_key(&session.profile_id)
-                                        && now_ms.saturating_sub(session.last_activity_at_ms)
-                                            >= self
-                                                .state
-                                                .retention_policy
-                                                .disposable_inactivity_ms)))
+                                        && self.session_inactive(
+                                            session,
+                                            self.state.retention_policy.disposable_inactivity_ms,
+                                            now_ms,
+                                        ))))
                                 || self.state.tabs.values().any(|tab| {
                                     tab.session_id == session.id
                                         && self.tab_lifetime_expired(tab, now_ms)
@@ -3518,8 +3664,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .disposable_profiles
                 .contains_key(&session.profile_id)
             {
-                let expired = now_ms.saturating_sub(session.last_activity_at_ms)
-                    >= self.state.retention_policy.disposable_inactivity_ms;
+                let expired = self.session_inactive(
+                    session,
+                    self.state.retention_policy.disposable_inactivity_ms,
+                    now_ms,
+                );
                 if expired && !externally_protected_session_ids.contains(&session.id) {
                     protected_session_ids.remove(&session.id);
                 }
@@ -3670,10 +3819,13 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     .disposable_profiles
                     .contains_key(&session.profile_id)
                 {
-                    now_ms.saturating_sub(session.last_activity_at_ms)
-                        >= self.state.retention_policy.disposable_inactivity_ms
+                    self.session_inactive(
+                        session,
+                        self.state.retention_policy.disposable_inactivity_ms,
+                        now_ms,
+                    )
                 } else {
-                    session.expires_at_ms <= now_ms
+                    self.session_idle(session, now_ms)
                 };
                 expired && !protected_session_ids.contains(&session.id)
             })
@@ -3734,7 +3886,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                         self.state
                             .sessions
                             .get(id)
-                            .is_some_and(|session| session.expires_at_ms <= now_ms)
+                            .is_some_and(|session| self.session_idle(session, now_ms))
                             && !self.session_has_retained_tab_lifetime(id, now_ms)
                             && !externally_protected_session_ids.contains(id)
                     })
@@ -3766,7 +3918,18 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .filter(|allocation| {
                 allocation
                     .cleanup_eligible_at_ms
-                    .is_some_and(|eligible_at_ms| eligible_at_ms <= now_ms)
+                    .is_some_and(|eligible_at_ms| {
+                        if !self.qualified_reap {
+                            return eligible_at_ms <= now_ms;
+                        }
+                        self.inactivity_elapsed(
+                            "profile",
+                            &allocation.profile.id,
+                            eligible_at_ms,
+                            allocation.cleanup_delay_ms,
+                            now_ms,
+                        )
+                    })
                     && !self
                         .state
                         .sessions
@@ -3794,6 +3957,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             self.effects.delete_disposable_profile(&allocation)?;
             self.state.disposable_profiles.remove(&profile_id);
             result.deleted_disposable_profile_ids.push(profile_id);
+        }
+        if self.qualified_reap {
+            return Ok(result);
         }
         let policy_ids = self
             .state
@@ -3825,14 +3991,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .collect::<Vec<_>>();
         !tabs.is_empty()
             && tabs.iter().all(|tab| {
-                let held = self
-                    .state
-                    .pending_human_tabs
-                    .get(&tab.id)
-                    .is_some_and(|hold| {
-                        hold.expires_at_ms.is_none_or(|deadline| now_ms < deadline)
-                    });
-                !held
+                !self.tab_awaits_human_use(&tab.id, now_ms)
                     && self
                         .state
                         .tab_lifetimes
@@ -3840,7 +3999,13 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                         .and_then(|lifetime| lifetime.pressure_inactivity_ms)
                         .is_some_and(|duration| {
                             duration > 0
-                                && now_ms.saturating_sub(tab.last_activity_at_ms) >= duration
+                                && self.inactivity_elapsed(
+                                    "tab",
+                                    &tab.id,
+                                    tab.last_activity_at_ms,
+                                    duration,
+                                    now_ms,
+                                )
                         })
             })
     }
@@ -3862,7 +4027,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get(policy_id)
             .cloned()
             .ok_or_else(|| format!("browser_disposable_policy_not_found:{policy_id}"))?;
-        let retention_sessions = active_retention_sessions(self.state, now_ms);
+        let retention_sessions = self.retention_sessions(now_ms);
         let mut retained_count = 0_u32;
         let mut retained_bytes = 0_u64;
         let mut candidates = Vec::new();
@@ -3942,6 +4107,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         let mut projected_count = target_count;
         let mut projected_bytes = target_bytes;
         let mut selected = Vec::new();
+        let mut observation_error = None;
         for (_, _, profile_id, bytes, protected) in candidates {
             if projected_count <= policy.maximum_retained_profiles
                 && projected_bytes <= policy.maximum_total_bytes
@@ -3962,12 +4128,21 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .collect::<Vec<_>>();
             let mut permitted = true;
             for browser in browsers {
-                if self.state.shared_browser_ids.contains(&browser.id)
-                    || !self.effects.permits_idle_browser_close(&browser)?
-                {
+                if self.state.shared_browser_ids.contains(&browser.id) {
                     permitted = false;
                     break;
                 }
+                match self.effects.permits_idle_browser_close(&browser) {
+                    Ok(true) => continue,
+                    Ok(false) => {}
+                    Err(error) => {
+                        // Missing custody disqualifies this candidate. Preserve the
+                        // cause if other eligible profiles cannot satisfy the quota.
+                        observation_error.get_or_insert(error);
+                    }
+                }
+                permitted = false;
+                break;
             }
             if !permitted {
                 continue;
@@ -3977,10 +4152,12 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             selected.push(profile_id);
         }
         if projected_count > policy.maximum_retained_profiles {
-            return Err("browser_disposable_profile_count_quota_protected".to_string());
+            return Err(observation_error
+                .unwrap_or_else(|| "browser_disposable_profile_count_quota_protected".into()));
         }
         if projected_bytes > policy.maximum_total_bytes {
-            return Err("browser_disposable_profile_bytes_quota_protected".to_string());
+            return Err(observation_error
+                .unwrap_or_else(|| "browser_disposable_profile_bytes_quota_protected".into()));
         }
 
         // Qualify the complete pressure effect group before retiring any candidate.

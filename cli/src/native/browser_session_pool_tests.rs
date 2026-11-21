@@ -3930,7 +3930,11 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
 
 #[test]
 fn expired_or_deleted_link_cannot_recreate_missing_target_after_restart() {
+    use crate::connection::stable_time::{fixture_stamp, Fixture as TimeFixture};
     for deleted in [false, true] {
+        let service_time = Rc::new(Cell::new(100));
+        let source = service_time.clone();
+        let _time = TimeFixture::observe_with(move || Ok(fixture_stamp(source.get())));
         let fixture = Fixture::new();
         let provider = Rc::new(RefCell::new(Provider::default()));
         let calls = Rc::new(Cell::new(0));
@@ -3954,13 +3958,11 @@ fn expired_or_deleted_link_cannot_recreate_missing_target_after_restart() {
             }));
             assert_eq!(finite["data"]["expiresAtMs"], 130, "{finite}");
         }
-        let expired = owner.handle_command(&serde_json::json!({
-            "action":"browser_session_reap", "activityAtMs":130
-        }));
-        assert_eq!(expired["success"], true, "{expired}");
+        service_time.set(130);
+        let expired = owner.reap(130).unwrap();
         assert_eq!(
-            expired["data"]["expiredTabIds"],
-            serde_json::json!([alice["browserSession"]["tabId"]])
+            expired.expired_tab_ids,
+            [alice["browserSession"]["tabId"].as_str().unwrap()]
         );
         if deleted {
             let revoked = owner.handle_command(&serde_json::json!({
@@ -4295,14 +4297,12 @@ fn human_use_releases_pending_hold_but_agent_preparation_does_not() {
         duplicate["data"]["status"], "human_use_already_confirmed",
         "{duplicate}"
     );
-    let before = consumer
-        .handle_command(&serde_json::json!({"action":"browser_session_reap", "activityAtMs":179}));
-    assert_eq!(before["data"]["expiredTabIds"], serde_json::json!([]));
-    let expired = consumer
-        .handle_command(&serde_json::json!({"action":"browser_session_reap", "activityAtMs":180}));
+    let before = consumer.reap(179).unwrap();
+    assert!(before.expired_tab_ids.is_empty());
+    let expired = consumer.reap(180).unwrap();
     assert_eq!(
-        expired["data"]["expiredTabIds"],
-        serde_json::json!([opened["browserSession"]["tabId"]])
+        expired.expired_tab_ids,
+        [opened["browserSession"]["tabId"].as_str().unwrap()]
     );
     let inspected = consumer.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":id,
@@ -4473,12 +4473,9 @@ fn unused_human_handoff_protects_configured_tab_expiry_across_restart() {
     assert_eq!(prepared["data"]["status"], "pending_human", "{prepared}");
     drop(consumer);
     let mut consumer = host(&fixture, provider, calls.clone());
-    let reaped = consumer.handle_command(&serde_json::json!({
-        "action":"browser_session_reap", "activityAtMs":130
-    }));
-    assert_eq!(reaped["success"], true, "{reaped}");
-    assert_eq!(reaped["data"]["expiredTabIds"], serde_json::json!([]));
-    assert_eq!(reaped["data"]["closedBrowserIds"], serde_json::json!([]));
+    let reaped = consumer.reap(130).unwrap();
+    assert!(reaped.expired_tab_ids.is_empty());
+    assert!(reaped.closed_browser_ids.is_empty());
     let inspected = consumer.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":id,
         "handoffOperation":"inspect", "activityAtMs":130
@@ -4513,12 +4510,9 @@ fn finite_pending_human_deadline_expires_exact_target_after_restart() {
         assert_eq!(prepared["data"]["status"], "pending_human", "{prepared}");
         drop(consumer);
         let mut consumer = host(&fixture, provider.clone(), calls.clone());
-        let reaped = consumer.handle_command(&serde_json::json!({
-            "action":"browser_session_reap", "activityAtMs":deadline - 1
-        }));
-        assert_eq!(reaped["success"], true, "{reaped}");
-        assert_eq!(reaped["data"]["expiredTabIds"], serde_json::json!([]));
-        assert_eq!(reaped["data"]["closedBrowserIds"], serde_json::json!([]));
+        let reaped = consumer.reap(deadline - 1).unwrap();
+        assert!(reaped.expired_tab_ids.is_empty());
+        assert!(reaped.closed_browser_ids.is_empty());
         let inspected = consumer.handle_command(&serde_json::json!({
             "action":"service_remote_view_handoff_resolve", "handoffId":id,
             "handoffOperation":"inspect", "activityAtMs":deadline - 1
@@ -4528,14 +4522,10 @@ fn finite_pending_human_deadline_expires_exact_target_after_restart() {
         assert_eq!(inspected["data"]["pendingHuman"]["expiresAtMs"], deadline);
         drop(consumer);
         let mut consumer = host(&fixture, provider, calls.clone());
-        let expired = consumer.handle_command(&serde_json::json!({
-            "action":"browser_session_reap", "activityAtMs":deadline
-        }));
-        assert_eq!(expired["success"], true, "{expired}");
+        let expired = consumer.reap(deadline).unwrap();
         assert_eq!(
-            expired["data"]["expiredTabIds"],
-            serde_json::json!([opened["browserSession"]["tabId"]]),
-            "{expired}"
+            expired.expired_tab_ids,
+            [opened["browserSession"]["tabId"].as_str().unwrap()]
         );
         let link = consumer.handle_command(&serde_json::json!({
             "action":"service_remote_view_handoff_resolve", "handoffId":id,
@@ -5353,20 +5343,9 @@ fn automatic_last_tab_expiry_closes_owned_browser_with_empty_peer_session() {
         .borrow_mut()
         .viewer_active_desktops
         .insert(desktop.clone());
-    let protected = consumer.handle_command(&serde_json::json!({
-        "action":"browser_session_reap", "activityAtMs":130
-    }));
-    assert_eq!(protected["success"], true, "{protected}");
-    assert_eq!(
-        protected["data"]["expiredTabIds"],
-        serde_json::json!([]),
-        "{protected}"
-    );
-    assert_eq!(
-        protected["data"]["closedBrowserIds"],
-        serde_json::json!([]),
-        "{protected}"
-    );
+    let protected = consumer.reap(130).unwrap();
+    assert!(protected.expired_tab_ids.is_empty());
+    assert!(protected.closed_browser_ids.is_empty());
     assert!(consumer.state().sessions[&peer.session_id]
         .current_tab_id
         .is_none());
@@ -5374,19 +5353,14 @@ fn automatic_last_tab_expiry_closes_owned_browser_with_empty_peer_session() {
         .borrow_mut()
         .viewer_active_desktops
         .remove(&desktop);
-    let reaped = consumer.handle_command(&serde_json::json!({
-        "action":"browser_session_reap", "activityAtMs":131
-    }));
-    assert_eq!(reaped["success"], true, "{reaped}");
+    let reaped = consumer.reap(131).unwrap();
     assert_eq!(
-        reaped["data"]["expiredTabIds"],
-        serde_json::json!([alice["browserSession"]["tabId"]]),
-        "{reaped}"
+        reaped.expired_tab_ids,
+        [alice["browserSession"]["tabId"].as_str().unwrap()]
     );
     assert_eq!(
-        reaped["data"]["closedBrowserIds"],
-        serde_json::json!([alice["browserSession"]["browserId"]]),
-        "{reaped}"
+        reaped.closed_browser_ids,
+        [alice["browserSession"]["browserId"].as_str().unwrap()]
     );
     assert!(consumer.state().sessions.is_empty());
     assert!(consumer.state().browsers.is_empty());
@@ -5458,19 +5432,14 @@ fn configured_tab_lifetime_expires_only_its_target_and_keeps_the_link() {
     );
     drop(consumer);
     let mut consumer = host(&fixture, provider.clone(), calls.clone());
-    let before = consumer.handle_command(&serde_json::json!({
-        "action":"browser_session_reap", "activityAtMs":129
-    }));
-    assert_eq!(before["data"]["expiredTabIds"], serde_json::json!([]));
-    let expired = consumer.handle_command(&serde_json::json!({
-        "action":"browser_session_reap", "activityAtMs":130
-    }));
-    assert_eq!(expired["success"], true, "{expired}");
+    let before = consumer.reap(129).unwrap();
+    assert!(before.expired_tab_ids.is_empty());
+    let expired = consumer.reap(130).unwrap();
     assert_eq!(
-        expired["data"]["expiredTabIds"],
-        serde_json::json!([alice["browserSession"]["tabId"]])
+        expired.expired_tab_ids,
+        [alice["browserSession"]["tabId"].as_str().unwrap()]
     );
-    assert_eq!(expired["data"]["closedBrowserIds"], serde_json::json!([]));
+    assert!(expired.closed_browser_ids.is_empty());
     let inspected = consumer.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":id,
         "handoffOperation":"inspect", "activityAtMs":130

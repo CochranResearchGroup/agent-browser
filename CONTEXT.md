@@ -8,7 +8,7 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Retention and popup admission**: Live operational policy bounds unreleased retained claims and new eligible popup admissions. Released original claims remain discoverable without consuming admission. Popup overflow defers targets while the original task continues; increasing policy does not replay input or expand access.
 
-**Deferred legacy expiry**: Automatic maintenance cannot close tasks or delete disposable profiles using unqualified guest timestamps. Deferred maintenance evidence does not establish qualified lifetime or cleanup; explicit scoped close retains its existing authority.
+**Inactivity observation**: The owner starts an inactivity window at its first StableTime observation of the current activity record. It preserves that observation across restart. Successful activity renews the addressed tab and session. The first observation gives legacy records a fresh window, and automatic closure starts only after the configured interval has elapsed within StableTime bounds.
 
 **Reconnect and runtime lane capacity**: Live reconnect admission preserves all original request receipts. Runtime lane admission uses system defaults before construction; task overrides never enlarge the host budget. Lowering policy does not evict retained lanes, discard constructed owners or rewrite a completed original. Manifest capacity is a startup snapshot.
 
