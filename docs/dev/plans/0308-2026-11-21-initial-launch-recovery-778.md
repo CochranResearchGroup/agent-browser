@@ -28,3 +28,11 @@ Use existing model and SQLite recovery tests, then one candidate for installed a
 - The worker's broad `cargo check --tests` hit pre-existing `current_time_ms` API drift in the untouched Native Remote View integration test. The affected CLI bin tests compiled and passed.
 - #781 worker source `d8e3a96a` integrated as `511f614e4`. Entire-branch checks started after documentation at `a5a285a11`. Installed reboot acceptance requires an isolated, configured Native host. The repository development provider currently reports unconfigured.
 - Final source gates passed: workspace formatting, strict workspace Clippy, and `scripts/ci/rust-tests.sh --focused exact_absent_unpublished_launch_settlement_preserves_history_and_checks_state` against the combined boot implementation. The regression covers prior-boot vacancy, retained post-boot occupancy, and replay of the original launch ID. No isolated physical reboot target was available. The requested full review and one TDD remediation remain gated by ticket closure.
+
+## Review and bounded remediation
+
+The operator deferred the installed reboot check and moved the single review and TDD pass ahead of it. Reviewed fixed point `da36d2f1a` through `0853e83c8` against #778 and repository standards.
+
+- Standards: zero blocking findings.
+- Spec: one blocker. Initial attachment errors bypassed the exact pending launch lookup and hid the task-free recovery action. The existing regression was red with the DevTools endpoint error and no launch ID. Commit `ba4ffe741` preserves attachment uncertainty, returns original launch readback when a matching claim exists, and keeps the ordinary confirmed-absence flow. All 13 selected launch and handoff model tests passed.
+- Installed verification remains open in #781.
