@@ -952,8 +952,9 @@ An exact completed retry returns the retained result with the current transport
 request ID, without another tab or navigation. Changed input conflicts with the
 retained key. An unknown result returns
 `browser_session_tab_creation_readback_required`; it remains pending across
-restart and prevents another creation on that profile. Automatic reconciliation
-of these pending requests remains unfinished. Legacy service tab handles still
+restart and blocks another creation for the same named session. A distinct
+named session on the same profile can proceed under its own normal ownership
+checks. Automatic reconciliation of pending requests remains unfinished. Legacy service tab handles still
 require their explicit managed join; this path does not fabricate one.
 
 Successful navigations retain their URL in durable session history.
