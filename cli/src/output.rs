@@ -5713,7 +5713,8 @@ New ordinary task commands refresh stale clean session state before acting;
 unpublished effects require reconciliation without automatic command replay.
 MCP browser_command action launch_status accepts params.launchId from the
 initial Open refusal and can inspect it before a managed task exists.
-Launch status includes worker boot evidence. Recovery still checks current profile occupancy.
+Launch status includes worker boot evidence. A distinct Open can settle a legacy
+claim with no worker record after verifying the exact profile is vacant.
 Optional browser_open requestId provides durable launch readback for identical MCP retries.
 Native application-pool remote_view_open uses top-level openRequestId for initial launch readback.
 Only proven process and profile absence settles occupancy; history is preserved.
