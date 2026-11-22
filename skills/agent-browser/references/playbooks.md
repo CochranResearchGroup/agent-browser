@@ -278,6 +278,29 @@ inspects pending effect custody. During MFA waiting or after a lost response,
 the existing request is inspected; no new task, private store, viewer or login
 submission is created. Native Remote View remains the human handoff surface.
 
+## Capture and consolidate browser lessons
+
+1. At closeout, capture reusable successes and failures. Run
+   `mattpocock-skills:writing-for-agents` before changing guidance. Record the
+   observed page or control state, the step taken, the independently verified
+   outcome or exact failure, and the recovery that worked or remains open.
+   Keep site evidence and private artifacts in their authorized tenant scope.
+2. Find the existing guidance. Put site-specific page and control behavior in
+   the SiteGuide. Put repeatable browser techniques and recovery decisions in
+   the relevant skill. In a source checkout, add a sanitized evidence note
+   under `docs/dev/notes/` for unresolved findings, with a replayable check and
+   the existing issue link when available.
+3. Route cross-service lessons to the owner. Agent Browser keeps the browser
+   and SiteGuide lesson. Auth Receipts keeps credential discovery, private
+   receiving, approval and recovery lessons. Link a sanitized evidence locator
+   when a lesson spans both. Keep credentials, codes, account-specific field
+   values, and private page content out of shared guidance.
+4. During the weekly skill and SiteGuide review, inspect new lessons and
+   recurring failures. Verify scope and current behavior. Merge duplicate
+   guidance, shorten instructions, update or retire stale steps, and promote
+   proven general techniques to their owning skill. Record what changed and
+   the evidence for keeping, replacing, or retiring the prior guidance.
+
 ## Bounded non-login retrieval
 
 collect_posts uses the same browser_command playbook interface, or
