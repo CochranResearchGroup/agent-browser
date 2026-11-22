@@ -81,6 +81,11 @@ Read [Workspace](references/cli-and-service.md#operator-workspace) for tabs, sha
 
 [Manual login](references/cli-and-service.md#manual-login) is CDP-free. For CDP, end the process with browser scope and actor/reason, then reopen that profile.
 
+## Capture browser lessons
+
+After a semantic browser task reveals a reusable success or failure, use
+`writing-for-agents` and follow [Capture and consolidate browser lessons](references/playbooks.md#capture-and-consolidate-browser-lessons) before closeout.
+
 ## Sharing a profile between tasks
 
 Use a separate task/session and tab per workflow. Shared profiles share login and
