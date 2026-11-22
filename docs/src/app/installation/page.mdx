@@ -29,7 +29,7 @@ VERSION=v0.28.0
 curl -L -o ~/.local/bin/agent-browser \
   https://github.com/CochranResearchGroup/agent-browser/releases/download/$VERSION/agent-browser-linux-x64
 chmod +x ~/.local/bin/agent-browser
-agent-browser install  # Download Chrome from Chrome for Testing (first time)
+agent-browser install  # Check for installed Stock Chrome or configured Chromium StealthCDP
 agent-browser install stealthcdp-chromium  # Optional preferred patched Chromium
 agent-browser install doctor  # Check binary drift and launch readiness
 agent-browser install --with-deps --with-remote-view-privileges  # Linux RDP/Guacamole desktop setup

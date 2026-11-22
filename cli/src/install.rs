@@ -18,8 +18,6 @@ use std::time::{Duration, Instant};
 
 mod development_doctor;
 
-const LAST_KNOWN_GOOD_URL: &str =
-    "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json";
 const STEALTHCDP_CHROMIUM_RELEASE_TAG: &str = "v150.0.7835.0-stealthcdp.6b6558b55a1d";
 const STEALTHCDP_CHROMIUM_RELEASE_ASSET: &str =
     "chromium-stealthcdp_150.0.7835.0+stealthcdp.6b6558b55a1d_win64.zip";
@@ -55,225 +53,6 @@ enum InstallDoctorCommandResult {
     Output(Output),
     Timeout { stdout: String, stderr: String },
     SpawnError(String),
-}
-
-pub fn get_browsers_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".agent-browser")
-        .join("browsers")
-}
-
-pub fn find_installed_chrome() -> Option<PathBuf> {
-    let browsers_dir = get_browsers_dir();
-    let debug = std::env::var("AGENT_BROWSER_DEBUG").is_ok();
-
-    if debug {
-        let _ = writeln!(
-            io::stderr(),
-            "[chrome-search] home_dir={:?} browsers_dir={}",
-            dirs::home_dir(),
-            browsers_dir.display()
-        );
-    }
-
-    if !browsers_dir.exists() {
-        if debug {
-            let _ = writeln!(io::stderr(), "[chrome-search] browsers_dir does not exist");
-        }
-        return None;
-    }
-
-    let entries = match fs::read_dir(&browsers_dir) {
-        Ok(entries) => entries,
-        Err(e) => {
-            let _ = writeln!(
-                io::stderr(),
-                "Warning: cannot read Chrome cache directory {}: {}",
-                browsers_dir.display(),
-                e
-            );
-            return None;
-        }
-    };
-
-    let mut versions: Vec<_> = entries
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            let matches = e
-                .file_name()
-                .to_str()
-                .is_some_and(|n| n.starts_with("chrome-"));
-            if debug {
-                let _ = writeln!(
-                    io::stderr(),
-                    "[chrome-search] entry {:?} matches={}",
-                    e.file_name(),
-                    matches
-                );
-            }
-            matches
-        })
-        .collect();
-
-    versions.sort_by_key(|b| std::cmp::Reverse(b.file_name()));
-
-    for entry in versions {
-        let dir = entry.path();
-        if let Some(bin) = chrome_binary_in_dir(&dir) {
-            let exists = bin.exists();
-            if debug {
-                let _ = writeln!(
-                    io::stderr(),
-                    "[chrome-search] candidate {} exists={}",
-                    bin.display(),
-                    exists
-                );
-            }
-            if exists {
-                return Some(bin);
-            }
-        } else if debug {
-            let _ = writeln!(
-                io::stderr(),
-                "[chrome-search] no binary found in {}",
-                dir.display()
-            );
-        }
-    }
-
-    if debug {
-        let _ = writeln!(io::stderr(), "[chrome-search] no installed Chrome found");
-    }
-    None
-}
-
-fn chrome_binary_in_dir(dir: &Path) -> Option<PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        let app =
-            dir.join("Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
-        if app.exists() {
-            return Some(app);
-        }
-        let inner = dir.join("chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
-        if inner.exists() {
-            return Some(inner);
-        }
-        let inner_x64 = dir.join(
-            "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-        );
-        if inner_x64.exists() {
-            return Some(inner_x64);
-        }
-        None
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let bin = dir.join("chrome");
-        if bin.exists() {
-            return Some(bin);
-        }
-        let inner = dir.join("chrome-linux64/chrome");
-        if inner.exists() {
-            return Some(inner);
-        }
-        None
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let bin = dir.join("chrome.exe");
-        if bin.exists() {
-            return Some(bin);
-        }
-        let inner = dir.join("chrome-win64/chrome.exe");
-        if inner.exists() {
-            return Some(inner);
-        }
-        None
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    {
-        None
-    }
-}
-
-fn platform_key() -> &'static str {
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    {
-        "mac-arm64"
-    }
-    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    {
-        "mac-x64"
-    }
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    {
-        "linux64"
-    }
-    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    {
-        "win64"
-    }
-    #[cfg(not(any(
-        all(target_os = "macos", target_arch = "aarch64"),
-        all(target_os = "macos", target_arch = "x86_64"),
-        all(target_os = "linux", target_arch = "x86_64"),
-        all(target_os = "windows", target_arch = "x86_64"),
-    )))]
-    {
-        // Compiles on unsupported platforms (e.g. linux aarch64) so the binary
-        // can still be used for other commands like `connect`. The install path
-        // guards against this at runtime before calling platform_key().
-        panic!("Unsupported platform for Chrome for Testing download")
-    }
-}
-
-async fn fetch_download_url() -> Result<(String, String), String> {
-    let client = http_client()?;
-    let resp = client
-        .get(LAST_KNOWN_GOOD_URL)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch version info: {}", format_reqwest_error(&e)))?;
-
-    let body: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse version info: {}", e))?;
-
-    let channel = body
-        .get("channels")
-        .and_then(|c| c.get("Stable"))
-        .ok_or("No Stable channel found in version info")?;
-
-    let version = channel
-        .get("version")
-        .and_then(|v| v.as_str())
-        .ok_or("No version string found")?
-        .to_string();
-
-    let platform = platform_key();
-
-    let url = channel
-        .get("downloads")
-        .and_then(|d| d.get("chrome"))
-        .and_then(|c| c.as_array())
-        .and_then(|arr| {
-            arr.iter().find_map(|entry| {
-                if entry.get("platform")?.as_str()? == platform {
-                    Some(entry.get("url")?.as_str()?.to_string())
-                } else {
-                    None
-                }
-            })
-        })
-        .ok_or_else(|| format!("No download URL found for platform: {}", platform))?;
-
-    Ok((version, url))
 }
 
 fn format_reqwest_error(e: &reqwest::Error) -> String {
@@ -804,19 +583,7 @@ const REMOTE_VIEW_PRIVILEGE_INSTALLER: &str =
 const REMOTE_VIEW_PRIVILEGED_HELPER: &str =
     include_str!("../../scripts/libexec/agent-browser-privileged-helper");
 
-pub fn run_install(with_deps: bool, with_remote_view_privileges: bool) {
-    if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-        eprintln!(
-            "{} Chrome for Testing does not provide Linux ARM64 builds.",
-            color::error_indicator()
-        );
-        eprintln!("  Install Chromium from your system package manager instead:");
-        eprintln!("    sudo apt install chromium-browser   # Debian/Ubuntu");
-        eprintln!("    sudo dnf install chromium            # Fedora");
-        eprintln!("  Then use: agent-browser --executable-path /usr/bin/chromium");
-        exit(1);
-    }
-
+pub fn run_install(flags: &Flags, with_deps: bool, with_remote_view_privileges: bool) {
     let is_linux = cfg!(target_os = "linux");
 
     if is_linux {
@@ -845,73 +612,23 @@ pub fn run_install(with_deps: bool, with_remote_view_privileges: bool) {
         exit(1);
     }
 
-    println!("{}", color::cyan("Installing Chrome..."));
-
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap_or_else(|e| {
-            eprintln!(
-                "{} Failed to create runtime: {}",
-                color::error_indicator(),
-                e
-            );
-            exit(1);
-        });
-
-    let (version, url) = match rt.block_on(fetch_download_url()) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("{} {}", color::error_indicator(), e);
-            exit(1);
-        }
-    };
-
-    let dest = get_browsers_dir().join(format!("chrome-{}", version));
-
-    if let Some(bin) = chrome_binary_in_dir(&dest) {
-        if bin.exists() {
-            println!(
-                "{} Chrome {} is already installed",
-                color::success_indicator(),
-                version
-            );
-            return;
-        }
-    }
-
-    println!("  Downloading Chrome {} for {}", version, platform_key());
-    println!("  {}", url);
-
-    let bytes = match rt.block_on(download_bytes(&url)) {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("{} {}", color::error_indicator(), e);
-            exit(1);
-        }
-    };
-
-    match extract_zip(bytes, &dest) {
-        Ok(()) => {
-            println!(
-                "{} Chrome {} installed successfully",
-                color::success_indicator(),
-                version
-            );
-            println!("  Location: {}", dest.display());
-
-            if is_linux && !with_deps {
-                println!();
-                println!(
-                    "{} If you see \"shared library\" errors when running, use:",
-                    color::yellow("Note:")
-                );
-                println!("  agent-browser install --with-deps");
-            }
-        }
-        Err(e) => {
-            let _ = fs::remove_dir_all(&dest);
-            eprintln!("{} {}", color::error_indicator(), e);
+    let stealth_ready = flags
+        .browser_build_manifest_status
+        .get("stealthcdp_chromium")
+        .and_then(|status| status["ready"].as_bool())
+        == Some(true);
+    match crate::native::cdp::chrome::find_chrome() {
+        Some(path) => println!(
+            "{} Stock Chrome found at {}",
+            color::success_indicator(),
+            path.display()
+        ),
+        None if stealth_ready => println!(
+            "{} Configured Chromium StealthCDP build is ready",
+            color::success_indicator()
+        ),
+        None => {
+            eprintln!("{} Install Stock Google Chrome through your operating system, or configure Chromium StealthCDP with its build manifest.", color::error_indicator());
             exit(1);
         }
     }

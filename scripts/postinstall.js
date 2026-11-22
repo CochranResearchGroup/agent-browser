@@ -162,13 +162,12 @@ function findSystemChrome() {
   if (os === 'darwin') {
     const candidates = [
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
       '/Applications/Chromium.app/Contents/MacOS/Chromium',
     ];
     return candidates.find(p => existsSync(p)) || null;
   }
   if (os === 'linux') {
-    const names = ['google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium'];
+    const names = ['google-chrome', 'google-chrome-stable'];
     for (const name of names) {
       try {
         const result = execSync(`which ${name} 2>/dev/null`, { encoding: 'utf8' }).trim();
@@ -200,7 +199,7 @@ function showInstallReminder() {
 
   console.log('');
   console.log('  ⚠ No Chrome installation detected.');
-  console.log('  If you plan to use a local browser, run:');
+  console.log('  Install Stock Google Chrome through your operating system or configure Chromium StealthCDP. Then run:');
   console.log('');
   console.log('    agent-browser install');
   if (platform() === 'linux') {

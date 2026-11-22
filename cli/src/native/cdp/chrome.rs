@@ -1093,6 +1093,9 @@ pub(crate) fn launch_chrome_manual_owned(options: &LaunchOptions) -> Result<Chro
         .map(PathBuf::from)
         .or_else(find_chrome)
         .ok_or("manual_login_browser_unavailable")?;
+    crate::native::browser_session_host::browser_build_selection::reject_testing_chrome(
+        &executable,
+    )?;
     validate_profile_browser_family(options, &executable)?;
     let profile = build_chrome_args(options, false)?.user_data_dir;
     cleanup_stale_profile_lock(&profile);
@@ -1105,18 +1108,12 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
         None => find_chrome().ok_or_else(|| {
-            let cache_dir = crate::install::get_browsers_dir();
-            format!(
-                "Chrome not found. Checked:\n  \
-                 - agent-browser cache: {}\n  \
-                 - System Chrome installations\n  \
-                 - Puppeteer browser cache\n  \
-                 - Playwright browser cache\n\
-                 Run `agent-browser install` to download Chrome, or use --executable-path.",
-                cache_dir.display()
-            )
+            "Stock Google Chrome not found. Install it through your operating system or configure a Chromium StealthCDP build.".to_string()
         })?,
     };
+    crate::native::browser_session_host::browser_build_selection::reject_testing_chrome(
+        &chrome_path,
+    )?;
     validate_profile_browser_family(options, &chrome_path)?;
     if let Some(runtime_profile) = options.runtime_profile.as_deref() {
         agent_browser_lease_authority::validate_runtime_profile_name(runtime_profile)?;
@@ -1201,18 +1198,12 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
         None => find_chrome().ok_or_else(|| {
-            let cache_dir = crate::install::get_browsers_dir();
-            format!(
-                "Chrome not found. Checked:\n  \
-                 - agent-browser cache: {}\n  \
-                 - System Chrome installations\n  \
-                 - Puppeteer browser cache\n  \
-                 - Playwright browser cache\n\
-                 Run `agent-browser install` to download Chrome, or use --executable-path.",
-                cache_dir.display()
-            )
+            "Stock Google Chrome not found. Install it through your operating system or configure a Chromium StealthCDP build.".to_string()
         })?,
     };
+    crate::native::browser_session_host::browser_build_selection::reject_testing_chrome(
+        &chrome_path,
+    )?;
     validate_profile_browser_family(options, &chrome_path)?;
 
     unlock_macos_keychain(options.keychain_password.as_deref())?;
@@ -2203,35 +2194,20 @@ fn chrome_launch_error(
 }
 
 pub fn find_chrome() -> Option<PathBuf> {
-    // 1. Check Chrome downloaded by `agent-browser install`
-    if let Some(p) = crate::install::find_installed_chrome() {
-        return Some(p);
-    }
-
-    // If the cache directory exists but no Chrome was found, warn -- this
-    // likely means the cache is corrupted or the directory layout is unexpected.
-    let cache_dir = crate::install::get_browsers_dir();
-    if cache_dir.exists() {
-        let _ = writeln!(
-            std::io::stderr(),
-            "Warning: Chrome cache directory exists ({}) but no Chrome binary found inside. \
-             Falling back to system Chrome. Run `agent-browser install` to re-download.",
-            cache_dir.display()
-        );
-    }
-
-    // 2. Check system-installed Chrome
+    // Managed StealthCDP is selected through its configured build.
+    let supported = |path: &Path| {
+        path.is_file()
+            && crate::native::browser_session_host::browser_build_selection::reject_testing_chrome(
+                path,
+            )
+            .is_ok()
+    };
     #[cfg(target_os = "macos")]
     {
-        let candidates = [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium",
-            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-        ];
+        let candidates = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"];
         for c in &candidates {
             let p = PathBuf::from(c);
-            if p.exists() {
+            if supported(&p) {
                 return Some(p);
             }
         }
@@ -2239,20 +2215,14 @@ pub fn find_chrome() -> Option<PathBuf> {
 
     #[cfg(target_os = "linux")]
     {
-        let candidates = [
-            "google-chrome",
-            "google-chrome-stable",
-            "chromium-browser",
-            "chromium",
-            "brave-browser",
-            "brave-browser-stable",
-        ];
+        let candidates = ["google-chrome", "google-chrome-stable"];
         for name in &candidates {
             if let Ok(output) = Command::new("which").arg(name).output() {
                 if output.status.success() {
                     let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !path.is_empty() {
-                        return Some(PathBuf::from(path));
+                    let path = PathBuf::from(path);
+                    if supported(&path) {
+                        return Some(path);
                     }
                 }
             }
@@ -2267,29 +2237,16 @@ pub fn find_chrome() -> Option<PathBuf> {
         ];
         if let Ok(local) = std::env::var("LOCALAPPDATA") {
             let chrome = PathBuf::from(&local).join(r"Google\Chrome\Application\chrome.exe");
-            if chrome.exists() {
+            if supported(&chrome) {
                 return Some(chrome);
-            }
-            let brave =
-                PathBuf::from(&local).join(r"BraveSoftware\Brave-Browser\Application\brave.exe");
-            if brave.exists() {
-                return Some(brave);
             }
         }
         for c in &candidates {
             let p = PathBuf::from(c);
-            if p.exists() {
+            if supported(&p) {
                 return Some(p);
             }
         }
-    }
-
-    // 3. Fallback: check Puppeteer / Playwright browser caches
-    if let Some(p) = find_puppeteer_chrome() {
-        return Some(p);
-    }
-    if let Some(p) = find_playwright_chromium() {
-        return Some(p);
     }
 
     None
@@ -2715,138 +2672,6 @@ fn should_disable_dev_shm(existing_args: &[String]) -> bool {
     }
 
     false
-}
-
-/// Search Puppeteer's browser cache for a Chrome binary.
-/// Puppeteer v19+ stores Chrome in ~/.cache/puppeteer/chrome/<platform>-<version>/
-fn find_puppeteer_chrome() -> Option<PathBuf> {
-    let mut search_dirs = Vec::new();
-
-    if let Ok(custom) = std::env::var("PUPPETEER_CACHE_DIR") {
-        search_dirs.push(PathBuf::from(custom).join("chrome"));
-    }
-
-    if let Some(home) = dirs::home_dir() {
-        search_dirs.push(home.join(".cache/puppeteer/chrome"));
-    }
-
-    for dir in &search_dirs {
-        if !dir.is_dir() {
-            continue;
-        }
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            let mut matches: Vec<PathBuf> = entries
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_dir())
-                .filter_map(|e| {
-                    let candidate = build_puppeteer_binary_path(&e.path());
-                    if candidate.exists() {
-                        Some(candidate)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            matches.sort();
-            matches.reverse();
-            if let Some(p) = matches.into_iter().next() {
-                return Some(p);
-            }
-        }
-    }
-
-    None
-}
-
-#[cfg(target_os = "linux")]
-fn build_puppeteer_binary_path(version_dir: &Path) -> PathBuf {
-    version_dir.join("chrome-linux64/chrome")
-}
-
-#[cfg(target_os = "macos")]
-fn build_puppeteer_binary_path(version_dir: &Path) -> PathBuf {
-    // Puppeteer uses chrome-mac-arm64 or chrome-mac-x64 depending on arch
-    let arm = version_dir.join(
-        "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-    );
-    if arm.exists() {
-        return arm;
-    }
-    version_dir.join(
-        "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-    )
-}
-
-#[cfg(target_os = "windows")]
-fn build_puppeteer_binary_path(version_dir: &Path) -> PathBuf {
-    version_dir.join(r"chrome-win64\chrome.exe")
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-fn build_puppeteer_binary_path(version_dir: &Path) -> PathBuf {
-    version_dir.join("chrome")
-}
-
-/// Search Playwright's browser cache for a Chromium binary.
-/// Legacy fallback for users who previously installed Chromium via Playwright.
-fn find_playwright_chromium() -> Option<PathBuf> {
-    let mut search_dirs = Vec::new();
-
-    if let Ok(custom) = std::env::var("PLAYWRIGHT_BROWSERS_PATH") {
-        search_dirs.push(PathBuf::from(custom));
-    }
-
-    if let Some(home) = dirs::home_dir() {
-        search_dirs.push(home.join(".cache/ms-playwright"));
-    }
-
-    for dir in &search_dirs {
-        if !dir.is_dir() {
-            continue;
-        }
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            let mut matches: Vec<PathBuf> = entries
-                .filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.file_name()
-                        .to_str()
-                        .map(|n| n.starts_with("chromium-"))
-                        .unwrap_or(false)
-                })
-                .filter_map(|e| {
-                    let candidate = build_playwright_binary_path(&e.path());
-                    if candidate.exists() {
-                        Some(candidate)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            // Sort descending so the newest version wins
-            matches.sort();
-            matches.reverse();
-            if let Some(p) = matches.into_iter().next() {
-                return Some(p);
-            }
-        }
-    }
-
-    None
-}
-
-#[cfg(target_os = "linux")]
-fn build_playwright_binary_path(chromium_dir: &Path) -> PathBuf {
-    chromium_dir.join("chrome-linux64/chrome")
-}
-
-#[cfg(target_os = "macos")]
-fn build_playwright_binary_path(chromium_dir: &Path) -> PathBuf {
-    chromium_dir.join("chrome-mac/Chromium.app/Contents/MacOS/Chromium")
-}
-
-#[cfg(target_os = "windows")]
-fn build_playwright_binary_path(chromium_dir: &Path) -> PathBuf {
-    chromium_dir.join("chrome-win/chrome.exe")
 }
 
 fn expand_tilde(path: &str) -> String {
@@ -3762,28 +3587,6 @@ mod tests {
             "Invalid runtime profile 'custom:invalid'. Must match /^[a-zA-Z0-9_-]+$/"
         );
         assert!(!error.contains("attempt 1:"));
-    }
-
-    #[test]
-    fn test_find_playwright_chromium_nonexistent() {
-        let guard = EnvGuard::new(&["PLAYWRIGHT_BROWSERS_PATH", "HOME", "USERPROFILE"]);
-        guard.set("PLAYWRIGHT_BROWSERS_PATH", "/nonexistent/path");
-
-        let temp_home = std::env::temp_dir().join(format!(
-            "agent-browser-test-home-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system clock should be after unix epoch")
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&temp_home).expect("temp home should be created");
-        let temp_home = temp_home.to_string_lossy().to_string();
-        guard.set("HOME", &temp_home);
-        guard.set("USERPROFILE", &temp_home);
-
-        let result = find_playwright_chromium();
-        assert!(result.is_none());
     }
 
     #[test]

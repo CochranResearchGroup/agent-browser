@@ -1062,9 +1062,7 @@ fn inspect_route_display_access(route_displays: &Value) -> Value {
 fn inspect_viewer_prerequisites(privileges: &Value) -> Value {
     let client_a_env = env::var("AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE").ok();
     let client_b_env = env::var("AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE").ok();
-    // A source-free workstation installs Chrome under agent-browser's managed
-    // browser directory, which is intentionally not added to the shell PATH.
-    let installed_chrome = crate::install::find_installed_chrome()
+    let installed_chrome = crate::native::cdp::chrome::find_chrome()
         .filter(|path| path.is_file())
         .map(|path| path.display().to_string());
     let apparmor_profile_loaded = privileges
@@ -1175,7 +1173,7 @@ fn managed_chrome_sandbox_policy_status(
     let managed_root = installed_chrome
         .and_then(|path| path.split_once(managed_browser_marker))
         .map(|(home, _)| format!("{home}/.agent-browser/browsers/**/chrome"));
-    let applicable = installed_chrome.is_some() && restriction_enabled && apparmor_enabled;
+    let applicable = managed_root.is_some() && restriction_enabled && apparmor_enabled;
     let policy_present = policy_content.is_some();
     let policy_matches_managed_chrome = managed_root.as_ref().is_some_and(|root| {
         policy_content.is_some_and(|content| {
@@ -1187,7 +1185,7 @@ fn managed_chrome_sandbox_policy_status(
     });
     let ready = !applicable
         || (apparmor_service_active && apparmor_profile_loaded && policy_matches_managed_chrome);
-    let state = if installed_chrome.is_none() {
+    let state = if managed_root.is_none() {
         "not_applicable_no_managed_chrome"
     } else if !restriction_enabled || !apparmor_enabled {
         "not_required"

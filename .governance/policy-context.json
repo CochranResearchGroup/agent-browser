@@ -54,7 +54,7 @@
   "governance_inventory": [
     {
       "path": "AGENTS.md",
-      "sha256": "8186bbfeffd3ee099b8ac2b412f739a87064d0e2204c8ffc4c39526940fa1da3"
+      "sha256": "d317b7730115427c459fa047440b86eb239f9de101204f4b2a2739bfcdc77540"
     },
     {
       "path": "docs/dev/policies/0001-policy-management.md",
@@ -325,7 +325,7 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "8186bbfeffd3ee099b8ac2b412f739a87064d0e2204c8ffc4c39526940fa1da3",
+          "sha256": "d317b7730115427c459fa047440b86eb239f9de101204f4b2a2739bfcdc77540",
           "sections": [
             {
               "heading_path": [
@@ -662,7 +662,7 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "8186bbfeffd3ee099b8ac2b412f739a87064d0e2204c8ffc4c39526940fa1da3",
+          "sha256": "d317b7730115427c459fa047440b86eb239f9de101204f4b2a2739bfcdc77540",
           "sections": [
             {
               "heading_path": [
@@ -1031,7 +1031,7 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "8186bbfeffd3ee099b8ac2b412f739a87064d0e2204c8ffc4c39526940fa1da3",
+          "sha256": "d317b7730115427c459fa047440b86eb239f9de101204f4b2a2739bfcdc77540",
           "sections": [
             {
               "heading_path": [
@@ -1367,7 +1367,7 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "8186bbfeffd3ee099b8ac2b412f739a87064d0e2204c8ffc4c39526940fa1da3",
+          "sha256": "d317b7730115427c459fa047440b86eb239f9de101204f4b2a2739bfcdc77540",
           "sections": [
             {
               "heading_path": [
