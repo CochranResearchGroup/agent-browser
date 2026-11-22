@@ -471,14 +471,18 @@ impl BrowserSessionSqliteStore {
         {
             return Err(Error::Conflict);
         }
-        // Explicit legacy recovery must also respect a currently held worker
-        // lock when the claim was admitted through the guarded path.
-        let _worker_guard = if exact_claim.is_none() {
-            if let [claim] = claims.as_slice() {
-                let path = transaction
-                    .path()
-                    .map(std::path::Path::new)
-                    .ok_or(Error::Unavailable)?;
+        // Check worker exclusion under the same writer transaction as the
+        // exact claim and physical absence. Legacy claims can predate worker
+        // files, but an existing unreadable or active worker is not absent.
+        let _worker_guard = if let [claim] = claims.as_slice() {
+            let path = transaction
+                .path()
+                .map(std::path::Path::new)
+                .ok_or(Error::Unavailable)?;
+            if exact_claim.is_some() {
+                hold_finished_initial_launch_worker(path, &claim.intent.intent_id)
+                    .map_err(|()| Error::LaunchPending)?
+            } else {
                 match open_initial_launch_worker(path, &claim.intent.intent_id) {
                     Ok(worker) => {
                         worker.try_lock_shared().map_err(|_| Error::LaunchPending)?;
@@ -487,8 +491,6 @@ impl BrowserSessionSqliteStore {
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
                     Err(_) => return Err(Error::Unavailable),
                 }
-            } else {
-                None
             }
         } else {
             None
@@ -904,15 +906,19 @@ fn open_initial_launch_worker(
 fn hold_finished_initial_launch_worker(
     database: &std::path::Path,
     launch_id: &str,
-) -> Option<std::fs::File> {
-    let worker = open_initial_launch_worker(database, launch_id).ok()?;
-    worker.try_lock_shared().ok()?;
+) -> Result<Option<std::fs::File>, ()> {
+    let worker = match open_initial_launch_worker(database, launch_id) {
+        Ok(worker) => worker,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(()),
+    };
+    worker.try_lock_shared().map_err(|_| ())?;
     let boot = InitialLaunchBoot::current();
-    match initial_worker_boot_status(&worker, boot.as_ref())? {
-        BootEpochStatus::Current | BootEpochStatus::Prior | BootEpochStatus::Missing => {
-            Some(worker)
+    match initial_worker_boot_status(&worker, boot.as_ref()) {
+        Some(BootEpochStatus::Current | BootEpochStatus::Prior | BootEpochStatus::Missing) => {
+            Ok(Some(worker))
         }
-        BootEpochStatus::Unavailable => None,
+        _ => Err(()),
     }
 }
 
@@ -931,7 +937,10 @@ pub(super) fn reap_initial_launch_claims() -> Result<(), String> {
         .map_err(|_| "remote_view_session_launch_readback_required")?
         .into_iter()
         .filter(|claim| {
-            hold_finished_initial_launch_worker(&path, &claim.intent.intent_id).is_some()
+            matches!(
+                hold_finished_initial_launch_worker(&path, &claim.intent.intent_id),
+                Ok(Some(_))
+            )
         })
         .collect::<Vec<_>>();
     if records.is_empty() {
@@ -1036,8 +1045,13 @@ pub(crate) fn initial_launch_status(launch_id: &str) -> Result<serde_json::Value
         "evidenceError": evidence_error,
         "nextAction": if profile_status == "occupied" {
             "Keep the current browser open, or close that exact window and check this launch again."
-        } else if status == "outcome_unresolved" && worker_boot == BootEpochStatus::Prior {
-            "A distinct Open can recheck current profile vacancy and reconcile this prior-boot launch."
+        } else if worker_active {
+            "Wait for the original launch worker to finish, then check this launch again."
+        } else if status == "outcome_unresolved"
+            && profile_status == "no_current_lock_holder"
+            && worker_boot != BootEpochStatus::Unavailable
+        {
+            "Use a distinct Open for the same profile to verify vacancy and reconcile this launch."
         } else {
             "Inspect the original launch with the browser owner. This observation does not settle the claim."
         }
@@ -1095,17 +1109,11 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         expected: &BrowserSessionState,
         profile: &agent_browser_service_model::BrowserProfileCatalogEntry,
     ) -> Result<bool, LaunchCustodyStoreError> {
-        let database = self
-            .remote_view_mutation_connection()
-            .path()
-            .map(std::path::Path::new)
-            .ok_or(LaunchCustodyStoreError::Unavailable)?;
-        let Some(_guard) = hold_finished_initial_launch_worker(database, &claim.intent.intent_id)
-        else {
-            return Ok(false);
-        };
-        self.settle_profile_launch_absence(profile, expected, None, Some(claim))?;
-        Ok(true)
+        match self.settle_profile_launch_absence(profile, expected, None, Some(claim)) {
+            Ok(()) => Ok(true),
+            Err(LaunchCustodyStoreError::LaunchPending) => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     fn retain_owner_released_assignment(
@@ -1803,6 +1811,12 @@ mod tests {
             store.admit_launch_intent(&fresh, &expected).unwrap(),
             LaunchCustodyAdmission::New
         );
+        let legacy = store.unpublished_launch_records().unwrap().pop().unwrap();
+        assert_eq!(
+            store.reconcile_absent_initial_launch(&legacy, &expected, &profile),
+            Ok(true)
+        );
+        assert!(store.unpublished_launch_records().unwrap().is_empty());
     }
 
     #[test]
