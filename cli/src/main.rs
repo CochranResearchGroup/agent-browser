@@ -2433,7 +2433,7 @@ fn main() {
         let with_remote_view_privileges = args
             .iter()
             .any(|a| a == "--with-remote-view-privileges" || a == "--remote-view-privileges");
-        run_install(with_deps, with_remote_view_privileges);
+        run_install(&flags, with_deps, with_remote_view_privileges);
         return;
     }
 

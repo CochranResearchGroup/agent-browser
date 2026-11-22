@@ -132,8 +132,9 @@ route coordination. Service State, durable filesystem, capture, locator, and
 platform-input implementations remain CLI adapters. Browser process launch,
 Chrome and Lightpanda selection, `BrowserManager`, the automation daemon,
 snapshots, and state remain in `cli/src/native/`. The `--engine` flag selects
-Chrome vs Lightpanda. The `install` command downloads Chrome from Chrome for
-Testing directly.
+Chrome vs Lightpanda. Managed Chromium launches use Stock Google Chrome or
+configured Chromium StealthCDP. The `install` command checks browser readiness
+and can install Linux dependencies. Chrome for Testing is unsupported.
 
 ## Isolated Development Runtime
 

@@ -502,7 +502,7 @@ VERSION=v0.28.0
 curl -L -o ~/.local/bin/agent-browser \
   https://github.com/CochranResearchGroup/agent-browser/releases/download/$VERSION/agent-browser-linux-x64
 chmod +x ~/.local/bin/agent-browser
-agent-browser install  # Download Chrome from Chrome for Testing (first time only)
+agent-browser install  # Check for installed Stock Chrome or configured Chromium StealthCDP
 agent-browser install stealthcdp-chromium  # Optional preferred patched Chromium
 agent-browser install doctor  # Check user-scoped binary drift and launch readiness
 agent-browser install --with-deps --with-remote-view-privileges  # Linux RDP/Guacamole desktop setup
@@ -1213,7 +1213,7 @@ but those channels are not authoritative here.
 
 ### Requirements
 
-- **Chrome** - Run `agent-browser install` to download Chrome from [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing/) (Google's official automation channel). Existing Chrome, Brave, Playwright, and Puppeteer installations are detected automatically. No Playwright or Node.js required for the daemon.
+- **Chrome** - Install Stock Google Chrome through your operating system or configure Chromium StealthCDP. Agent Browser does not download Chrome for Testing or select browser testing caches. No Playwright or Node.js required for the daemon.
 - **Rust** - Only needed when building from source (see From Source above).
 
 ## Quick Start
@@ -2343,7 +2343,7 @@ agent-browser reload                  # Reload page
 ### Setup
 
 ```bash
-agent-browser install                 # Download Chrome from Chrome for Testing (Google's official automation channel)
+agent-browser install                 # Check for installed Stock Chrome or configured Chromium StealthCDP
 agent-browser install stealthcdp-chromium  # Download the preferred patched Chromium release when available
 agent-browser install doctor          # Check binary drift, launch readiness, and remote-view privilege state
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
@@ -6867,7 +6867,7 @@ The selected runtime host starts automatically on the first command and persists
 
 Persisted service browser-health reconciliation runs every 60000 ms while the daemon is alive. Set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable the background loop. Due active service monitors are also enqueued every 60000 ms by default; set `AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS=0` to disable monitor scheduling. Use `agent-browser service monitors run-due` for an immediate due-monitor pass without waiting for the next scheduler tick. Use `agent-browser service monitors pause <id>` and `agent-browser service monitors resume <id>` when a noisy monitor needs an explicit operator state change. Use `agent-browser service monitors triage <id>` to acknowledge the related monitor incident and clear reviewed failures together, or `agent-browser service monitors reset <id>` when only the failure count should be cleared while keeping retained evidence.
 
-**Browser Engine:** Uses Chrome (from Chrome for Testing) by default. The `--engine` flag selects between `chrome` and `lightpanda`. Supported browsers: Chromium/Chrome (via CDP) and Safari (via WebDriver for iOS).
+**Browser Engine:** Uses Stock Google Chrome or configured Chromium StealthCDP. The `--engine` flag selects between `chrome` and `lightpanda`. Supported browsers: Chromium/Chrome (via CDP) and Safari (via WebDriver for iOS).
 
 ## Platforms
 
@@ -7719,7 +7719,7 @@ prepare another copy or replay closure merely because a reply was lost.
 
 Right-click a managed browser heading or tab in the left rail to choose **Relaunch with CDP** or **Relaunch without CDP**. The tab actions button and browser mode menu offer the same controls. Review applies to the entire shared browser, including its other tasks. A successful explicit replacement preserves the logical task, durable profile and original handoff; it changes the physical browser process. Review the affected tasks before selecting relaunch. Unsaved page state and downloads may be lost; unknown URLs and uncertain website submissions are never replayed.
 
-A confirmed mode change restarts the same profile, retains its tabs and session names, and updates every attached task to the replacement process. After exit, the old PID and desktop assignment are historical records, not reasons to refuse the replacement. The supported workspace chooser includes Chrome and Chromium; Chrome for Testing is identified separately and excluded.
+A confirmed mode change restarts the same profile, retains its tabs and session names, and updates every attached task to the replacement process. After exit, the old PID and desktop assignment are historical records, not reasons to refuse the replacement. Use Stock Google Chrome or configured Chromium StealthCDP. If a retained executable points to Chrome for Testing, select an approved build before relaunch and check profile compatibility.
 
 Fullscreen Native handoffs also show a **CDP on/off** control in the top row. Switching it opens the same whole-browser relaunch review; it does not immediately restart the browser. Unverified mode stays unavailable. An interrupted conversion resumes its original operation, and completion reconnects the original handoff. Retained mode targets refresh only activity and expiry timestamps; process, profile, task, tab, target, desktop and concurrent-state changes remain guarded. A confirmed graceful relaunch returns only that viewer's own Native control before closing with the current agent epoch. The existing viewer rechecks CDP mode and rejoins the same durable handoff after a verified change. Its invitation follows only the exact completed mode journal and current launch custody; passive invitations remain passive. Native Remote View and Agent Browser must both include this integration.
 

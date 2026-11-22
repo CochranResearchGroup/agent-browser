@@ -45,15 +45,6 @@ pub fn green(text: &str) -> String {
     }
 }
 
-/// Format text in yellow (warnings)
-pub fn yellow(text: &str) -> String {
-    if is_enabled() {
-        format!("\x1b[33m{}\x1b[0m", text)
-    } else {
-        text.to_string()
-    }
-}
-
 /// Format text in cyan (info/progress)
 pub fn cyan(text: &str) -> String {
     if is_enabled() {

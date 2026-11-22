@@ -237,6 +237,61 @@ fn version_output(_: &Path) -> Option<(String, String)> {
     None
 }
 
+#[cfg(windows)]
+fn windows_testing_brand(path: &Path) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{GetFileVersionInfoSizeW, GetFileVersionInfoW};
+    let name: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    let mut handle = 0;
+    // The filename buffer is null-terminated and both Windows calls use the
+    // resource size returned for this executable. The browser is never run.
+    let size = unsafe { GetFileVersionInfoSizeW(name.as_ptr(), &mut handle) };
+    if size == 0 || size > 1024 * 1024 {
+        return false;
+    }
+    let mut resource = vec![0u8; size as usize];
+    if unsafe { GetFileVersionInfoW(name.as_ptr(), 0, size, resource.as_mut_ptr().cast()) } == 0 {
+        return false;
+    }
+    let brand: Vec<u8> = "Chrome for Testing"
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    resource.windows(brand.len()).any(|bytes| bytes == brand)
+}
+
+/// Refuse the retired browser before spawning it or closing a mode-switch source.
+pub(crate) fn reject_testing_chrome(path: &Path) -> Result<(), String> {
+    let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let hint = path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let retired_cache =
+        hint.contains("/.agent-browser/browsers/chrome-") || hint.contains("/puppeteer/chrome/");
+    let testing_name = hint.contains("chrome-for-testing")
+        || hint.contains("chrome_for_testing")
+        || hint.contains("chrome for testing");
+    let testing_brand = || {
+        path.is_file()
+            && (native_binary(&path) == Some(true)
+                || path.file_name().is_some_and(|name| {
+                    name.to_string_lossy()
+                        .to_ascii_lowercase()
+                        .contains("chrome")
+                }))
+            && version_output(&path).is_some_and(|(family, _)| family == "chrome_for_testing")
+    };
+    #[cfg(windows)]
+    let testing_resource = || windows_testing_brand(&path);
+    #[cfg(not(windows))]
+    let testing_resource = || false;
+    if retired_cache || testing_name || testing_brand() || testing_resource() {
+        return Err("chrome_for_testing_unsupported: select Stock Google Chrome or a configured Chromium StealthCDP build".into());
+    }
+    Ok(())
+}
+
 pub(super) fn inspect_executable(path: &Path) -> ExecutableEvidence {
     let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let name = path
@@ -558,6 +613,7 @@ pub(super) fn requested_build(
 }
 /// Verify before close and launch. Confirmation never substitutes for file evidence.
 pub(super) fn verify_build(path: &str, expected: Option<&str>) -> Result<(), String> {
+    reject_testing_chrome(Path::new(path))?;
     let Some(expected) = expected else {
         return Ok(());
     };
@@ -633,6 +689,10 @@ mod testing_brand_tests {
             .unwrap();
             std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
             let evidence = inspect_executable(&executable);
+            assert!(reject_testing_chrome(&executable)
+                .unwrap_err()
+                .starts_with("chrome_for_testing_unsupported:"));
+            assert!(verify_build(executable.to_str().unwrap(), None).is_err());
             assert_eq!(evidence.version.as_deref(), Some("157.0.8103.78"));
             assert_eq!(
                 evidence.family.as_deref(),

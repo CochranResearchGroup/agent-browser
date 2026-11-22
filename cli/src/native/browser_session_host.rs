@@ -23,7 +23,7 @@ use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionSqli
 #[path = "browser_build_open.rs"]
 mod browser_build_open;
 #[path = "browser_build_selection.rs"]
-mod browser_build_selection;
+pub(crate) mod browser_build_selection;
 #[path = "browser_mode_host.rs"]
 pub(crate) mod browser_mode_host;
 #[path = "browser_native_host.rs"]

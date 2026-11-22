@@ -9,7 +9,7 @@ VERSION=v0.28.0
 curl -L -o ~/.local/bin/agent-browser \
   https://github.com/CochranResearchGroup/agent-browser/releases/download/$VERSION/agent-browser-linux-x64
 chmod +x ~/.local/bin/agent-browser
-agent-browser install             # Download Chrome (first time)
+agent-browser install             # Check for installed Stock Chrome or configured Chromium StealthCDP
 agent-browser doctor windows-browser # Diagnose WSL to Windows browser routing
 agent-browser doctor windows-browser --scan-ports --firewall # Read-only port and firewall diagnostics
 agent-browser doctor remote-view # Read-only Guacamole and RDP setup diagnostics

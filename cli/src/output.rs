@@ -8531,7 +8531,7 @@ Install:
   npm install -g agent-browser           # npm
   brew install agent-browser             # Homebrew
   cargo install agent-browser            # Cargo
-  agent-browser install                  # Download Chrome (first time)
+  agent-browser install                  # Check for installed Stock Chrome or configured Chromium StealthCDP
 
 Examples:
   agent-browser open example.com

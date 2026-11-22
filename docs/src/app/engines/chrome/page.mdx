@@ -4,47 +4,20 @@ Chrome (and Chromium) is the default browser engine. agent-browser discovers, la
 
 ## Binary Discovery
 
-When no `--executable-path` is provided, agent-browser searches for Chrome in this order:
+Agent Browser uses installed Stock Google Chrome or a configured Chromium StealthCDP build. The default executable discovery checks Stock Chrome in the following locations.
 
 <table>
   <thead>
     <tr><th>Platform</th><th>Locations checked</th></tr>
   </thead>
   <tbody>
-    <tr>
-      <td>macOS</td>
-      <td>
-        <code>/Applications/Google Chrome.app</code>,
-        <code>/Applications/Google Chrome Canary.app</code>,
-        <code>/Applications/Chromium.app</code>,
-        <code>/Applications/Brave Browser.app</code>,
-        Puppeteer cache (<code>~/.cache/puppeteer/chrome/</code> or <code>PUPPETEER_CACHE_DIR</code>),
-        Chrome for Testing cache
-      </td>
-    </tr>
-    <tr>
-      <td>Linux</td>
-      <td>
-        <code>google-chrome</code>,
-        <code>google-chrome-stable</code>,
-        <code>chromium-browser</code>,
-        <code>chromium</code> in PATH,
-        Puppeteer cache (<code>~/.cache/puppeteer/chrome/</code> or <code>PUPPETEER_CACHE_DIR</code>),
-        Chrome for Testing cache
-      </td>
-    </tr>
-    <tr>
-      <td>Windows</td>
-      <td>
-        <code>%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe</code>,
-        <code>C:\Program Files\Google\Chrome\Application\chrome.exe</code>,
-        <code>C:\Program Files (x86)\...\chrome.exe</code>
-      </td>
-    </tr>
+    <tr><td>macOS</td><td><code>/Applications/Google Chrome.app</code></td></tr>
+    <tr><td>Linux</td><td><code>google-chrome</code> and <code>google-chrome-stable</code> in PATH</td></tr>
+    <tr><td>Windows</td><td>Google Chrome under Local AppData or Program Files</td></tr>
   </tbody>
 </table>
 
-If Chrome is not found, run `agent-browser install` to download Chrome from Chrome for Testing.
+Install Stock Google Chrome through your operating system or configure the Chromium StealthCDP build manifest. Agent Browser does not install or launch Chrome for Testing. A legacy executable pin that points to it must be replaced with an approved build. Check profile compatibility before relaunching with an older major version.
 
 ## Usage
 
@@ -62,16 +35,16 @@ agent-browser --engine chrome open example.com
 
 ## Custom Binary
 
-Point to any Chromium-based browser with `--executable-path`:
+Point to your installed Stock Chrome or Chromium StealthCDP executable with `--executable-path`:
 
 ```bash
-agent-browser --executable-path /path/to/chromium open example.com
+agent-browser --executable-path /path/to/chromium-stealthcdp open example.com
 ```
 
 Or via environment variable:
 
 ```bash
-export AGENT_BROWSER_EXECUTABLE_PATH=/path/to/chromium
+export AGENT_BROWSER_EXECUTABLE_PATH=/path/to/chromium-stealthcdp
 agent-browser open example.com
 ```
 
