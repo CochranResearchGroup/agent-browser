@@ -1,5 +1,7 @@
 # Active plan index
 
+[P309 CDP-free private password paste](0309-2026-11-22-cdp-free-private-paste-786.md), spec786. PL-AUTH.
+
 [P308 initial launch recovery](0308-2026-11-21-initial-launch-recovery-778.md), spec778. PL-BUGFIX.
 [P307 recoverable browser work](0307-2026-11-19-recoverable-work749.md), spec749:750–758/760–769, source accepted through PR759: configured capacity, actionable logged refusal recovery, Native activity coordination and measured latency. One review/one remediation; no deployment.
 

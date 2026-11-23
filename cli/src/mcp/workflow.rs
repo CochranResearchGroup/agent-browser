@@ -195,6 +195,33 @@ pub(super) fn inspect_mode(task_id: &str) -> Result<Value, String> {
     BrowserSessionSqliteStore::open_read_only(&path)?.inspect_task_mode(task_id)
 }
 
+/// Find the original handoff for the current tab without creating a link or
+/// making viewer availability a prerequisite for private input.
+pub(super) fn retained_task_handoff_url(task_id: &str) -> Option<String> {
+    let path = BrowserSessionSqliteStore::default_sqlite_path().ok()?;
+    let state = BrowserSessionSqliteStore::open_read_only(&path)
+        .ok()?
+        .load_session_state()
+        .ok()?;
+    let tab_id = state.sessions.get(task_id)?.current_tab_id.as_ref()?;
+    let mut matches = state.remote_view_tab_handoffs.values().filter(|link| {
+        link.session_id == task_id && &link.tab_id == tab_id && !link.target_expired
+    });
+    let link = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+    if let Some(binding) = state.host_bindings.get(task_id) {
+        return crate::native::browser_host_context::handoff_url(&binding.request, &link.id).ok();
+    }
+    let origin = std::env::var("AGENT_BROWSER_PUBLIC_ORIGIN").ok()?;
+    crate::native::browser_session_remote_view::public_origin(&origin)
+        .ok()?
+        .join(&format!("/remote-view/{}", link.id))
+        .ok()
+        .map(|url| url.to_string())
+}
+
 /// Read a compact briefing from the existing owner stores. No transport, live
 /// browser observation, credentials, page bodies or human-use acknowledgement.
 pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {

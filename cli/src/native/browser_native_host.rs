@@ -21,6 +21,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         {
             return Err("browser_native_target_changed:refresh task".into());
         }
+        if command["action"] == "native_paste_target" && !target.browser.cdp_endpoint.is_empty() {
+            return Err("browser_native_paste_mode_changed:refresh task".into());
+        }
         let original = if let Some(attachment) =
             self.state.app_browser_attachments.get(&target.browser.id)
         {
