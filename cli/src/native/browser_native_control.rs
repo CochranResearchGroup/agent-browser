@@ -479,16 +479,18 @@ fn execute_inner(
         )?;
         if control["desktopId"] != target.viewing_desktop_id
             || control["generation"] != target.viewing_generation
-            || control["owner"] != "agent"
-            || control["epoch"].as_u64().is_none()
         {
-            return Err("browser_native_paste_control_changed:return control and observe".into());
+            return Err("browser_native_paste_control_identity_changed".into());
         }
-        return Ok(json!({
+        let mut result = json!({
             "desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,
             "controlEpoch":control["epoch"],"windowId":window["id"],
             "process":window["processIdentity"]
-        }));
+        });
+        if control["owner"] != "agent" || control["epoch"].as_u64().is_none() {
+            result["recovery"] = json!("return_control");
+        }
+        return Ok(result);
     }
     // Lifecycle close is an explicit whole-browser operation. Read its current
     // Native fence only after joining the exact original process/window. This

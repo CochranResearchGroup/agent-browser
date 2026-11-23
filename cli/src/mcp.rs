@@ -5863,11 +5863,21 @@ fn call_service_mcp_tool_inner(
                     let name = workflow::address_task_command(&mut command, task_id)
                         .map_err(|error| JsonRpcError::invalid_params(&error))?;
                     let target = workflow::execute(command, &name)?;
-                    json!({"mode":"cdp_free","binding":{
-                        "desktopId":target["desktopId"],"generation":target["generation"],
-                        "controlEpoch":target["controlEpoch"],"windowId":target["windowId"],
-                        "process":target["process"]
-                    }})
+                    let mut data = json!({"mode":"cdp_free"});
+                    if target["controlEpoch"].as_u64().is_some() {
+                        data["binding"] = json!({
+                            "desktopId":target["desktopId"],"generation":target["generation"],
+                            "controlEpoch":target["controlEpoch"],"windowId":target["windowId"],
+                            "process":target["process"]
+                        });
+                    }
+                    if let Some(recovery) = target["recovery"].as_str() {
+                        data["recovery"] = json!(recovery);
+                    }
+                    if let Some(url) = workflow::retained_task_handoff_url(task_id) {
+                        data["handoffUrl"] = json!(url);
+                    }
+                    data
                 }
                 _ => {
                     return Err(JsonRpcError::invalid_params(
