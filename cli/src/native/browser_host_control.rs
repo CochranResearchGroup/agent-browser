@@ -243,6 +243,7 @@ pub(crate) fn observation(action: &str) -> bool {
             | "snapshot"
             | "screenshot"
             | "native_capture"
+            | "native_paste_target"
             | "content"
             | "gettext"
             | "inputvalue"

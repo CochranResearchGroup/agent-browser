@@ -224,7 +224,7 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
                         "maximumRuntimeLanes":{"type":"integer","minimum":1}},
                         "required":["initialCapacity","extensionIncrement","maximumCapacity"]}},
                 "anyOf":[{"required":["requestId"]},{"properties":{"operation":{"const":"capacity"}},"required":["operation"]}]})),
-            "task_briefing" | "mode" | "back" | "forward" | "reload" | "service_resources" => {
+            "task_briefing" | "mode" | "native_paste_target" | "back" | "forward" | "reload" | "service_resources" => {
                 Some(json!({"type":"object",
                 "additionalProperties":false,"properties":{},"required":[]}))
             }

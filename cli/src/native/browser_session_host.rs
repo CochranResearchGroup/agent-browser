@@ -3445,7 +3445,7 @@ where
         super::browser_host_policy::check_state(&self.state, session_name, command)?;
         if matches!(
             command["action"].as_str(),
-            Some("native_input" | "native_capture")
+            Some("native_input" | "native_capture" | "native_paste_target")
         ) {
             return self.execute_native_task(session_name, command);
         }

@@ -8078,3 +8078,10 @@ Cold runtime startup uses a persistent kernel-owned admission lock. A healthy ex
 
 
 Approval transport failure (`auth_parent_unavailable`) is not an authorization denial. Inspect the original Auth request and its `approvalDelivery` cause through the existing authenticated helper. Repair its operator notification connection, then call `receive_credential_approval` with the same `requestId`. Auth retains idempotent notification delivery and the operator decision; valid current permission does not require reapproval because transport failed. Preserve pending and uncertain input without creating a replacement request.
+
+
+For a configured CDP-free Auth Receipts route, `browser_command` with
+`action: "native_paste_target"` returns the current native window binding to
+the Auth owner. This is a read-only metadata action. Auth and Remote View
+deliver the approved password privately. Use native input for focus and
+submit only after acknowledged paste delivery.

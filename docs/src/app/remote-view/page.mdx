@@ -1471,3 +1471,10 @@ Finite handoffs and new Auth/challenge deadlines retain a trusted service-time o
 Profile recovery/reset plans keep their sealed absolute deadline. New defaults use trusted service time; apply requires the entire current time interval before the deadline. An overlapping interval is uncertain; only a lower bound at or beyond the deadline proves expiry. Authenticated, sealed completed receipts replay before time-client or current-route availability checks. Repairing time qualification never renews the plan or permits replay of unknown input.
 
 Cold runtime startup uses a persistent kernel-owned admission lock. A healthy exact warm continuation bypasses unrelated cold admission. A legacy marker's age never proves its owner absent: preserve live or unqualified ownership and use the reported startup diagnosis/replacement plan rather than deleting markers or killing processes.
+
+
+For a configured CDP-free Auth Receipts route, `browser_command` with
+`action: "native_paste_target"` returns the current native window binding to
+the Auth owner. This is a read-only metadata action. Auth and Remote View
+deliver the approved password privately. Use native input for focus and
+submit only after acknowledged paste delivery.

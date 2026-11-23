@@ -169,6 +169,12 @@ link, provider assignment, original process and Native binding checks, and does
 not wait for mode-operation history. Remote View independently owns input epochs,
 held-input arbitration and the final generation-to-effect guard.
 
+**Private native password paste**: One approved credential entry into a focused
+password field on a CDP-free browser desktop. The agent positions focus and
+requests the paste. Auth Receipts holds the credential, and Remote View owns
+paste delivery. Form submission and provider sign-in verification are separate
+actions. An uncertain paste retains the original attempt for readback.
+
 **Inspection review**: An explicit accepted or rejected judgment about one frozen inspection run, scoped to its original workspace, task, browser, tab and profile. Activity retains bounded identity and evidence-reference metadata. The judgment does not change observation validity, execution authority or readiness.
 
 **Exact task routing**: MCP page commands and authenticated dashboard browser

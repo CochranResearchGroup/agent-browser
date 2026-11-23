@@ -119,6 +119,7 @@ const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
     "mode",
     "task_briefing",
     "native_capture",
+    "native_paste_target",
     "native_input",
     "profile_duplicate",
     "browser_build",
@@ -5843,6 +5844,37 @@ fn call_service_mcp_tool_inner(
             let task_id = required_string_argument(arguments, "taskId")?;
             let data = workflow::inspect_briefing(task_id)
                 .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            return Ok(tool_response_from_payload(
+                "browser_command",
+                session,
+                json!({}),
+                data,
+                false,
+            ));
+        }
+        if arguments["action"] == "native_paste_target" {
+            let task_id = required_string_argument(arguments, "taskId")?;
+            let mode = workflow::inspect_mode(task_id)
+                .map_err(|error| JsonRpcError::invalid_params(&error))?;
+            let data = match mode["mode"].as_str() {
+                Some("cdp") => json!({"mode":"cdp"}),
+                Some("cdp_free") => {
+                    let mut command = json!({"action":"native_paste_target","id":uuid::Uuid::new_v4().to_string()});
+                    let name = workflow::address_task_command(&mut command, task_id)
+                        .map_err(|error| JsonRpcError::invalid_params(&error))?;
+                    let target = workflow::execute(command, &name)?;
+                    json!({"mode":"cdp_free","binding":{
+                        "desktopId":target["desktopId"],"generation":target["generation"],
+                        "controlEpoch":target["controlEpoch"],"windowId":target["windowId"],
+                        "process":target["process"]
+                    }})
+                }
+                _ => {
+                    return Err(JsonRpcError::invalid_params(
+                        "browser_native_paste_mode_unverified",
+                    ))
+                }
+            };
             return Ok(tool_response_from_payload(
                 "browser_command",
                 session,

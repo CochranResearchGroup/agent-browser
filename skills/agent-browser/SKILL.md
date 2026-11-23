@@ -148,3 +148,10 @@ Latency: [phases](references/cli-and-service.md#optional-command-latency-diagnos
 [Login and grant continuation](references/cli-and-service.md#continued-login-and-scoped-override-capacity).
 
 Time: [freshness and deadlines](references/cli-and-service.md#native-freshness-time).
+
+
+For a configured CDP-free Auth Receipts route, `browser_command` with
+`action: "native_paste_target"` returns the current native window binding to
+the Auth owner. This is a read-only metadata action. Auth and Remote View
+deliver the approved password privately. Use native input for focus and
+submit only after acknowledged paste delivery.

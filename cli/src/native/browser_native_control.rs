@@ -260,7 +260,14 @@ fn execute_inner(
 ) -> Result<Value, String> {
     if !matches!(
         command["action"].as_str(),
-        Some("native_input" | "native_capture" | "native_close" | "native_focus" | "native_ready")
+        Some(
+            "native_input"
+                | "native_capture"
+                | "native_close"
+                | "native_focus"
+                | "native_ready"
+                | "native_paste_target"
+        )
     ) {
         return Err("browser_native_action_unavailable".into());
     }
@@ -461,6 +468,28 @@ fn execute_inner(
             )
         }
     };
+    if command["action"] == "native_paste_target" {
+        let control = owner.request(
+            "control",
+            &json!({
+                "desktopId":target.viewing_desktop_id,
+                "expectedGeneration":target.viewing_generation,
+                "operation":"status"
+            }),
+        )?;
+        if control["desktopId"] != target.viewing_desktop_id
+            || control["generation"] != target.viewing_generation
+            || control["owner"] != "agent"
+            || control["epoch"].as_u64().is_none()
+        {
+            return Err("browser_native_paste_control_changed:return control and observe".into());
+        }
+        return Ok(json!({
+            "desktopId":target.viewing_desktop_id,"generation":target.viewing_generation,
+            "controlEpoch":control["epoch"],"windowId":window["id"],
+            "process":window["processIdentity"]
+        }));
+    }
     // Lifecycle close is an explicit whole-browser operation. Read its current
     // Native fence only after joining the exact original process/window. This
     // does not acquire a lease or relax epoch requirements for generic input.

@@ -2,6 +2,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: PRIVATE-NATIVE-PASTE-786
+    product_lane: PL-AUTH
+    objective: Complete managed CDP-free sign-in with private Remote View password delivery
+    plan: docs/dev/plans/0309-2026-11-22-cdp-free-private-paste-786.md
+    branch: auth/spec786-integration
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#786, CochranResearchGroup/agent-browser#787, CochranResearchGroup/agent-browser#788, CochranResearchGroup/agent-browser#789]
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: ["Reuse a clean merged checkout; the primary owns the Agent Browser metadata contract and coordinates the separate Remote View provider and Auth Receipts receiver branches."]
+    validation_status: Stock Chrome CDP-free X11 delivery and separate Auth public-seam tests pass; composed isolated journey is in progress
+    updated_at: 2026-11-22
   - id: INITIAL-LAUNCH-RECOVERY-778
     product_lane: PL-BUGFIX
     objective: Recover an original initial launch after external close or owner-host reboot
