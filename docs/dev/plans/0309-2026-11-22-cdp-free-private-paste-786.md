@@ -6,18 +6,19 @@ Decision: ADR 0004
 State: IN_PROGRESS
 Integration branch: auth/spec786-integration (reused merged semantic-browser-learning checkout)
 Comparison base: 551e99fdd4e07b3d05556cb441c435d935d12154
-Integration tip: 551e99fdd4e07b3d05556cb441c435d935d12154
+Synthetic validation tip: f428e5118c9034025ad49dc24abf366c7bd1074a
 
 ## Execution ledger
 
 | Ticket | Blocks | State | Owner | Writes and validation |
 | --- | --- | --- | --- | --- |
 | #787 Synthetic private paste | #788 | validated | Primary | Remote View owns private delivery and clipboard isolation. Auth Receipts owns approval and custody. Agent Browser owns the task seam. Validate on the existing synthetic native browser path. |
-| #788 Paste recovery | #789 | running | Worker after #787 validates | Same-request outcome and cleanup recovery through the existing workflow. Validate proven no-paste and uncertain delivery. |
+| #788 Paste recovery | #789 | running | paste_recovery788 | Same-request outcome and cleanup recovery through the existing workflow. Validate proven no-paste and uncertain delivery. |
 | #789 Synchrony acceptance | none | pending | Worker after #788 validates | Verify stock Chrome CDP-free, one authorized attempt and the intended account. Retain a provider failure as a distinct outcome. |
 
 Tracker parent and native edges verified. Review and TDD remediation passes
-remain at zero. No source checkpoint, runtime change, or tracker closure.
+remain at zero. The synthetic slice has local source checkpoints and disposable
+runtime evidence. All tracker issues remain open.
 
 ## Admission and provider seam
 
