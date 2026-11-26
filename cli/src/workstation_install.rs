@@ -68,8 +68,7 @@ const DASHBOARD_CANDIDATE_POLL_INTERVAL: std::time::Duration =
 // of failing the reversible upgrade at the one-second interactive default.
 const CANDIDATE_HANDOFF_STATE_LOCK_TIMEOUT_MS: &str = "30000";
 const POST_COMMIT_DOCTOR_ATTEMPTS: usize = 4;
-const POST_COMMIT_INSTALL_DOCTOR_TIMEOUT: std::time::Duration =
-    std::time::Duration::from_secs(75);
+const POST_COMMIT_INSTALL_DOCTOR_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(75);
 const POST_COMMIT_DOCTOR_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 const LEGACY_DAEMON_EXIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 const LEGACY_DAEMON_EXIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(25);
@@ -20124,7 +20123,6 @@ mod tests {
             finalize_without_source_backend(&transaction, &[handoff], || Ok((Some(42), 1, true))),
             Err("runtime source ingress backend is missing before finalize".to_string())
         );
-
     }
 
     #[test]
