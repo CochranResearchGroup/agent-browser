@@ -41,6 +41,8 @@ Unrelated session metadata updates do not block ordinary activity on an unchange
 
 Writer custody survives executable unlink.
 
+For a named account and service, resolve the profile in the registry before opening a task. Use `agent-browser service profiles lookup --account-id '<account>' --target-service-id '<service-id>' --json`. Confirm the selected record contains both the requested account and service, then pass its registry ID to `browser_open` with `profileMode: "existing"`. Use `--search` for free-text hints. If a display-label search misses, retry with the structured fields before reporting the profile missing.
+
 Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName":"Edit draft","profile":"editorial","profileMode":"persistent","taskKey":"editing","url":"https://example.com"}`. Read `data.taskId`, `profileId`, `browserId`, `tabId`, `url`. Address actions with `taskId`. Reuse `taskKey` to preserve the page/edits without navigation; distinct keys separate tasks. `browser_close` ends only the addressed task.
 
 Clicks deliver pointer input; verify page state. [Profile rules](references/cli-and-service.md#task-clicks-and-profiles).
