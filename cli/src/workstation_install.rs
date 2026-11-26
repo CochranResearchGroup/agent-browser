@@ -11234,17 +11234,19 @@ fn finalize_runtime_handoffs(prepared: &mut PreparedPayloadTransaction) -> Resul
     let source_backend = match registry.fallback_backend() {
         Some(source) => source.clone(),
         None => {
-            let supervisor = crate::session_supervisor::runtime_host_supervisor_observation()?;
-            if source_retirement_can_defer_to_supervisor(
+            return finalize_without_source_backend(
                 &prepared.transaction,
                 &prepared.runtime_handoffs,
-                supervisor.main_pid,
-                supervisor.manifests.len(),
-                supervisor.active_state == "active" && supervisor.sub_state == "running",
-            ) {
-                return Ok(());
-            }
-            return Err("runtime source ingress backend is missing before finalize".to_string());
+                || {
+                    let supervisor =
+                        crate::session_supervisor::runtime_host_supervisor_observation()?;
+                    Ok((
+                        supervisor.main_pid,
+                        supervisor.manifests.len(),
+                        supervisor.active_state == "active" && supervisor.sub_state == "running",
+                    ))
+                },
+            );
         }
     };
     let source_is_runtime_host =
@@ -11390,6 +11392,33 @@ fn source_runtime_host_retirement_is_recorded(
         .as_ref()
         .and_then(|convergence| convergence.old_host.as_ref())
         .is_some()
+}
+
+fn finalize_without_source_backend(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+    handoffs: &[PreparedRuntimeHandoff],
+    observe_supervisor: impl FnOnce() -> Result<(Option<u32>, usize, bool), String>,
+) -> Result<(), String> {
+    let browserless_source = transaction
+        .runtime_host_convergence
+        .as_ref()
+        .filter(|convergence| handoffs.is_empty() && convergence.lanes.is_empty())
+        .and_then(|convergence| convergence.old_host.as_ref());
+    if browserless_source
+        .map(recorded_runtime_host_is_absent)
+        .transpose()?
+        == Some(true)
+    {
+        // A prior resume can retire the source before acceptance is persisted.
+        // The removed route is expected once the exact source has exited.
+        return Ok(());
+    }
+
+    let (pid, manifests, running) = observe_supervisor()?;
+    if source_retirement_can_defer_to_supervisor(transaction, handoffs, pid, manifests, running) {
+        return Ok(());
+    }
+    Err("runtime source ingress backend is missing before finalize".to_string())
 }
 
 fn source_retirement_can_defer_to_supervisor(
@@ -20071,11 +20100,31 @@ mod tests {
         };
         assert!(!source_retirement_can_defer_to_supervisor(
             &transaction,
-            &[handoff],
+            std::slice::from_ref(&handoff),
             Some(41),
             1,
             true,
         ));
+
+        transaction
+            .runtime_host_convergence
+            .as_mut()
+            .unwrap()
+            .old_host
+            .as_mut()
+            .unwrap()
+            .pid = u32::MAX;
+        assert_eq!(
+            finalize_without_source_backend(&transaction, &[], || {
+                panic!("an absent source has no supervisor readiness dependency")
+            }),
+            Ok(())
+        );
+        assert_eq!(
+            finalize_without_source_backend(&transaction, &[handoff], || Ok((Some(42), 1, true))),
+            Err("runtime source ingress backend is missing before finalize".to_string())
+        );
+
     }
 
     #[test]
