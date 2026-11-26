@@ -512,6 +512,17 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
                     {
                         return Err(Error::ViewGrantTerminal);
                     }
+                    if status == reqwest::StatusCode::BAD_REQUEST
+                        && envelope_operation == "acquire"
+                        && value.get("schema_version").and_then(Value::as_u64) == Some(1)
+                        && value.get("code").and_then(Value::as_str) == Some("desktop_unavailable")
+                        && value.get("retryable").and_then(Value::as_bool) == Some(false)
+                    {
+                        return Err(Error::OwnerFailure {
+                            status: 400,
+                            cause: "desktop_unavailable",
+                        });
+                    }
                     if status != reqwest::StatusCode::OK {
                         // Preserve the existing uncertain-mutation classification.
                         // This diagnostic projection belongs to the private read.
@@ -793,6 +804,43 @@ mod tests {
             .unwrap_err();
         assert!(refused.contains("input:Rejected"));
         server.join().unwrap();
+    }
+
+    #[test]
+    fn acquire_preserves_explicit_desktop_unavailability_and_unknown_replies() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE");
+        for (body, expected) in [
+            (
+                r#"{"schema_version":1,"code":"desktop_unavailable","retryable":false,"message":"DO_NOT_REFLECT"}"#,
+                Error::OwnerFailure {
+                    status: 400,
+                    cause: "desktop_unavailable",
+                },
+            ),
+            (r#"{"code":"unreviewed"}"#, Error::OutcomeUnknown),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let origin = format!("http://{}", listener.local_addr().unwrap());
+            let server = std::thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                let request = read_request(&mut socket);
+                assert!(request.starts_with("POST /v1/consumer "));
+                assert!(request.contains("acquire"));
+                write!(socket, "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            });
+            let mut http = RemoteViewApplicationHttp::new(&origin, Duration::from_secs(2)).unwrap();
+            let envelope = RemoteViewApplicationEnvelope {
+                application: "agent-browser".into(),
+                request: RemoteViewApplicationRequest::Acquire {
+                    pool_name: "main".into(),
+                    idempotency_key: "original".into(),
+                },
+            };
+            assert_eq!(http.request(&envelope).unwrap_err(), expected);
+            server.join().unwrap();
+        }
     }
 
     #[test]
