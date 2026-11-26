@@ -1577,7 +1577,7 @@ fn pool_demand_acquires_a_free_desktop_for_an_independent_browser() {
 }
 
 #[test]
-fn pool_demand_unknown_new_desktop_reuses_healthy_peer_without_another_acquisition() {
+fn pool_demand_below_limit_waits_for_new_desktop_readback_before_placement() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider {
         pool_maximum: Some(3),
@@ -1595,17 +1595,23 @@ fn pool_demand_unknown_new_desktop_reuses_healthy_peer_without_another_acquisiti
         .occupied_desktops
         .insert(first.assignments[0].desktop_id.clone());
     provider.borrow_mut().fail_new_windows = true;
-    let continued = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
-    assert_eq!(continued.desktops.len(), 1);
     assert_eq!(
-        continued.desktops[0].desktop.desktop_id,
+        prepare_remote_view_session_pool(&mut adapter, &mut store, &pool)
+            .err()
+            .as_deref(),
+        Some("remote_view_runtime_assignment_unavailable"),
+        "an occupied desktop cannot be offered below the pool limit"
+    );
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+
+    provider.borrow_mut().fail_new_windows = false;
+    let recovered = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
+    assert_eq!(recovered.desktops.len(), 1);
+    assert_ne!(
+        recovered.desktops[0].desktop.desktop_id,
         first.assignments[0].desktop_id
     );
-    assert_eq!(
-        provider.borrow().acquisitions.len(),
-        2,
-        "failed new observation must not acquire a third desktop"
-    );
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
 }
 
 #[test]

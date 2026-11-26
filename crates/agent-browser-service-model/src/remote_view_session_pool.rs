@@ -186,39 +186,32 @@ pub fn prepare_remote_view_session_pool<
             candidates.push(candidate);
         }
         let warm_minimum_met = assignments.len() >= pool.desired_desktops as usize;
-        if warm_minimum_met && !candidates.is_empty() {
+        let growth_limit_reached = assignments.len() >= maximum as usize;
+        let readback_pending = unresolved || new_observation_failed;
+        if !candidates.is_empty() && (warm_minimum_met || readback_pending) {
             return Ok(RemoteViewPreparedSessionPool {
                 assignments,
                 desktops: candidates,
             });
         }
-        if unresolved || new_observation_failed {
-            // Reuse only positively observed, eligible existing capacity. A
-            // failed new observation never causes another acquisition, nor
-            // makes that unknown desktop a placement candidate.
-            return if observed.is_empty() {
-                Err(if unresolved {
-                    "remote_view_pool_acquisition_readback_required"
-                } else {
-                    "remote_view_runtime_assignment_unavailable"
-                }
-                .into())
-            } else {
-                Ok(RemoteViewPreparedSessionPool {
-                    assignments,
-                    desktops: observed,
-                })
-            };
-        }
-        // At the growth limit known healthy occupied desktops are eligible
-        // for wrap-around. Unknown peers never become placement candidates.
-        if assignments.len() >= maximum as usize && !observed.is_empty() {
+        // Only the growth limit permits wrap-around onto an occupied desktop.
+        // An unknown desktop is never a placement candidate.
+        if growth_limit_reached && !observed.is_empty() {
             return Ok(RemoteViewPreparedSessionPool {
                 assignments,
                 desktops: observed,
             });
         }
-        if assignments.len() >= maximum as usize {
+        // A failed new observation does not justify another acquisition.
+        if readback_pending {
+            return Err(if unresolved {
+                "remote_view_pool_acquisition_readback_required"
+            } else {
+                "remote_view_runtime_assignment_unavailable"
+            }
+            .into());
+        }
+        if growth_limit_reached {
             return Err(if capacity_in_use {
                 "remote_view_pool_capacity_exhausted"
             } else {

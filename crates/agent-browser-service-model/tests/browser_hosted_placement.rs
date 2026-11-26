@@ -84,13 +84,17 @@ impl BrowserSessionEffects for Effects {
     }
     fn launch_browser(
         &mut self,
-        _: &BrowserProfileCatalogEntry,
+        profile: &BrowserProfileCatalogEntry,
         desktop: Option<&RemoteViewFixedDesktop>,
     ) -> Result<BrowserLaunch, String> {
         self.launched.push(desktop.cloned());
         Ok(BrowserLaunch {
             process_identity: None,
-            browser_id: "browser".into(),
+            browser_id: if profile.id == "profile" {
+                "browser".into()
+            } else {
+                format!("browser:{}", profile.id)
+            },
             pid: 123,
             cdp_endpoint: "http://fixture".into(),
             desktop: desktop.cloned(),
@@ -193,6 +197,40 @@ fn open(
     )
     .open(request)
 }
+#[test]
+fn ordinary_open_uses_a_vacant_desktop_before_wrapping_to_an_occupied_one() {
+    let mut catalog = catalog();
+    for profile_id in ["second", "third"] {
+        let mut profile = catalog.profiles["profile"].clone();
+        profile.id = profile_id.into();
+        profile.name = profile_id.into();
+        profile.user_data_dir = format!("/fixture/{profile_id}");
+        catalog.profiles.insert(profile.id.clone(), profile);
+    }
+    let mut state = BrowserSessionState::default();
+    let mut fx = effects(&[("first", 1, true)]);
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 100,
+        remote_view_desktops: vec![],
+    };
+
+    for (time, profile, ids) in [
+        (1, "profile", vec![("first", 1, true)]),
+        (2, "second", vec![("second", 1, true)]),
+        (
+            3,
+            "third",
+            vec![("second", 1, true), ("first", 1, true), ("spare", 1, true)],
+        ),
+    ] {
+        fx.candidates = effects(&ids).candidates;
+        BrowserSessionManager::new(&mut state, &catalog, &mut fx, config.clone())
+            .open(OpenBrowserSession::exact_profile(profile, profile, time))
+            .unwrap();
+    }
+    assert_eq!(fx.launched.last(), Some(&Some(desktop("spare", 1))));
+}
+
 #[test]
 fn required_placement_selects_exact_generation_instead_of_provider_order() {
     let mut state = BrowserSessionState::default();

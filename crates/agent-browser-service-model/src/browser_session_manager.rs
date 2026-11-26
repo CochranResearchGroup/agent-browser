@@ -2432,7 +2432,22 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                             .position(|candidate| &candidate.desktop.desktop_id == last)
                     })
                     .map_or(0, |index| (index + 1) % ready.len());
-                Some(ready[index].desktop.clone())
+                // A provider fallback can return ready desktops with existing
+                // windows. Prefer vacant capacity before wrapping onto a peer.
+                let available = ready[index..]
+                    .iter()
+                    .chain(&ready[..index])
+                    .find(|candidate| {
+                        !self.state.browsers.values().any(|browser| {
+                            browser.desktop.as_ref().is_some_and(|desktop| {
+                                desktop.desktop_id == candidate.desktop.desktop_id
+                                    && desktop.generation == candidate.desktop.generation
+                            })
+                        })
+                    })
+                    .copied()
+                    .unwrap_or(ready[index]);
+                Some(available.desktop.clone())
             } else {
                 Some(
                     select_least_crowded_remote_view_desktop(candidates, &live_desktop_ids)?
