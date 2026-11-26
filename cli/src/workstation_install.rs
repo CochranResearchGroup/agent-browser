@@ -68,6 +68,8 @@ const DASHBOARD_CANDIDATE_POLL_INTERVAL: std::time::Duration =
 // of failing the reversible upgrade at the one-second interactive default.
 const CANDIDATE_HANDOFF_STATE_LOCK_TIMEOUT_MS: &str = "30000";
 const POST_COMMIT_DOCTOR_ATTEMPTS: usize = 4;
+const POST_COMMIT_INSTALL_DOCTOR_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(75);
 const POST_COMMIT_DOCTOR_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 const LEGACY_DAEMON_EXIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 const LEGACY_DAEMON_EXIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(25);
@@ -5790,6 +5792,12 @@ fn verify_final_doctors(
         } else {
             1
         };
+        // A retained generation can be slower than the release candidate.
+        let timeout = if expected_upgrade.is_some() && label == "install doctor" {
+            POST_COMMIT_INSTALL_DOCTOR_TIMEOUT
+        } else {
+            std::time::Duration::from_secs(45)
+        };
         let mut last_failure = None;
         for attempt in 0..attempts {
             let output = run_final_doctor_observed_with_timeout(
@@ -5800,7 +5808,7 @@ fn verify_final_doctors(
                 &args,
                 support_root,
                 command_env,
-                std::time::Duration::from_secs(45),
+                timeout,
             )?;
             let payload: Value = serde_json::from_slice(&output.stdout)
                 .map_err(|error| format!("{label} JSON parse failed: {error}"))?;
@@ -17735,6 +17743,58 @@ mod tests {
         assert!(!paths.generations_dir.exists());
         assert!(!paths.current_selector.exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn upgrade_accepts_ready_selected_doctor_after_previous_deadline() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = env::temp_dir().join(format!(
+            "agent-browser-doctor-deadline-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir(&root).unwrap();
+        let mut paths = install_paths(&root);
+        paths.binary = root.join("agent-browser");
+        let transaction =
+            new_upgrade_transaction(&paths, "candidate".into(), "a".repeat(64), "b".repeat(64));
+        let payload = serde_json::json!({
+            "success": false,
+            "data": {
+                "issues": [{"code": "workstation_upgrade_transaction_not_terminal"}],
+                "liveDashboardRuntime": {"workstationUpgrade": {
+                    "latestTransaction": {
+                        "transactionId": transaction.transaction_id,
+                        "state": "post_commit_validating"
+                    },
+                    "selectedGenerationId": transaction.candidate_generation_id
+                }},
+                "sessionSupervisors": {"sessions": [], "issues": []}
+            }
+        });
+        let remote_payload = serde_json::json!({"data": {
+            "install": {"data": payload},
+            "remoteControl": {
+                "rdpGatewayReady": true,
+                "privateDisplayAllocatorReady": true,
+                "routePoolReady": true,
+                "routeUrlReady": true,
+                "routeDisplayReady": true,
+                "routeDisplayAccessReady": true,
+                "browserLaunchReady": true
+            }
+        }});
+        let program = format!(
+            "#!/bin/sh\nif [ \"$1\" = install ]; then\n  sleep 46\n  printf '%s\\n' '{}'\nelse\n  printf '%s\\n' '{}'\nfi\n",
+            payload, remote_payload
+        );
+        fs::write(&paths.binary, program).unwrap();
+        fs::set_permissions(&paths.binary, fs::Permissions::from_mode(0o700)).unwrap();
+
+        let outcome = verify_final_doctors(&paths, &root, &[], Some(&transaction), &[]);
+        fs::remove_dir_all(&root).unwrap();
+        assert_eq!(outcome, Ok(()));
     }
 
     #[cfg(unix)]
