@@ -2257,21 +2257,31 @@ impl<
         {
             LaunchCustodyAdmission::New => (),
             LaunchCustodyAdmission::Existing(_) => {
-                return Err("browser_session_recovery_readback_required".into())
+                return Err(launch_readback(
+                    "browser_session_recovery_readback_required",
+                    &intent,
+                ));
             }
         }
         self.pending = Some((intent.clone(), false));
         let mut launch = self
             .effects
             .recover_launch(browser, profile, &intent, environment, &observation)
-            .map_err(|_| "browser_session_recovery_launch_readback_required")?;
+            .map_err(|_| {
+                launch_readback("browser_session_recovery_launch_readback_required", &intent)
+            })?;
         if launch.browser_id != browser.id {
             return Err("browser_session_recovery_identity_conflict".into());
         }
         launch.desktop = Some(desktop.clone());
         self.store
             .observe_launch_intent(&intent, &launch)
-            .map_err(|_| "browser_session_recovery_observation_readback_required")?;
+            .map_err(|_| {
+                launch_readback(
+                    "browser_session_recovery_observation_readback_required",
+                    &intent,
+                )
+            })?;
         let mut restored_browser = browser.clone();
         restored_browser.pid = launch.pid;
         restored_browser.cdp_endpoint = launch.cdp_endpoint.clone();
@@ -2324,8 +2334,12 @@ impl<
 }
 
 fn initial_launch_readback(intent: &BrowserLaunchIntent) -> String {
+    launch_readback("remote_view_session_launch_readback_required", intent)
+}
+
+fn launch_readback(code: &str, intent: &BrowserLaunchIntent) -> String {
     format!(
-        "remote_view_session_launch_readback_required: profileId={}; launchId={}; inspect with browser_command action=launch_status params.launchId={}",
+        "{code}: profileId={}; launchId={}; inspect with browser_command action=launch_status params.launchId={}",
         intent.profile_id, intent.intent_id, intent.intent_id
     )
 }
