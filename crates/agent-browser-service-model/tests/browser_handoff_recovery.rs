@@ -4,6 +4,7 @@ use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[derive(Default)]
 struct Evidence {
+    interrupt_recovery_launch: bool,
     initial_profile_vacant: bool,
     initial_attachment_error: bool,
     pending: Option<BrowserLaunchCustodyRecord>,
@@ -353,6 +354,9 @@ impl RemoteViewBrowserProcessEffects for Runtime {
             .into_environment(observation, &intent.assignment)
             .unwrap();
         self.evidence.borrow_mut().effects.push("launch".into());
+        if self.evidence.borrow().interrupt_recovery_launch {
+            return Err(RemoteViewBrowserProcessError::Rejected);
+        }
         Ok(BrowserLaunch {
             process_identity: None,
             browser_id: browser.id.clone(),
@@ -518,12 +522,13 @@ impl BrowserSessionEffects for Runtime {
 
 #[test]
 fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody() {
-    for (absent, fail_restoration, reject_environment, restored_tabs) in [
-        (false, false, false, false),
-        (true, true, false, false),
-        (true, false, false, false),
-        (true, false, true, false),
-        (true, false, false, true),
+    for (absent, fail_restoration, reject_environment, restored_tabs, interrupt_launch) in [
+        (false, false, false, false, false),
+        (true, true, false, false, false),
+        (true, false, false, false, false),
+        (true, false, true, false, false),
+        (true, false, false, true, false),
+        (true, false, false, false, true),
     ] {
         let mut f: Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
@@ -534,6 +539,7 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
             serde_json::from_value(f["assignment"].clone()).unwrap();
         let evidence = Rc::new(RefCell::new(Evidence {
             prior: Some(assignment.clone()),
+            interrupt_recovery_launch: interrupt_launch,
             ..Default::default()
         }));
         let profile = BrowserProfileCatalogEntry {
@@ -600,7 +606,15 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
         .unwrap();
         effects.begin_operation(&state).unwrap();
         let outcome = effects.recover_browser(&browser, &profile, &tabs, &navigation);
-        if reject_environment {
+        if interrupt_launch {
+            let error = outcome.unwrap_err();
+            let evidence = evidence.borrow();
+            let pending = evidence.pending.as_ref().unwrap();
+            assert!(error.starts_with("browser_session_recovery_launch_readback_required:"));
+            assert!(error.contains(&format!("params.launchId={}", pending.intent.intent_id)));
+            assert!(!pending.published);
+            assert_eq!(evidence.effects, ["absence", "claim", "launch"]);
+        } else if reject_environment {
             let error = outcome.unwrap_err();
             assert!(error.contains("browser_session_recovery_environment_unavailable"));
             assert!(
