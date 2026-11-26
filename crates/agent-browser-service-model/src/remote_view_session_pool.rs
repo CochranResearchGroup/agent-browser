@@ -13,6 +13,20 @@ pub struct RemoteViewPreparedSessionPool {
     pub desktops: Vec<RemoteViewDesktopCandidate>,
 }
 
+const ACQUISITION_READBACK_REQUIRED: &str = "remote_view_pool_acquisition_readback_required";
+
+fn acquisition_failure(error: RemoteViewApplicationAdapterError) -> &'static str {
+    match error {
+        RemoteViewApplicationAdapterError::Transport(
+            RemoteViewApplicationTransportError::OwnerFailure {
+                status: 400,
+                cause: "desktop_unavailable",
+            },
+        ) => "remote_view_pool_acquisition_readback_required: Remote View reported desktop_unavailable",
+        _ => ACQUISITION_READBACK_REQUIRED,
+    }
+}
+
 /// Background maintenance for an already-used pool. An unused environment
 /// does not acquire desktops merely because its daemon is running.
 pub fn replenish_remote_view_session_pool<
@@ -90,15 +104,21 @@ pub fn prepare_remote_view_session_pool<
     let pending = store
         .pending_pool_acquisitions(&adapter.application, &pool.name)
         .map_err(|_| "remote_view_pool_custody_unavailable".to_string())?;
-    let mut unresolved = false;
+    let mut pending_failure = None;
     for record in pending {
         if !matches!(&record.envelope.request,
             RemoteViewApplicationRequest::Acquire { pool_name, .. } if pool_name == &pool.name)
         {
             return Err("remote_view_pool_acquisition_readback_required".into());
         }
-        unresolved |= adapter.reconcile_acquisition(&record, store).is_err();
+        if let Err(error) = adapter.reconcile_acquisition(&record, store) {
+            let failure = acquisition_failure(error);
+            if pending_failure.is_none() || failure != ACQUISITION_READBACK_REQUIRED {
+                pending_failure = Some(failure);
+            }
+        }
     }
+    let unresolved = pending_failure.is_some();
     let confirmed = if unresolved {
         store
             .confirmed_pool_acquisitions(&adapter.application, &pool.name)
@@ -204,12 +224,9 @@ pub fn prepare_remote_view_session_pool<
         }
         // A failed new observation does not justify another acquisition.
         if readback_pending {
-            return Err(if unresolved {
-                "remote_view_pool_acquisition_readback_required"
-            } else {
-                "remote_view_runtime_assignment_unavailable"
-            }
-            .into());
+            return Err(pending_failure
+                .unwrap_or("remote_view_runtime_assignment_unavailable")
+                .into());
         }
         if growth_limit_reached {
             return Err(if capacity_in_use {
@@ -230,7 +247,7 @@ pub fn prepare_remote_view_session_pool<
             .map_err(|_| "remote_view_pool_acquisition_readback_required".to_string())?;
         let acquired = adapter
             .acquire(pool.name.clone(), key, store)
-            .map_err(|_| "remote_view_pool_acquisition_readback_required".to_string())?;
+            .map_err(acquisition_failure)?;
         inventory = adapter
             .inventory()
             .map_err(|_| "remote_view_runtime_inventory_unavailable".to_string())?;
