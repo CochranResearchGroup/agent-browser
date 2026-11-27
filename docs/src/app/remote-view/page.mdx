@@ -1379,7 +1379,9 @@ missing as closed without closing a physical target or erasing their history.
 The background owner writes its latest maintenance pass to the private file
 `~/.agent-browser/service/browser-session-reaper.json`. It records start/completion
 times, completed/deferred/failed outcome, cleanup counts and bounded error codes.
-Browser identifiers in deferrals are hashed; page URLs and titles are omitted.
+The receipt includes scoped retention reasons, available expiry, and recovery
+actions. Browser and evidence identifiers are hashed. Page URLs and titles
+are omitted.
 A running or old receipt is not proof of a completed pass. This diagnostic does
 not renew activity, change TTL defaults or authorize cleanup retries.
 

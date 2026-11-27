@@ -227,6 +227,75 @@ impl BrowserSessionSqliteStore {
         Ok(inspection)
     }
 
+    pub(crate) fn last_retention_observation(browser_id: &str) -> Option<serde_json::Value> {
+        super::browser_session_reaper::last_observation_for(browser_id)
+    }
+
+    pub(crate) fn describe_tab_lifetime(
+        state: &BrowserSessionState,
+        tab_id: &str,
+        handoff: Option<&agent_browser_service_model::RemoteViewTabHandoff>,
+    ) -> Option<serde_json::Value> {
+        let lifetime = state
+            .tab_lifetimes
+            .get(tab_id)
+            .or_else(|| handoff?.resume.as_ref()?.tab_lifetime.as_ref())?;
+        let window = lifetime
+            .inactivity_ms
+            .and_then(|duration| state.tab_inactivity_window_ms(tab_id, duration));
+        let policy_source =
+            handoff.and_then(|link| state.tab_lifetime_policy_sources.get(&link.id));
+        Some(serde_json::json!({
+            "inactivityMs":lifetime.inactivity_ms,
+            "pressureInactivityMs":lifetime.pressure_inactivity_ms,
+            "policySource":policy_source,
+            "activityObservedAtMs":window.map(|(observed, _)| observed),
+            "deadlineAtMs":window.map(|(_, deadline)| deadline),
+        }))
+    }
+
+    /// Read-only current retention evidence for the addressed task tab.
+    pub(crate) fn inspect_tab_retention(
+        state: &BrowserSessionState,
+        tab: &agent_browser_service_model::ManagedBrowserTab,
+        current: Option<&agent_browser_service_model::ServiceTimeOrigin>,
+    ) -> Vec<agent_browser_service_model::BrowserRetentionHold> {
+        use agent_browser_service_model::BrowserRetentionHold;
+        let mut holds =
+            state.tab_retention_holds(tab, current.map(|time| time.earliest_utc_ms), true);
+        if let Some(browser) = state.browsers.get(&tab.browser_id) {
+            let observed =
+                super::service_store::load_default_service_state_snapshot().and_then(|service| {
+                    super::service_resources::managed_browser_idle_retention_holds(
+                        &service,
+                        browser,
+                        &chrono::Utc::now().to_rfc3339(),
+                    )
+                });
+            match observed {
+                Ok(runtime_holds) => holds.extend(runtime_holds),
+                Err(error) => holds.push(BrowserRetentionHold::browser(
+                    browser,
+                    super::browser_session_reaper::error_code(&error),
+                    "Inspect runtime custody and retry after its evidence is available.",
+                )),
+            }
+        }
+        // Handoff IDs are bearer locators and are already separately exposed
+        // through the authorized handoff surface.
+        for hold in &mut holds {
+            if matches!(
+                hold.reason_code.as_str(),
+                "legacy_handoff_target_retention"
+                    | "pending_human_use"
+                    | "pending_human_time_unavailable"
+            ) {
+                hold.evidence_id = None;
+            }
+        }
+        holds
+    }
+
     pub(crate) fn original_browser_identity(
         &self,
         state: &BrowserSessionState,

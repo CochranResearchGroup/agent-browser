@@ -1433,13 +1433,20 @@ fn uncertain_browser_observation_does_not_starve_another_tabs_lifetime() {
         !state.tabs.contains_key("tab-b"),
         "unrelated expiry was starved: {observed:?}"
     );
+    let observed = observed.unwrap();
     assert_eq!(
-        observed.unwrap().deferred_browser_errors,
+        observed.deferred_browser_errors,
         BTreeMap::from([(
             created[0].browser_id.clone(),
             "synthetic_owner_observation_unavailable".into()
         )])
     );
+    assert!(observed.retention_holds.iter().any(|hold| {
+        hold.reason_code == "synthetic_owner_observation_unavailable"
+            && hold.scope == "browser"
+            && hold.target_id == created[0].browser_id
+            && !hold.recovery.is_empty()
+    }));
     assert!(
         state.tabs.contains_key("tab-a"),
         "uncertain owner must remain protected"
@@ -1452,6 +1459,64 @@ fn uncertain_browser_observation_does_not_starve_another_tabs_lifetime() {
         effects.closes.is_empty(),
         "shared or uncertain browser must remain open"
     );
+}
+
+#[test]
+fn expired_finite_handoff_no_longer_retains_legacy_target() {
+    use agent_browser_service_model::{retain_remote_view_tab_handoff, ServiceTimeOrigin};
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "dormant-tab".into(),
+            target_id: "dormant-target".into(),
+            source: BrowserTabSource::SessionInitial,
+        }),
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 10,
+        remote_view_desktops: Vec::new(),
+    };
+    let mut manager =
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone());
+    let opened = manager
+        .open(OpenBrowserSession::exact_profile(
+            "bookmarked",
+            "profile-a",
+            100,
+        ))
+        .unwrap();
+    manager.tab_for_navigation(&opened.session_id, 100).unwrap();
+    drop(manager);
+    let origin = ServiceTimeOrigin::new("fixture".into(), 1_000, 1_002).unwrap();
+    retain_remote_view_tab_handoff(&mut state, "finite-link", &opened.session_id, "dormant-tab")
+        .unwrap();
+    state
+        .remote_view_tab_handoffs
+        .get_mut("finite-link")
+        .unwrap()
+        .renew_link_lifetime(Some(origin.clone()), 40)
+        .unwrap();
+    state.observe_expiry_sources(&origin);
+
+    let before = state.tab_retention_holds(&state.tabs["dormant-tab"], Some(1_039), true);
+    assert_eq!(before.len(), 1);
+    assert_eq!(before[0].reason_code, "legacy_handoff_target_retention");
+    assert_eq!(before[0].evidence_id.as_deref(), Some("finite-link"));
+    assert_eq!(before[0].expires_at_ms, Some(1_040));
+    assert!(state
+        .tab_retention_holds(&state.tabs["dormant-tab"], Some(1_040), true)
+        .is_empty());
+
+    let mut manager = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config);
+    manager.use_qualified_expiry();
+    let outcome = manager.reap(1_040).unwrap();
+    assert_eq!(outcome.expired_session_ids, [opened.session_id]);
+    assert!(outcome.retention_holds.is_empty());
+    assert!(!state.tabs.contains_key("dormant-tab"));
+    assert!(state.remote_view_tab_handoffs.contains_key("finite-link"));
 }
 
 #[test]

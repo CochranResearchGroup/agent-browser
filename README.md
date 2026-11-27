@@ -7866,6 +7866,11 @@ URLs, page bodies, artifact paths and credentials are omitted. Artifact referenc
 recorded by `browser_artifact` describe completed operations, not continuing file
 availability. Older artifacts without recorded references remain unknown.
 
+When available, the briefing also shows the effective tab inactivity policy,
+its source, and the qualified deadline. Current retention holds identify their
+scope, reason, available expiry, and recovery action. The last retention
+observation describes a previous owner maintenance pass.
+
 Software clients can use `getTaskBriefing({baseUrl, taskId, headers})` from
 `@agent-browser/client/task-briefing`. Its authenticated read endpoint is
 `GET /api/browser/tasks/{encoded-task-id}/briefing`; supply the existing dashboard

@@ -333,6 +333,22 @@ pub trait BrowserSessionEffects {
         Ok(true)
     }
 
+    /// Explain the same read-only permission check used by the reaper.
+    fn idle_browser_close_holds(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<Vec<BrowserRetentionHold>, String> {
+        Ok(if self.permits_idle_browser_close(browser)? {
+            Vec::new()
+        } else {
+            vec![BrowserRetentionHold::browser(
+                browser,
+                "browser_session_idle_retirement_held",
+                "Inspect current task ownership and connected viewers before retrying.",
+            )]
+        })
+    }
+
     /// Revalidate current activity and retain adapter admission exclusion until
     /// the caller finishes automatic close effects. None defers without effects.
     /// Provider-free adapters have no concurrent authority and use the fallback;
@@ -692,6 +708,37 @@ pub struct CloseBrowserSessionResult {
     pub disposition: SessionCloseDisposition,
 }
 
+/// Current reason an automatic retirement cannot proceed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserRetentionHold {
+    pub scope: String,
+    pub target_id: String,
+    pub browser_id: String,
+    pub reason_code: String,
+    pub evidence_id: Option<String>,
+    pub expires_at_ms: Option<u64>,
+    pub recovery: String,
+}
+
+impl BrowserRetentionHold {
+    pub fn browser(
+        browser: &ManagedBrowserInstance,
+        reason_code: impl Into<String>,
+        recovery: &str,
+    ) -> Self {
+        Self {
+            scope: "browser".into(),
+            target_id: browser.id.clone(),
+            browser_id: browser.id.clone(),
+            reason_code: reason_code.into(),
+            evidence_id: None,
+            expires_at_ms: None,
+            recovery: recovery.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ReapBrowserSessionsResult {
     pub expired_tab_ids: Vec<String>,
@@ -700,6 +747,7 @@ pub struct ReapBrowserSessionsResult {
     pub closed_browser_ids: Vec<String>,
     pub deleted_disposable_profile_ids: Vec<String>,
     pub deferred_browser_errors: BTreeMap<String, String>,
+    pub retention_holds: Vec<BrowserRetentionHold>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1074,6 +1122,8 @@ pub struct BrowserSessionState {
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
     #[serde(default)]
     pub tab_lifetimes: BTreeMap<String, BrowserTabLifetime>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tab_lifetime_policy_sources: BTreeMap<String, String>,
     /// Original supplied context belongs to the tab, independently of its links.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tab_metadata: BTreeMap<String, BrowserTaskMetadata>,
@@ -1117,6 +1167,7 @@ impl Default for BrowserSessionState {
             disposable_profiles: BTreeMap::new(),
             tabs: BTreeMap::new(),
             tab_lifetimes: BTreeMap::new(),
+            tab_lifetime_policy_sources: BTreeMap::new(),
             tab_metadata: BTreeMap::new(),
             pending_human_tabs: BTreeMap::new(),
             tab_history: Vec::new(),
@@ -1129,6 +1180,187 @@ impl Default for BrowserSessionState {
 }
 
 impl BrowserSessionState {
+    /// Inspect the exact target's recorded holds using the reaper's time basis.
+    /// A missing time observation is reported independently from a current hold.
+    pub fn tab_retention_holds(
+        &self,
+        tab: &ManagedBrowserTab,
+        now_ms: Option<u64>,
+        qualified: bool,
+    ) -> Vec<BrowserRetentionHold> {
+        let mut holds = Vec::new();
+        let mut add = |scope: &str,
+                       target: &str,
+                       reason: &str,
+                       evidence: Option<&str>,
+                       expiry,
+                       recovery: &str| {
+            holds.push(BrowserRetentionHold {
+                scope: scope.into(),
+                target_id: target.into(),
+                browser_id: tab.browser_id.clone(),
+                reason_code: reason.into(),
+                evidence_id: evidence.map(str::to_owned),
+                expires_at_ms: expiry,
+                recovery: recovery.into(),
+            });
+        };
+        if self.leave_open_session_ids.contains(&tab.session_id) {
+            add(
+                "session",
+                &tab.session_id,
+                "leave_open",
+                None,
+                None,
+                "Close the task explicitly when its work is finished.",
+            );
+        }
+        if let Some(operation) = self
+            .sessions
+            .get(&tab.session_id)
+            .and_then(|session| self.profile_operation_ids.get(&session.profile_id))
+        {
+            add(
+                "session",
+                &tab.session_id,
+                "profile_operation",
+                Some(operation),
+                None,
+                "Inspect and finish the original profile operation.",
+            );
+        }
+        for claim in self.retention_claims.values().filter(|claim| {
+            claim.session_id == tab.session_id
+                && !claim.released
+                && retention_generation(self, &claim.session_id).as_deref()
+                    == Some(claim.generation.as_str())
+        }) {
+            let deadline = if qualified {
+                self.retention_deadline("claim", &claim.claim_id, claim.expires_at_ms, 300_000)
+            } else {
+                Some(claim.expires_at_ms)
+            };
+            if deadline
+                .zip(now_ms)
+                .is_none_or(|(deadline, now)| now < deadline)
+            {
+                let reason = if deadline.is_some() && now_ms.is_some() {
+                    "active_retention_claim"
+                } else {
+                    "retention_claim_time_unavailable"
+                };
+                add(
+                    "session",
+                    &tab.session_id,
+                    reason,
+                    Some(&claim.claim_id),
+                    deadline,
+                    "Wait for claim expiry or release the original claim through its owner.",
+                );
+            }
+        }
+        if let Some(hold) = self.pending_human_tabs.get(&tab.id) {
+            let deadline = hold.expires_at_ms.and_then(|deadline| {
+                if qualified {
+                    self.retention_deadline(
+                        "hold",
+                        &tab.id,
+                        hold.requested_at_ms,
+                        deadline.saturating_sub(hold.requested_at_ms),
+                    )
+                } else {
+                    Some(deadline)
+                }
+            });
+            if deadline
+                .zip(now_ms)
+                .is_none_or(|(deadline, now)| now < deadline)
+            {
+                let reason =
+                    if hold.expires_at_ms.is_some() && (deadline.is_none() || now_ms.is_none()) {
+                        "pending_human_time_unavailable"
+                    } else {
+                        "pending_human_use"
+                    };
+                add(
+                    "tab",
+                    &tab.id,
+                    reason,
+                    Some(&hold.handoff_id),
+                    deadline,
+                    "Open the handoff to complete human use or close the task explicitly.",
+                );
+            }
+        }
+        if let Some(ttl) = self
+            .tab_lifetimes
+            .get(&tab.id)
+            .and_then(|lifetime| lifetime.inactivity_ms)
+        {
+            let deadline = if qualified {
+                self.retention_deadline("tab", &tab.id, tab.last_activity_at_ms, ttl)
+            } else {
+                tab.last_activity_at_ms.checked_add(ttl)
+            };
+            if deadline.is_none() || now_ms.is_none() {
+                add(
+                    "tab",
+                    &tab.id,
+                    "tab_inactivity_time_unavailable",
+                    None,
+                    deadline,
+                    "Check StableTime and allow the owner to observe the tab activity.",
+                );
+            }
+        } else {
+            for link in self.remote_view_tab_handoffs.values().filter(|link| {
+                link.session_id == tab.session_id
+                    && !self.handoff_definitely_expired(link, now_ms, qualified)
+                    && crate::resolve_remote_view_tab_handoff(self, &link.id).is_ok()
+            }) {
+                add("session", &tab.session_id, "legacy_handoff_target_retention", Some(&link.id),
+                    link.expires_at_ms, "Set a finite tab inactivity lifetime to retire the target independently of its handoff.");
+            }
+        }
+        holds
+    }
+
+    fn retention_deadline(&self, scope: &str, id: &str, token: u64, duration: u64) -> Option<u64> {
+        self.expiry_observations
+            .get(&format!("{scope}:{id}"))
+            .filter(|observation| observation.activity_token == token)?
+            .observed_latest_utc_ms
+            .checked_add(duration)
+    }
+
+    fn handoff_definitely_expired(
+        &self,
+        link: &crate::RemoteViewTabHandoff,
+        now_ms: Option<u64>,
+        qualified: bool,
+    ) -> bool {
+        let Some((deadline, now)) = link.expires_at_ms.zip(now_ms) else {
+            return false;
+        };
+        if !qualified {
+            return false;
+        }
+        link.retention_time.as_ref().is_some_and(|retention| {
+            retention.origin.deadline_ms(retention.lifetime_ms).ok() == Some(deadline)
+                && now >= deadline
+        })
+    }
+
+    pub fn tab_inactivity_window_ms(&self, tab_id: &str, duration_ms: u64) -> Option<(u64, u64)> {
+        let tab = self.tabs.get(tab_id)?;
+        let observation = self.expiry_observations.get(&format!("tab:{tab_id}"))?;
+        if observation.activity_token != tab.last_activity_at_ms {
+            return None;
+        }
+        let observed = observation.observed_latest_utc_ms;
+        Some((observed, observed.checked_add(duration_ms)?))
+    }
+
     /// Bind current activity generations to a trusted observation. Retaining
     /// the first observation keeps the grace window intact across restarts.
     pub fn observe_expiry_sources(&mut self, current: &crate::ServiceTimeOrigin) {
@@ -3516,7 +3748,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         })
     }
 
-    fn defer_borrowed_retirement_error(
+    fn defer_retirement_error(
         &mut self,
         browser: &ManagedBrowserInstance,
         failed_session_id: &str,
@@ -3525,9 +3757,16 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         protected: &mut BTreeSet<String>,
         externally_protected: &mut BTreeSet<String>,
     ) -> Result<(), String> {
+        // Native janitor effects are journaled. Its transaction must leave
+        // unsettled operations for the existing exact-scope recovery path.
         if !self.state.shared_browser_ids.contains(&browser.id) || browser.desktop.is_some() {
             return Err(error);
         }
+        result.retention_holds.push(BrowserRetentionHold::browser(
+            browser,
+            "browser_session_idle_effect_unverified",
+            "Inspect the original close operation and read back the target before retrying.",
+        ));
         result
             .deferred_browser_errors
             .entry(browser.id.clone())
@@ -3552,10 +3791,21 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         {
             Ok(Some(guard)) => Some(guard),
             outcome => {
-                if let Err(error) = outcome {
-                    result
-                        .deferred_browser_errors
-                        .insert(browser.id.clone(), error);
+                match outcome {
+                    Err(error) => {
+                        result.deferred_browser_errors.insert(browser.id.clone(), error.clone());
+                        result.retention_holds.push(BrowserRetentionHold::browser(
+                            browser, error,
+                            "Inspect the task and retry after current custody or viewer evidence is available.",
+                        ));
+                    }
+                    _ => match self.effects.idle_browser_close_holds(browser) {
+                        Ok(holds) if !holds.is_empty() => result.retention_holds.extend(holds),
+                        _ => result.retention_holds.push(BrowserRetentionHold::browser(
+                            browser, "browser_session_idle_authority_changed",
+                            "Inspect the task and retry after current custody or viewer activity settles.",
+                        )),
+                    }
                 }
                 protected.extend(browser.active_session_ids.iter().cloned());
                 externally_protected.extend(browser.active_session_ids.iter().cloned());
@@ -3615,11 +3865,20 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .union(&protected_session_ids)
             .cloned()
             .collect::<BTreeSet<_>>();
-        let mut protected_session_ids = self
-            .protected_session_ids
-            .union(&protected_session_ids)
-            .cloned()
-            .collect::<BTreeSet<_>>();
+        let mut protected_session_ids = externally_protected_session_ids.clone();
+        protected_session_ids.extend(self.state.remote_view_tab_handoffs.values().filter_map(
+            |link| {
+                if self
+                    .state
+                    .handoff_definitely_expired(link, Some(now_ms), self.qualified_reap)
+                {
+                    return None;
+                }
+                crate::resolve_remote_view_tab_handoff(self.state, &link.id)
+                    .ok()
+                    .map(|target| target.session.id)
+            },
+        ));
         // Qualify viewer protection before either logical expiry or physical
         // idle close. It also protects disposable sessions from quota eviction.
         let candidates = self
@@ -3655,16 +3914,20 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .cloned()
             .collect::<Vec<_>>();
         for browser in candidates {
-            let permitted = match self.effects.permits_idle_browser_close(&browser) {
-                Ok(permitted) => permitted,
+            let reasons = match self.effects.idle_browser_close_holds(&browser) {
+                Ok(reasons) => reasons,
                 Err(error) => {
                     result
                         .deferred_browser_errors
-                        .insert(browser.id.clone(), error);
-                    false
+                        .insert(browser.id.clone(), error.clone());
+                    vec![BrowserRetentionHold::browser(
+                        &browser, error,
+                        "Inspect the browser's current custody and viewer evidence before retrying.",
+                    )]
                 }
             };
-            if !permitted {
+            if !reasons.is_empty() {
+                result.retention_holds.extend(reasons);
                 externally_protected_session_ids.extend(browser.active_session_ids.iter().cloned());
                 protected_session_ids.extend(browser.active_session_ids.iter().cloned());
             }
@@ -3736,7 +3999,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 ) {
                     Ok(closed) => closed,
                     Err(error) => {
-                        self.defer_borrowed_retirement_error(
+                        self.defer_retirement_error(
                             &browser,
                             &tab.session_id,
                             error,
@@ -3758,7 +4021,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     BrowserTabEndReason::InactivityExpired,
                     now_ms,
                 ) {
-                    self.defer_borrowed_retirement_error(
+                    self.defer_retirement_error(
                         &browser,
                         &tab.session_id,
                         error,
@@ -3869,7 +4132,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 match self.close_session(&session_id, SessionEndReason::HeartbeatExpired, now_ms) {
                     Ok(closed) => closed,
                     Err(error) => {
-                        self.defer_borrowed_retirement_error(
+                        self.defer_retirement_error(
                             &browser,
                             &session_id,
                             error,
@@ -3922,6 +4185,16 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .idle_closed_browsers
                 .insert(browser.id.clone(), now_ms);
             result.closed_browser_ids.push(browser.id);
+        }
+        if disposable_maintenance {
+            for hold in self.state.tabs.values().flat_map(|tab| {
+                self.state
+                    .tab_retention_holds(tab, Some(now_ms), self.qualified_reap)
+            }) {
+                if !result.retention_holds.contains(&hold) {
+                    result.retention_holds.push(hold);
+                }
+            }
         }
         if !disposable_maintenance {
             return Ok(result);
