@@ -28,6 +28,7 @@ pub struct RemoteViewSessionEffects<E, T, S> {
     retirements: BTreeMap<String, BrowserIdleRetirementRecord>,
     active_retirements: BTreeMap<String, Weak<()>>,
     operation_retirements: BTreeSet<String>,
+    idle_retirement_holds: Vec<crate::BrowserRetentionHold>,
     activities: BTreeSet<String>,
 }
 
@@ -75,6 +76,7 @@ impl<
             retirements: BTreeMap::new(),
             active_retirements: BTreeMap::new(),
             operation_retirements: BTreeSet::new(),
+            idle_retirement_holds: Vec::new(),
             activities: BTreeSet::new(),
         })
     }
@@ -191,6 +193,7 @@ impl<
     where
         E: BrowserSessionEffects,
     {
+        self.idle_retirement_holds.clear();
         if self.pool.is_none() || browsers.is_empty() {
             return acquire_guard(&mut self.effects);
         }
@@ -379,7 +382,28 @@ impl<
                             .map_err(|_| "browser_session_idle_custody_unavailable")?
                     }
                     Ok(BrowserIdleRetirementAdmission::Existing(record)) => *record,
-                    Err(BrowserIdleRetirementStoreError::ActivityActive) => return Ok(None),
+                    Err(BrowserIdleRetirementStoreError::ActivityActive) => {
+                        if let Ok(activities) = self.store.browser_activity_records() {
+                            for activity in activities.into_iter().filter(|activity| {
+                                !activity.original_ended
+                                    && intent.scopes.iter().any(|scope| {
+                                        scope.browser.profile_id == activity.browser.profile_id
+                                    })
+                            }) {
+                                for browser in browsers {
+                                    let mut hold = crate::BrowserRetentionHold::browser(
+                                        browser,
+                                        "browser_session_idle_assignment_activity_active",
+                                        "Let the active browser operation finish or reconcile it through its owner.",
+                                    );
+                                    hold.target_id = activity.browser.id.clone();
+                                    hold.evidence_id = Some(activity.id.clone());
+                                    self.idle_retirement_holds.push(hold);
+                                }
+                            }
+                        }
+                        return Ok(None);
+                    }
                     Err(_) => return Err("browser_session_idle_readback_required".into()),
                 }
             };
@@ -1688,6 +1712,9 @@ impl<
     ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
         self.require_operation()?;
         self.effects.acquire_profile_cleanup_guard(allocation)
+    }
+    fn take_idle_retirement_holds(&mut self) -> Vec<crate::BrowserRetentionHold> {
+        std::mem::take(&mut self.idle_retirement_holds)
     }
     fn acquire_idle_retirement_guard(
         &mut self,
