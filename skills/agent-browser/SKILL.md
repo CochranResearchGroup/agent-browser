@@ -65,6 +65,9 @@ For an operator-requested stuck-browser restart, inspect `mode`, then use `mode_
 
 ## Standalone authentication
 
+For Iowa State Outlook, follow the [Iowa State sign-in steps](references/authentication.md#iowa-state-outlook-sign-in)
+through native security-key dismissal, password entry and the SMS option under additional verification methods.
+
 Follow explicit service authentication instructions and authorized credential paths. Keep credential pairs together and secrets inside private input channels. Read [standalone authentication](references/cli-and-service.md#standalone-authentication) before Auth discovery or saved-password use.
 
 ## Hosted workflow guidance v1
