@@ -1649,14 +1649,20 @@ impl<
         &mut self,
         browser: &ManagedBrowserInstance,
     ) -> Result<bool, String> {
+        Ok(self.idle_browser_close_holds(browser)?.is_empty())
+    }
+    fn idle_browser_close_holds(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<Vec<crate::BrowserRetentionHold>, String> {
         self.require_operation()?;
-        // Provider idleness cannot override current controller or operation
-        // protection supplied by the browser runtime authority.
-        if !self.effects.permits_idle_browser_close(browser)? {
-            return Ok(false);
-        }
-        if self.pool.is_none() || self.borrows_browser_without_native_desktop(browser) {
-            return Ok(true);
+        // Provider idleness cannot override current controller or operation custody.
+        let holds = self.effects.idle_browser_close_holds(browser)?;
+        if !holds.is_empty()
+            || self.pool.is_none()
+            || self.borrows_browser_without_native_desktop(browser)
+        {
+            return Ok(holds);
         }
         let assignment = self
             .store
@@ -1666,7 +1672,15 @@ impl<
             .adapter
             .observe_idle(&assignment)
             .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
-        Ok(!observation.viewer_active)
+        Ok(if observation.viewer_active {
+            vec![crate::BrowserRetentionHold::browser(
+                browser,
+                "browser_session_idle_viewer_active",
+                "Close the active viewer or wait for the viewer to disconnect.",
+            )]
+        } else {
+            Vec::new()
+        })
     }
     fn acquire_profile_cleanup_guard(
         &mut self,

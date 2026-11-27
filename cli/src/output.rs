@@ -7450,6 +7450,7 @@ Commands:
   task-briefing TASK Read retained task context without browser effects
   host-control TASK status|view reads any retained managed task; standalone return verifies the original process and freshly observes the same target before release; reconcile checks exact owned task and terminal dispatcher; takeover/override require hosted app binding.
   Task briefing processPid is retained metadata; authentication verifies current physical ownership separately.
+  Task briefing reports the effective tab inactivity window, qualified deadline, and current retention holds when available.
   task-operation TASK REQUEST [reconcile] Read original; reconcile only owner-proven no-effect refusal
   failure-recovery JSON Inspect/packet/history/run/reconcile; live configure maxAttempts/maxNoProgress with actor/reason
   Retention/popup limits: live maximumRetentionClaims=4096, maximumPopupAdmissions=64; released history retained

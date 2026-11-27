@@ -1393,6 +1393,14 @@ pub(crate) fn permits_managed_browser_idle_retirement(
     browser: &agent_browser_service_model::ManagedBrowserInstance,
     now: &str,
 ) -> Result<bool, String> {
+    Ok(managed_browser_idle_retention_holds(state, browser, now)?.is_empty())
+}
+
+pub(crate) fn managed_browser_idle_retention_holds(
+    state: &ServiceState,
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+    now: &str,
+) -> Result<Vec<agent_browser_service_model::BrowserRetentionHold>, String> {
     let mut observed = state.clone();
     if let Some(existing) = observed.browsers.get(&browser.id) {
         if existing.pid != Some(browser.pid)
@@ -1414,7 +1422,35 @@ pub(crate) fn permits_managed_browser_idle_retirement(
             },
         );
     }
-    Ok(!resource_lane_activity_at(&observed, &browser.id, now).active)
+    Ok(resource_lane_activity_at(&observed, &browser.id, now)
+        .reasons
+        .into_iter()
+        .map(|reason| {
+            let (code, id) = reason.split_once(':').unwrap_or((&reason, ""));
+            let (scope, target, expiry, recovery) = match code {
+                "active_lease" => ("session", id, state.sessions.get(id).and_then(|session| session.expires_at.as_deref()), "Release the session lease or wait until its expiry."),
+                "explicit_session_retention" | "lease_observation_invalid" | "session_missing" =>
+                    ("session", id, None, "Inspect the original session and reconcile its ownership record."),
+                "active_tab_work_lease" =>
+                    ("tab", id, state.tabs.get(id).and_then(|tab| tab.work_lease_expires_at.as_deref()), "Release the tab work lease or wait until its expiry."),
+                "active_job" => ("job", id, None, "Inspect the active job and let it finish or cancel it through its owner."),
+                "active_viewer_lease" | "unresolved_viewer_lease" | "explicit_view_retention" =>
+                    ("browser", browser.id.as_str(), None, "Inspect current viewer leases and disconnect obsolete viewer sessions through the owner."),
+                "active_profile_claim" => ("browser", browser.id.as_str(),
+                    state.current_lease_claim(
+                        &agent_browser_lease_authority::LeaseResourceKey::profile(browser.profile_id.as_str()), now
+                    ).map(|claim| claim.expires_at()),
+                    "Release the original profile claim or wait until its expiry."),
+                _ => ("browser", browser.id.as_str(), None, "Inspect the original operation and retry after custody settles."),
+            };
+            let mut hold = agent_browser_service_model::BrowserRetentionHold::browser(browser, code, recovery);
+            hold.scope = scope.into();
+            hold.target_id = target.into();
+            hold.evidence_id = (!id.is_empty()).then(|| id.to_owned());
+            hold.expires_at_ms = expiry.and_then(|expiry| chrono::DateTime::parse_from_rfc3339(expiry).ok())
+                .and_then(|expiry| u64::try_from(expiry.timestamp_millis()).ok());
+            hold
+        }).collect())
 }
 
 fn resource_lane_activity_at(
@@ -1596,7 +1632,19 @@ fn resource_lane_activity_at(
             stream.controller_lease_id.as_deref().unwrap_or("none"),
             stream.viewer_lease_ids.join(","),
         ));
-        if stream.controller_lease_id.is_some() || !stream.viewer_lease_ids.is_empty() {
+        if stream
+            .viewer_lease_ids
+            .iter()
+            .chain(stream.controller_lease_id.iter())
+            .any(|id| {
+                state.viewer_leases.get(id).is_none_or(|lease| {
+                    !matches!(
+                        lease.state.as_str(),
+                        "disconnected" | "expired" | "failed" | "released"
+                    )
+                })
+            })
+        {
             reasons.insert(format!("explicit_view_retention:{}", stream.id));
         }
     }
@@ -4033,6 +4081,20 @@ mod tests {
         assert!(matches!(
             decision(&controlled_view, &root),
             AbandonedBrowserLaneDecision::Protected { .. }
+        ));
+
+        controlled_view.viewer_leases.insert(
+            "controller-active".into(),
+            super::super::service_model::ViewerLease {
+                id: "controller-active".into(),
+                browser_id: Some(browser_id.clone()),
+                state: "released".into(),
+                ..Default::default()
+            },
+        );
+        assert!(matches!(
+            decision(&controlled_view, &root),
+            AbandonedBrowserLaneDecision::Candidate(_)
         ));
 
         let mut leased_tab = idle_open_tab;

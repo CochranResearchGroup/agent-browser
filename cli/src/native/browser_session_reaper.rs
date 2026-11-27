@@ -11,7 +11,7 @@ pub(super) fn now_ms() -> u64 {
         .unwrap_or_default()
 }
 
-fn error_code(reason: &str) -> &str {
+pub(super) fn error_code(reason: &str) -> &str {
     let code = reason.split(':').next().unwrap_or_default();
     if code.len() <= 96
         && (code.starts_with("browser_")
@@ -25,6 +25,79 @@ fn error_code(reason: &str) -> &str {
     } else {
         "browser_session_reap_failed"
     }
+}
+
+fn hold_reason(reason: &str) -> &str {
+    match reason {
+        "leave_open"
+        | "profile_operation"
+        | "active_retention_claim"
+        | "retention_claim_time_unavailable"
+        | "pending_human_time_unavailable"
+        | "pending_human_use"
+        | "tab_inactivity_time_unavailable"
+        | "legacy_handoff_target_retention"
+        | "active_lease"
+        | "explicit_session_retention"
+        | "lease_observation_invalid"
+        | "session_missing"
+        | "active_tab_work_lease"
+        | "active_job"
+        | "active_viewer_lease"
+        | "unresolved_viewer_lease"
+        | "explicit_view_retention"
+        | "active_profile_claim"
+        | "active_presentation_slot_lease"
+        | "active_remote_view_acquisition" => reason,
+        _ => error_code(reason),
+    }
+}
+
+pub(super) fn public_retention_holds(
+    holds: &[agent_browser_service_model::BrowserRetentionHold],
+) -> Vec<Value> {
+    let digest = |id: &str| format!("{:x}", Sha256::digest(id.as_bytes()));
+    holds
+        .iter()
+        .take(64)
+        .map(|hold| {
+            json!({"scope":hold.scope, "targetIdSha256":digest(&hold.target_id),
+            "browserIdSha256":digest(&hold.browser_id), "reasonCode":hold_reason(&hold.reason_code),
+            "evidenceIdSha256":hold.evidence_id.as_deref().map(digest),
+            "expiresAtMs":hold.expires_at_ms,"recovery":hold.recovery})
+        })
+        .collect()
+}
+
+/// Historical passive observation for a currently addressed browser. This is
+/// never used as permission to retire or as evidence that a hold is still live.
+pub(crate) fn last_observation_for(browser_id: &str) -> Option<Value> {
+    use std::io::Read;
+    let path = super::service_store::default_service_state_path()
+        .ok()?
+        .with_file_name("browser-session-reaper.json");
+    let file = std::fs::File::open(path).ok()?;
+    let mut raw = Vec::new();
+    file.take(128 * 1024).read_to_end(&mut raw).ok()?;
+    let receipt: Value = serde_json::from_slice(&raw).ok()?;
+    let completed_at_ms = receipt["completedAtMs"].as_u64()?;
+    let digest = format!("{:x}", Sha256::digest(browser_id.as_bytes()));
+    let holds: Vec<_> = receipt["retentionHolds"]
+        .as_array()?
+        .iter()
+        .filter(|hold| hold["browserIdSha256"].as_str() == Some(digest.as_str()))
+        .map(|hold| {
+            json!({
+                "scope": hold["scope"],
+                "targetIdSha256": hold["targetIdSha256"],
+                "reasonCode": hold["reasonCode"],
+                "evidenceIdSha256": hold["evidenceIdSha256"],
+                "expiresAtMs": hold["expiresAtMs"],
+                "recovery": hold["recovery"],
+            })
+        })
+        .collect();
+    (!holds.is_empty()).then(|| json!({"receiptCompletedAtMs":completed_at_ms,"holds":holds}))
 }
 
 /// Run the owner pass once. A receipt failure is observable but never retries
@@ -66,6 +139,10 @@ pub(super) fn run_pass(
             receipt["deferredBrowserCount"] = json!(outcome.deferred_browser_errors.len());
             receipt["omittedDeferredBrowserCount"] =
                 json!(outcome.deferred_browser_errors.len().saturating_sub(64));
+            receipt["retentionHolds"] = json!(public_retention_holds(&outcome.retention_holds));
+            receipt["retentionHoldCount"] = json!(outcome.retention_holds.len());
+            receipt["omittedRetentionHoldCount"] =
+                json!(outcome.retention_holds.len().saturating_sub(64));
             receipt["deferredBrowsers"] = json!(deferrals);
         }
         Err(reason) => {
@@ -149,6 +226,15 @@ mod tests {
                         )
                     })
                     .collect(),
+                retention_holds: vec![agent_browser_service_model::BrowserRetentionHold {
+                    scope: "tab".into(),
+                    target_id: "private-tab".into(),
+                    browser_id: "private-browser-1".into(),
+                    reason_code: "pending_human_use".into(),
+                    evidence_id: Some("private-handoff".into()),
+                    expires_at_ms: Some(900),
+                    recovery: "Open the handoff to complete human use.".into(),
+                }],
                 ..Default::default()
             })
         });
@@ -160,6 +246,15 @@ mod tests {
         assert_eq!(receipt["deferredBrowsers"].as_array().unwrap().len(), 64);
         assert_eq!(receipt["omittedDeferredBrowserCount"], 6);
         assert!(!raw.contains("private-browser"));
+        assert!(!raw.contains("private-tab"));
+        assert!(!raw.contains("private-handoff"));
+        assert_eq!(receipt["retentionHoldCount"], 1);
+        assert_eq!(receipt["retentionHolds"][0]["scope"], "tab");
+        assert_eq!(
+            receipt["retentionHolds"][0]["reasonCode"],
+            "pending_human_use"
+        );
+        assert_eq!(receipt["retentionHolds"][0]["expiresAtMs"], 900);
         assert!(!raw.contains("private detail"));
         assert_eq!(
             receipt["deferredBrowsers"][0]["reasonCode"],

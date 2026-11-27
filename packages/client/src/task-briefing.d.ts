@@ -14,6 +14,26 @@ export interface TaskBriefing {
   goal: { status: 'missing' | 'caller_supplied'; taskName?: string | null; purpose?: string | null; requestId?: string | null; jobId?: string | null; [key: string]: unknown };
   lastVerifiedOutcome: { status: 'missing' | 'historical_verified_navigation'; observedAtMs?: number; taskCompletion?: 'unverified'; [key: string]: unknown };
   artifacts: { status: 'not_recorded' | 'recorded_references_not_revalidated'; references: Array<{artifactId: string; kind: string; handle: string; observedAtMs: number} | {source: 'task_operation'; operationId: string; artifactId: string; kind: 'screenshot'; availability: 'not_revalidated'}> | null };
+  tabLifetime?: {
+    inactivityMs: number | null;
+    pressureInactivityMs: number | null;
+    policySource: string | null;
+    activityObservedAtMs: number | null;
+    deadlineAtMs: number | null;
+  } | null;
+  retentionHolds?: Array<RetentionReason & {
+    targetId: string;
+    browserId: string;
+    evidenceId: string | null;
+  }>;
+  /** Historical receipt, separate from current retention evidence. */
+  lastRetentionObservation?: {
+    receiptCompletedAtMs: number;
+    holds: Array<RetentionReason & {
+      targetIdSha256: string;
+      evidenceIdSha256: string | null;
+    }>;
+  } | null;
   assistance: { status: string; [key: string]: unknown };
   control: { epoch: number; owner: string; pauseReads: boolean; cooperativeOnly: true };
   uncertainOperations: Array<{source: string; operationId: string; retryAllowed: false; scope?: string; state?: string}>;
@@ -21,6 +41,12 @@ export interface TaskBriefing {
   legacyRequestAttribution: 'exact_retained_lane' | 'ambiguous_excluded';
   browserEffects: 'none';
   liveObservation: 'not_performed';
+}
+interface RetentionReason {
+  scope: string;
+  reasonCode: string;
+  expiresAtMs: number | null;
+  recovery: string;
 }
 export function getTaskBriefing(options: { baseUrl: string; taskId: string; headers?: Record<string,string>; signal?: AbortSignal; fetch?: typeof globalThis.fetch }): Promise<TaskBriefing>;
 

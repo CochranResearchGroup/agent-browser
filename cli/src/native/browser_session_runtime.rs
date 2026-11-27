@@ -117,6 +117,20 @@ pub(crate) trait BrowserRuntimeDriver {
     ) -> Result<bool, String> {
         Ok(true)
     }
+    fn idle_browser_close_holds(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<Vec<agent_browser_service_model::BrowserRetentionHold>, String> {
+        Ok(if self.permits_idle_browser_close(browser)? {
+            Vec::new()
+        } else {
+            vec![agent_browser_service_model::BrowserRetentionHold::browser(
+                browser,
+                "browser_session_idle_retirement_held",
+                "Inspect current task ownership and connected viewers before retrying.",
+            )]
+        })
+    }
     fn acquire_profile_cleanup_guard(
         &mut self,
         _allocation: &ManagedDisposableProfile,
@@ -407,6 +421,12 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
         browser: &ManagedBrowserInstance,
     ) -> Result<bool, String> {
         self.runtime.permits_idle_browser_close(browser)
+    }
+    fn idle_browser_close_holds(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<Vec<agent_browser_service_model::BrowserRetentionHold>, String> {
+        self.runtime.idle_browser_close_holds(browser)
     }
     fn acquire_idle_retirement_guard(
         &mut self,
@@ -1022,19 +1042,26 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
         &mut self,
         browser: &ManagedBrowserInstance,
     ) -> Result<bool, String> {
+        Ok(self.idle_browser_close_holds(browser)?.is_empty())
+    }
+
+    fn idle_browser_close_holds(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<Vec<agent_browser_service_model::BrowserRetentionHold>, String> {
         let state = super::service_store::load_default_service_state_snapshot()?;
-        let permitted = super::service_resources::permits_managed_browser_idle_retirement(
+        let holds = super::service_resources::managed_browser_idle_retention_holds(
             &state,
             browser,
             &chrono::Utc::now().to_rfc3339(),
         )?;
         #[cfg(test)]
-        if permitted {
+        if holds.is_empty() {
             if let Some(after_check) = self.idle_retirement_after_check {
                 after_check(browser)?;
             }
         }
-        Ok(permitted)
+        Ok(holds)
     }
 
     fn acquire_profile_cleanup_guard(

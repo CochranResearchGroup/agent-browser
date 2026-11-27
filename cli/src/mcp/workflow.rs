@@ -363,6 +363,21 @@ pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {
             "humanUse":"unverified"})
         })
         .unwrap_or(json!({"status":"none_recorded"}));
+    let tab_lifetime = tab.and_then(|tab| {
+        let handoff = state
+            .remote_view_tab_handoffs
+            .values()
+            .find(|link| link.session_id == task_id && link.tab_id == tab.id);
+        BrowserSessionSqliteStore::describe_tab_lifetime(&state, &tab.id, handoff)
+    });
+    let retention_holds = tab
+        .map(|tab| {
+            let current = crate::connection::stable_time::authority_now()
+                .and_then(|time| time.service_origin())
+                .ok();
+            BrowserSessionSqliteStore::inspect_tab_retention(&state, tab, current.as_ref())
+        })
+        .unwrap_or_default();
     // This is a retained snapshot, not an input-admission decision. Peer or
     // activity publications after the read cannot invalidate its historical
     // context. Physical actions independently revalidate their exact binding.
@@ -375,6 +390,8 @@ pub(super) fn inspect_briefing(task_id: &str) -> Result<Value, String> {
         "lastActivityAtMs":task.last_activity_at_ms,"goal":goal,"lastVerifiedOutcome":outcome,
         "artifacts":{"status":if !artifact_references.is_empty(){"recorded_references_not_revalidated"}else{"not_recorded"},
             "references":artifact_references},
+        "tabLifetime":tab_lifetime,"retentionHolds":retention_holds,
+        "lastRetentionObservation":BrowserSessionSqliteStore::last_retention_observation(&task.browser_id),
         "assistance":assistance,"control":{"epoch":control["epoch"],"owner":if control_recorded {control["owner"].clone()} else {json!("unverified")},
             "pauseReads":control["pauseReads"],"cooperativeOnly":true},
         "uncertainOperations":uncertain,"uncertaintyTruncated":uncertainty_truncated,

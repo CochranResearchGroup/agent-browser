@@ -3817,6 +3817,11 @@ fn closed_handoff_reopens_only_after_explicit_profile_choice_on_the_same_link() 
 
 #[test]
 fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
+    use crate::connection::stable_time::{fixture_stamp, Fixture as TimeFixture};
+
+    let service_time = Rc::new(Cell::new(100));
+    let source = service_time.clone();
+    let _time = TimeFixture::observe_with(move || Ok(fixture_stamp(source.get())));
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
     let calls = Rc::new(Cell::new(0));
@@ -3847,6 +3852,7 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
         .as_str()
         .unwrap()
         .to_owned();
+    service_time.set(130);
     assert_eq!(
         consumer.reap(130).unwrap().expired_session_ids,
         vec![session_id]
@@ -3871,6 +3877,7 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
         "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
         "nativeDesktop":true, "activityAtMs":131
     });
+    service_time.set(131);
     let first_reopen = consumer.handle_command(&reopen);
     assert_eq!(first_reopen["success"], true, "{first_reopen}");
     // Native selection and compatibility view issuance are separate contracts.
@@ -5418,6 +5425,62 @@ fn closing_last_live_tab_closes_browser_without_deleting_handoff() {
     assert_eq!(inspected["success"], true, "{inspected}");
     assert_eq!(inspected["data"]["expired"], false);
     assert!(inspected["data"]["expiresAtMs"].is_null());
+}
+
+#[test]
+fn unattended_enrichment_gets_finite_tab_inactivity_with_durable_link() {
+    use crate::connection::stable_time::{fixture_stamp, Fixture as TimeFixture};
+
+    let service_time = Rc::new(Cell::new(100));
+    let source = service_time.clone();
+    let _time = TimeFixture::observe_with(move || Ok(fixture_stamp(source.get())));
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider, calls);
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/profile", "profileId":"profile-a",
+        "serviceName":"contacts-receipts", "agentName":"linkedin-connector",
+        "taskName":"Read bounded profile evidence", "originKind":"agent", "activityAtMs":100
+    })).unwrap().unwrap();
+    let handoff_id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let tab_id = opened["browserSession"]["tabId"].as_str().unwrap();
+    assert!(consumer.reap_current().unwrap().expired_tab_ids.is_empty());
+    let readback = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
+        "handoffOperation":"inspect", "activityAtMs":101
+    }));
+    assert_eq!(
+        readback["data"]["tabLifetime"]["inactivityMs"], 300_000,
+        "{readback}"
+    );
+    assert_eq!(
+        readback["data"]["tabLifetime"]["policySource"],
+        "unattended_enrichment"
+    );
+    assert_eq!(readback["data"]["tabLifetime"]["deadlineAtMs"], 300_100);
+    assert!(readback["data"]["expiresAtMs"].is_null());
+    assert!(readback["data"]["pendingHuman"].is_null());
+
+    let extended = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
+        "handoffOperation":"set_tab_lifetime", "tabInactivityMs":400_000, "activityAtMs":102
+    }));
+    assert_eq!(extended["success"], true, "{extended}");
+    service_time.set(300_100);
+    assert!(consumer.reap_current().unwrap().expired_tab_ids.is_empty());
+    service_time.set(400_100);
+    assert_eq!(consumer.reap_current().unwrap().expired_tab_ids, [tab_id]);
+    let after = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
+        "handoffOperation":"inspect", "activityAtMs":400_101
+    }));
+    assert_eq!(after["data"]["expired"], false);
+    assert_eq!(after["data"]["tabLifetime"]["inactivityMs"], 400_000);
+    assert_eq!(
+        after["data"]["tabLifetime"]["policySource"],
+        "explicit_tab_policy"
+    );
 }
 
 #[test]

@@ -45,6 +45,8 @@ For a named account and service, resolve the profile in the registry before open
 
 Use `browser_open` with `{"serviceName":"my-app","agentName":"editor","taskName":"Edit draft","profile":"editorial","profileMode":"persistent","taskKey":"editing","url":"https://example.com"}`. Read `data.taskId`, `profileId`, `browserId`, `tabId`, `url`. Address actions with `taskId`. Reuse `taskKey` to preserve the page/edits without navigation; distinct keys separate tasks. `browser_close` ends only the addressed task.
 
+Use `task_briefing` to read the addressed tab's inactivity policy, deadline and current holds. Unattended Contacts Receipts tasks get the service idle window by default. An upload or unsaved work may need a longer finite window. Use the [tab lifetime control](references/cli-and-service.md#retained-handoff-recovery) and keep the original handoff link for resumption.
+
 Clicks deliver pointer input; verify page state. [Profile rules](references/cli-and-service.md#task-clicks-and-profiles).
 
 Installed viewers: [qualification](references/cli-and-service.md#native-journey-qualification).

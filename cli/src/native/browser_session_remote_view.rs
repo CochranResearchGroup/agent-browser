@@ -669,6 +669,15 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.permits_idle_browser_close(browser),
         }
     }
+    fn idle_browser_close_holds(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<Vec<agent_browser_service_model::BrowserRetentionHold>, String> {
+        match self {
+            Self::Local(effects) => effects.idle_browser_close_holds(browser),
+            Self::Remote(effects) => effects.idle_browser_close_holds(browser),
+        }
+    }
     fn acquire_profile_cleanup_guard(
         &mut self,
         allocation: &agent_browser_service_model::ManagedDisposableProfile,

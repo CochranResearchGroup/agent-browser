@@ -1535,6 +1535,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         result
             .deferred_browser_errors
             .extend(maintenance.deferred_browser_errors);
+        result.retention_holds.extend(maintenance.retention_holds);
         // A provider observation failure must remain visible, but cannot
         // starve unrelated eligible expiry. Existing manager/publication fences
         // still reject conflicting state before any cleanup is published.
@@ -1855,6 +1856,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         .remote_view_tab_handoffs
                         .remove(handoff_id)
                         .ok_or("remote_view_tab_handoff_missing")?;
+                    self.state.tab_lifetime_policy_sources.remove(handoff_id);
                     self.commit_state()?;
                     return Ok(serde_json::json!({"handoffId":handoff_id,"status":"deleted"}));
                 }
@@ -1873,20 +1875,27 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     let time_recovery = validity_error.as_ref().map(|error| {
                         super::browser_session_remote_view::handoff_time_recovery(error, handoff_id)
                     });
-                    let tab_lifetime = self.state.tab_lifetimes.get(&link.tab_id).or_else(|| {
-                        link.resume
-                            .as_ref()
-                            .and_then(|intent| intent.tab_lifetime.as_ref())
-                    });
+                    let tab_lifetime = super::browser_session_store::BrowserSessionSqliteStore::describe_tab_lifetime(
+                        &self.state, &link.tab_id, Some(link),
+                    );
                     let task_metadata = self.state.tab_metadata.get(&link.tab_id).or_else(|| {
                         link.resume
                             .as_ref()
                             .and_then(|intent| intent.task_metadata.as_ref())
                     });
+                    let retention_holds = self.state.tabs.get(&link.tab_id).map(|tab| {
+                        let current = crate::connection::stable_time::authority_now()
+                            .ok()
+                            .and_then(|reading| reading.service_origin().ok());
+                        super::browser_session_store::BrowserSessionSqliteStore::inspect_tab_retention(
+                            &self.state, tab, current.as_ref()
+                        )
+                    }).unwrap_or_default();
                     return Ok(serde_json::json!({"handoffId":handoff_id,
                         "handoffUrl":format!("/remote-view/{handoff_id}"),
                         "createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,
                         "tabId":link.tab_id,"tabLifetime":tab_lifetime,"taskMetadata":task_metadata,
+                        "retentionHolds":retention_holds,
                         "pendingHuman":self.state.pending_human_tabs.get(&link.tab_id).map(|hold| serde_json::json!({
                             "awaitingUse":true,"requestedAtMs":hold.requested_at_ms,"expiresAtMs":hold.expires_at_ms,
                             "retained":hold.expires_at_ms.is_none_or(|deadline| now_ms < deadline),
@@ -2030,6 +2039,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         .filter(|link| link.tab_id == target.tab.id)
                     {
                         link.resume = Some(intent.clone());
+                        self.state
+                            .tab_lifetime_policy_sources
+                            .insert(link.id.clone(), "explicit_tab_policy".to_owned());
                     }
                     self.commit_state()?;
                     return Ok(serde_json::json!({"handoffId":handoff_id,
@@ -2405,6 +2417,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "closedBrowserIds": reaped.closed_browser_ids,
                     "deletedDisposableProfileIds": reaped.deleted_disposable_profile_ids,
                     "deferredBrowserErrors": reaped.deferred_browser_errors,
+                    "retentionHolds": super::browser_session_reaper::public_retention_holds(&reaped.retention_holds),
                 }))
             }
             "browser_session_status" => {
@@ -3646,6 +3659,26 @@ where
                 None => self.state.retention_policy.durable_handoff_ttl_ms,
             };
             if record.created_at_ms.is_none() {
+                let enrichment_ttl = self.manager_config.session_idle_timeout_ms;
+                if command["originKind"] == "agent"
+                    && command["serviceName"] == "contacts-receipts"
+                    && command["manualLogin"] != true
+                    && command["leaveOpen"] != true
+                    && pending_human_ttl.is_none()
+                    && enrichment_ttl > 0
+                    && !self.state.tab_lifetimes.contains_key(&tab.id)
+                {
+                    self.state.tab_lifetimes.insert(
+                        tab.id.clone(),
+                        agent_browser_service_model::BrowserTabLifetime {
+                            inactivity_ms: Some(enrichment_ttl),
+                            pressure_inactivity_ms: None,
+                        },
+                    );
+                    self.state
+                        .tab_lifetime_policy_sources
+                        .insert(id.clone(), "unattended_enrichment".to_owned());
+                }
                 if let Some(ttl) = ttl {
                     let origin =
                         crate::connection::stable_time::authority_now()?.service_origin()?;
