@@ -463,6 +463,36 @@ pub(crate) async fn close_shared_operator_tab(
     .map_err(|_| "browser_session_host_join_failed")?
 }
 
+/// Temporary opt-in timings for the native handoff resume path.
+pub(crate) struct HandoffTiming {
+    stage: &'static str,
+    started: Option<std::time::Instant>,
+}
+
+impl HandoffTiming {
+    pub(crate) fn start(stage: &'static str) -> Self {
+        let enabled = std::env::var("AGENT_BROWSER_HANDOFF_TIMING").as_deref() == Ok("1");
+        Self {
+            stage,
+            started: enabled.then(std::time::Instant::now),
+        }
+    }
+}
+
+impl Drop for HandoffTiming {
+    fn drop(&mut self) {
+        if let Some(started) = self.started {
+            use std::io::Write;
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "[DEBUG-handoff-timing] stage={} elapsed_us={}",
+                self.stage,
+                started.elapsed().as_micros()
+            );
+        }
+    }
+}
+
 /// Both socket dispatch and queued service resolution borrow the same owner.
 pub(crate) async fn resolve_shared_handoff_command(
     shared: SharedBrowserSessionHost,
@@ -471,11 +501,15 @@ pub(crate) async fn resolve_shared_handoff_command(
     let Some(id) = optional_string(&command, "handoffId").map(str::to_string) else {
         return Ok(None);
     };
+    let queue = HandoffTiming::start("daemon_dispatch");
     tokio::task::spawn_blocking(move || {
+        drop(queue);
+        let lock = HandoffTiming::start("session_request_lock");
         let mut host = shared
             .requests
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
+        drop(lock);
         if host.is_none() {
             if !BrowserSessionSqliteStore::default_sqlite()?
                 .load_session_state()?
@@ -2133,7 +2167,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         &self.state,
                         handoff_id,
                     )?;
+                    let focus = HandoffTiming::start("focus_and_window_readback");
                     self.focus_browser(&target.browser.id, Some(&target.tab.target_id), now_ms)?;
+                    drop(focus);
                     let digest = agent_browser_service_model::remote_view_native_target_digest(
                         handoff_id, &target,
                     )?;
