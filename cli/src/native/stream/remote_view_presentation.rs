@@ -307,6 +307,10 @@ pub(super) async fn resolve_location(
     operator: Option<&str>,
     headers: &[(String, String)],
 ) -> Result<String, String> {
+    use crate::native::browser_session_host::HandoffTiming;
+
+    let _resume = HandoffTiming::start("resume_total");
+    let lookup = HandoffTiming::start("session_lookup");
     let configured = std::env::var("AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN")
         .map_err(|_| "remote_view_public_origin_missing")?;
     let origin = public_origin(&configured)?;
@@ -322,16 +326,21 @@ pub(super) async fn resolve_location(
     })
     .await
     .map_err(|_| "remote_view_presentation_join_failed")??;
+    drop(lookup);
     let command = serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":id, "nativeDesktop":true,
     });
+    let daemon_ready = HandoffTiming::start("daemon_ready");
     super::http::ensure_service_daemon_session(&session, Some(&command)).await?;
+    drop(daemon_ready);
+    let resolve = HandoffTiming::start("daemon_resolve");
     let response = tokio::time::timeout(
         std::time::Duration::from_secs(90),
         super::http::relay_command_to_daemon(&session, &command.to_string()),
     )
     .await
     .map_err(|_| "remote_view_browser_recovery_timeout")??;
+    drop(resolve);
     let response: serde_json::Value = serde_json::from_str(&response)
         .map_err(|_| "remote_view_browser_recovery_response_invalid")?;
     let mode_recovery = response["success"] == true
@@ -350,10 +359,12 @@ pub(super) async fn resolve_location(
             .unwrap_or("remote_view_browser_recovery_pending")
             .to_string());
     }
+    let desktop_route = HandoffTiming::start("desktop_route_lookup");
     let retained_id = id.to_string();
     let route = tokio::task::spawn_blocking(move || resolve_handoff_desktop_route(&retained_id))
         .await
         .map_err(|_| "remote_view_presentation_join_failed")??;
+    drop(desktop_route);
     let mut location = presentation_url(&origin, &route)?;
     if mode_recovery {
         let mut url =
@@ -363,12 +374,14 @@ pub(super) async fn resolve_location(
         return Ok(url.to_string());
     }
     if let Some(registration) = human_use_registration(id, operator, headers, &response) {
+        let prepare = HandoffTiming::start("viewer_observation_prepare");
         let prepared = tokio::time::timeout(
             std::time::Duration::from_secs(90),
             super::http::relay_command_to_daemon(&session, &registration.to_string()),
         )
         .await
         .map_err(|_| "remote_view_native_registration_timeout")??;
+        drop(prepare);
         let prepared: serde_json::Value = serde_json::from_str(&prepared)
             .map_err(|_| "remote_view_native_registration_response_invalid")?;
         if prepared["success"] != true {
