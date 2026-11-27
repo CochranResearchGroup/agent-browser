@@ -365,6 +365,11 @@ pub trait BrowserSessionEffects {
         Ok(Some(Box::new(())))
     }
 
+    /// Take evidence captured by the most recent retirement admission.
+    fn take_idle_retirement_holds(&mut self) -> Vec<BrowserRetentionHold> {
+        Vec::new()
+    }
+
     /// Qualify this exact orphan allocation and retain activity admission through
     /// cleanup. Provider-free adapters have no external concurrent authority.
     /// Production adapters must check profile claims, jobs and physical custody.
@@ -3793,18 +3798,29 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             outcome => {
                 match outcome {
                     Err(error) => {
-                        result.deferred_browser_errors.insert(browser.id.clone(), error.clone());
+                        result
+                            .deferred_browser_errors
+                            .insert(browser.id.clone(), error.clone());
                         result.retention_holds.push(BrowserRetentionHold::browser(
                             browser, error,
                             "Inspect the task and retry after current custody or viewer evidence is available.",
                         ));
                     }
-                    _ => match self.effects.idle_browser_close_holds(browser) {
-                        Ok(holds) if !holds.is_empty() => result.retention_holds.extend(holds),
-                        _ => result.retention_holds.push(BrowserRetentionHold::browser(
-                            browser, "browser_session_idle_authority_changed",
-                            "Inspect the task and retry after current custody or viewer activity settles.",
-                        )),
+                    _ => {
+                        let mut holds = self.effects.take_idle_retirement_holds();
+                        if holds.is_empty() {
+                            holds = self
+                                .effects
+                                .idle_browser_close_holds(browser)
+                                .unwrap_or_default();
+                        }
+                        if holds.is_empty() {
+                            holds.push(BrowserRetentionHold::browser(
+                                browser, "browser_session_idle_authority_changed",
+                                "Inspect the task and retry after current custody or viewer activity settles.",
+                            ));
+                        }
+                        result.retention_holds.extend(holds);
                     }
                 }
                 protected.extend(browser.active_session_ids.iter().cloned());

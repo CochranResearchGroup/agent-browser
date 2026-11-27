@@ -8282,6 +8282,35 @@ fn unknown_command_activity_recovers_only_after_original_process_readback() {
         .open(OpenBrowserSession::exact_profile("Bob", "profile-b", 102))
         .unwrap();
     assert_eq!(calls.get(), 2, "unrelated profile must remain usable");
+    let link = resumed
+        .state()
+        .remote_view_tab_handoffs
+        .values()
+        .find(|link| link.session_id == opened.session_id)
+        .unwrap()
+        .id
+        .clone();
+    let update = resumed.handle_command(&serde_json::json!({
+        "action": "service_remote_view_handoff_resolve", "handoffOperation": "set_tab_lifetime",
+        "handoffId": link, "tabInactivityMs": 1, "activityAtMs": 102
+    }));
+    assert_eq!(update["success"], true, "{update}");
+    let reaped = resumed.reap(103).unwrap();
+    let activity = fixture
+        .store(false)
+        .browser_activity_records()
+        .unwrap()
+        .remove(0);
+    assert!(
+        reaped.retention_holds.iter().any(|hold| {
+            hold.reason_code == "browser_session_idle_assignment_activity_active"
+                && hold.target_id == opened.browser_id
+                && hold.evidence_id.as_deref() == Some(activity.id.as_str())
+        }),
+        "{:?}",
+        reaped.retention_holds
+    );
+    assert!(reaped.closed_browser_ids.is_empty());
     let baseline = resumed.state().clone();
     let intent = fixture_retirement_intent(
         &fixture,
