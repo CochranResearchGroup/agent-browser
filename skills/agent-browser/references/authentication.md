@@ -449,6 +449,37 @@ fi
    ```
 
 
+## Iowa State Outlook sign-in
+
+Keep the same Iowa State Outlook task on its dedicated desktop. Use a fresh
+observation at each transition and preserve the task if the screen changes
+unexpectedly.
+
+1. If Chrome shows **Use your security key with login.microsoft.com**, verify the
+   focused window belongs to the Outlook profile. Dismiss the native dialog
+   once with its **Cancel** button or Native **Esc**. Reobserve the same tab.
+   In the live Outlook check, the Microsoft page's **Back** button left the
+   native dialog in place. Native **Esc** returned to the account chooser.
+2. If Microsoft shows both account types for the Net-ID, choose **Work or
+   school account**. If the method chooser appears first, select **Use my
+   password**. On the trusted Microsoft **Enter password** screen, verify the
+   intended Iowa State account and submit its authorized private password once.
+3. After Microsoft accepts the password and shows the verification choices,
+   open **Show more verification methods**. Choose the enrolled **Text** option
+   whose masked destination matches the account's enrolled phone. Use the
+   account-specific suffix from the operator or private configuration. Check
+   the selected account before requesting an SMS.
+4. If a code was already sent, reobserve the same tab and look for **Enter
+   code** before requesting another message. Use only a code tied to the current
+   challenge and selected phone through the authorized private receiving flow.
+   Keep the code out of chat, guide text and logs.
+5. Confirm the Outlook mailbox opened for the intended Iowa State account.
+   Report the actual stage if password entry, method selection, SMS entry or
+   mailbox verification is still pending.
+
+The password and SMS transitions are grounded in Scrapaper's Iowa State
+sign-in implementation at commit `1854f2b`, `src/scrapaper/isu_signin.py`.
+
 ## Native input and control ownership
 
 Before saved-password Native input, use `native_ready`: owner authentication and
