@@ -105,6 +105,10 @@ If browser_open is absent, report missing MCP integration and use installed CLI 
 
 ## SiteGuide routines
 
+For Outlook Online mail search or composition, calendar and Teams meetings,
+Groups and membership, or contact lists, read the
+[Outlook Online SiteGuide](references/outlook-online.md).
+
 Discover `category:"playbooks"` and use `browser_command` in the existing task. Before login, hosted-helper use, guide development or bounded collection, read [SiteGuide routines](references/cli-and-service.md#siteguide-routines) and [the routine guide](references/playbooks.md). Verify the intended account/company; browser login and OAuth/API readiness are separate.
 
 ## References
