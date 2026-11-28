@@ -260,6 +260,14 @@ fn windows_testing_brand(path: &Path) -> bool {
     resource.windows(brand.len()).any(|bytes| bytes == brand)
 }
 
+fn retired_testing_path(hint: &str) -> bool {
+    hint.contains("/.agent-browser/browsers/chrome-")
+        || hint.contains("/puppeteer/chrome/")
+        || hint.contains("chrome-for-testing")
+        || hint.contains("chrome_for_testing")
+        || hint.contains("chrome for testing")
+}
+
 /// Refuse the retired browser before spawning it or closing a mode-switch source.
 pub(crate) fn reject_testing_chrome(path: &Path) -> Result<(), String> {
     let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -267,11 +275,6 @@ pub(crate) fn reject_testing_chrome(path: &Path) -> Result<(), String> {
         .to_string_lossy()
         .replace('\\', "/")
         .to_ascii_lowercase();
-    let retired_cache =
-        hint.contains("/.agent-browser/browsers/chrome-") || hint.contains("/puppeteer/chrome/");
-    let testing_name = hint.contains("chrome-for-testing")
-        || hint.contains("chrome_for_testing")
-        || hint.contains("chrome for testing");
     let testing_brand = || {
         path.is_file()
             && (native_binary(&path) == Some(true)
@@ -286,7 +289,7 @@ pub(crate) fn reject_testing_chrome(path: &Path) -> Result<(), String> {
     let testing_resource = || windows_testing_brand(&path);
     #[cfg(not(windows))]
     let testing_resource = || false;
-    if retired_cache || testing_name || testing_brand() || testing_resource() {
+    if retired_testing_path(&hint) || testing_brand() || testing_resource() {
         return Err("chrome_for_testing_unsupported: select Stock Google Chrome or a configured Chromium StealthCDP build".into());
     }
     Ok(())
@@ -298,8 +301,11 @@ pub(super) fn inspect_executable(path: &Path) -> ExecutableEvidence {
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let hint = path.to_string_lossy().to_ascii_lowercase();
-    let family = if hint.contains("chrome-for-testing") || hint.contains("chrome_for_testing") {
+    let hint = path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let family = if retired_testing_path(&hint) {
         Some("chrome_for_testing".into())
     } else if hint.contains("chromium") {
         Some("chromium".into())
@@ -326,7 +332,12 @@ pub(super) fn inspect_executable(path: &Path) -> ExecutableEvidence {
         .then(|| version_output(&path))
         .flatten();
     let version = observed.as_ref().map(|(_, v)| v.clone());
-    let family = observed.map(|(f, _)| f).or(family);
+    let family = if family.as_deref() == Some("chrome_for_testing") {
+        family
+    } else {
+        observed.map(|(f, _)| f).or(family)
+    };
+    let retired = family.as_deref() == Some("chrome_for_testing");
     let stable = sha256
         .as_ref()
         .is_none_or(|digest| executable_digest(&path).as_ref() == Ok(digest));
@@ -344,7 +355,7 @@ pub(super) fn inspect_executable(path: &Path) -> ExecutableEvidence {
         name,
         family,
         version,
-        available: executable && sha256.is_some() && stable,
+        available: !retired && executable && sha256.is_some() && stable,
         native_binary,
         sha256,
     }
@@ -457,6 +468,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects + ManagedBrowserComm
         let source_family = pin.as_ref().and_then(|pin| pin.family.as_deref());
         let available = rows
             .iter()
+            .filter(|row| row.family.as_deref() != Some("chrome_for_testing"))
             .map(|row| {
                 let mut value = row.public();
                 value["selection"] = json!({"buildId":row.id,"expectedSha256":row.sha256});
@@ -692,6 +704,7 @@ mod testing_brand_tests {
             assert!(reject_testing_chrome(&executable)
                 .unwrap_err()
                 .starts_with("chrome_for_testing_unsupported:"));
+            assert!(!evidence.available, "retired builds must not be offered");
             assert!(verify_build(executable.to_str().unwrap(), None).is_err());
             assert_eq!(evidence.version.as_deref(), Some("157.0.8103.78"));
             assert_eq!(

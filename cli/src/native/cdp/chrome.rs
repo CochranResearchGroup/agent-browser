@@ -1104,7 +1104,11 @@ pub(crate) fn launch_chrome_manual_owned(options: &LaunchOptions) -> Result<Chro
     try_launch_chrome(&executable, options, &HashMap::new(), false)
 }
 
-pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
+pub fn launch_chrome(
+    options: &LaunchOptions,
+    cause: &mut Option<&'static str>,
+) -> Result<ChromeProcess, String> {
+    *cause = Some("chrome_launch_preflight_failed");
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
         None => find_chrome().ok_or_else(|| {
@@ -1131,12 +1135,27 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
 
     for attempt in 1..=max_attempts {
         cleanup_stale_profile_lock(&build_chrome_args(options, true)?.user_data_dir);
+        *cause = Some("chrome_profile_occupancy_check_failed");
         ensure_profile_not_in_use(&build_chrome_args(options, true)?.user_data_dir)?;
         match try_launch_chrome(&chrome_path, options, &linux_keyring_env, true) {
             Ok(process) => {
+                *cause = None;
                 return Ok(process);
             }
             Err(e) => {
+                *cause = Some(if e.starts_with("Chrome exited early") {
+                    if e.contains("UtilAcceptVsock") && e.contains("accept4 failed 110") {
+                        "chrome_vsock_accept_timeout"
+                    } else {
+                        "chrome_exited_before_devtools"
+                    }
+                } else if e.starts_with("Timeout waiting for Chrome DevTools endpoint") {
+                    "chrome_devtools_endpoint_timeout"
+                } else if e.starts_with("Failed to launch Chrome at") {
+                    "chrome_spawn_failed"
+                } else {
+                    "chrome_process_setup_failed"
+                });
                 attempt_errors.push(format!("attempt {attempt}: {e}"));
                 if attempt < max_attempts {
                     // Use write! instead of eprintln! to avoid panicking
@@ -3135,7 +3154,7 @@ mod tests {
             private_launch_environment: Some(environment),
             ..LaunchOptions::default()
         };
-        let error = match launch_chrome(&options) {
+        let error = match launch_chrome(&options, &mut None) {
             Err(error) => error,
             Ok(_) => panic!("synthetic child must fail"),
         };
@@ -3577,7 +3596,7 @@ mod tests {
             ..LaunchOptions::default()
         };
 
-        let error = match launch_chrome(&options) {
+        let error = match launch_chrome(&options, &mut None) {
             Ok(_) => panic!("invalid runtime profile must fail before launch"),
             Err(error) => error,
         };
