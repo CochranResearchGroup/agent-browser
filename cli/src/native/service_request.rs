@@ -2849,7 +2849,8 @@ mod tests {
     fn browser_build_request_accepts_alias_and_rejects_conflicting_declarations() {
         let request = |top, nested| {
             json!({
-                "action": "service_profile_lookup",
+                "action": "tab_new",
+                "url": "https://example.test/",
                 "serviceName": "test",
                 "agentName": "test",
                 "taskName": "test",
