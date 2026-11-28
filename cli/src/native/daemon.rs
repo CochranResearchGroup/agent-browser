@@ -429,6 +429,30 @@ struct RuntimeLane {
     configuration_committed: bool,
 }
 
+impl RuntimeLane {
+    fn restore_stream_metadata(&self) -> Result<(), String> {
+        let (Some(server), Some(path)) = (&self.stream_server, &self.stream_file) else {
+            return Ok(());
+        };
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options.open(path);
+        match file {
+            Ok(mut file) => write!(file, "{}", server.port())
+                .map_err(|error| format!("runtime_host_stream_metadata_write_failed: {error}")),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+            Err(error) => Err(format!(
+                "runtime_host_stream_metadata_write_failed: {error}"
+            )),
+        }
+    }
+}
+
 #[derive(Clone)]
 struct RuntimeHostRouter {
     lanes: Arc<crate::runtime_host::RuntimeLaneRegistry<RuntimeLane>>,
@@ -534,6 +558,9 @@ impl RuntimeHostRouter {
     ) -> Result<RuntimeLane, String> {
         if let Some(lane) = self.lanes.get(session) {
             if lane.configuration_committed || config.is_none() {
+                if config.is_some() {
+                    lane.restore_stream_metadata()?;
+                }
                 return Ok(lane);
             }
         }
@@ -575,6 +602,9 @@ impl RuntimeHostRouter {
                         },
                     );
                 }
+            }
+            if config.is_some() {
+                lane.restore_stream_metadata()?;
             }
             return Ok(lane);
         }
@@ -1672,6 +1702,54 @@ mod tests {
                 .starts_with("operator_focus_"),
             "the direct owner must still refuse an invalid signed focus: {response}"
         );
+    }
+
+    #[tokio::test]
+    async fn existing_runtime_lane_republishes_missing_stream_metadata() {
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_RUNTIME_HOST",
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+        ]);
+        let home =
+            std::env::temp_dir().join(format!("ab-stream-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_HOME",
+            home.join("agent-home").to_str().unwrap(),
+        );
+        guard.set("AGENT_BROWSER_RUNTIME_HOST", "1");
+        guard.set(
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+            home.join("supervisor").to_str().unwrap(),
+        );
+        let router = RuntimeHostRouter::new(
+            home.clone(),
+            "initial",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        let config = crate::runtime_host::RuntimeLaneConfig::default();
+        router.lane("stream", Some(config.clone())).await.unwrap();
+        let metadata = home.join("stream.stream");
+        let port = fs::read_to_string(&metadata).unwrap();
+        fs::remove_file(&metadata).unwrap();
+
+        router.lane("stream", Some(config)).await.unwrap();
+        let restored = fs::read_to_string(&metadata).ok();
+        router.shutdown().await;
+        fs::remove_dir_all(home).unwrap();
+
+        assert_eq!(restored.as_deref(), Some(port.as_str()));
     }
 
     #[tokio::test]
