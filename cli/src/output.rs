@@ -5827,7 +5827,7 @@ Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
        agent-browser install transactions list [--json]
        agent-browser install transactions inspect --transaction-id <id> [--json]
        agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]
-       agent-browser install stealthcdp-chromium [--force]
+       agent-browser install chromiumQ [--force]
        agent-browser install doctor [--json]
 
 Downloads and installs browser binaries required for automation. The doctor is
@@ -6146,7 +6146,7 @@ Options:
   -d, --with-deps      Also install system dependencies (Linux only)
   --with-remote-view-privileges
                        Install the agent-browser group, root-owned helper, and sudoers rule used by RDP/Guacamole desktop setup (Linux only)
-  --force              Replace an existing chromium-stealthcdp artifact
+  --force              Replace an existing chromiumQ artifact
   --dry-run            Plan workstation payload installation without mutation
   --apply              Materialize the installed workstation payload
   --progress-json      Emit incremental observations on stderr; requires --apply --json
@@ -6172,7 +6172,7 @@ Options:
 
 Examples:
   agent-browser install
-  agent-browser install stealthcdp-chromium
+  agent-browser install chromiumQ
   agent-browser install doctor
   agent-browser install doctor --json
   agent-browser install --with-deps
@@ -6800,9 +6800,9 @@ for journal correlation; retrySafe remains false.
 
 Options:
   --runtime-profile <id>       Use a managed runtime profile, for example last30days-facebook
-  --browser-build <build>      Browser build: stock_chrome, stealthcdp_chromium, or cdp_free_headed
+  --browser-build <build>      Browser build: stock_chrome, chromiumQ, or cdp_free_headed
                               Linux managed opens verify the actual executable and reject incompatible reuse;
-                              stealthcdp_chromium requires a ready configured build manifest.
+                              chromiumQ requires a ready configured build manifest.
   --view-stream-provider rdp_gateway
                                Use the Guacamole/RDP gateway view stream
   --provider rdp_gateway       Compatibility alias for --view-stream-provider rdp_gateway
@@ -6846,7 +6846,7 @@ Global placement:
 
 Examples:
   agent-browser --json remote-view open https://www.facebook.com/ --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
-  agent-browser remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --job-timeout-ms 120000 --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
+  agent-browser remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build chromiumQ --view-stream-provider rdp_gateway --job-timeout-ms 120000 --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
   agent-browser remote-view open https://messages.google.com/web/conversations --runtime-profile google-messages --browser-build stock_chrome --view-stream-provider rdp_gateway --manual-login-launch --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
   agent-browser --session facebook-route remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --session-name last30days-facebook --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
   agent-browser remote-view open linkedin.com --route-pool-entry-id guacamole-rdp-a --display :11 --dry-run
@@ -6878,7 +6878,7 @@ Options:
                        Report readiness for one retained runtime profile
   --route-id <id>       Report readiness for one retained remote-view route
   --browser-build <build>
-                       Select the browser build for remote-view open, for example stealthcdp_chromium
+                       Select the browser build for remote-view open, for example chromiumQ
   --view-stream-provider rdp_gateway
                        Select the RDP gateway view stream for remote-view open
   --provider rdp_gateway
@@ -6898,7 +6898,7 @@ Environment:
 
 Post-setup validation:
   When profileSmoke.available is true, run pnpm test:wsl-windows-chromium-profile-live
-  from the repo to verify Windows chromium-stealthcdp profile writes from WSL.
+  from the repo to verify Windows chromiumQ profile writes from WSL.
 
 Timeout handling:
   remote-view doctor reports child-command timeouts with distinct *_timed_out
@@ -6933,7 +6933,7 @@ Examples:
   agent-browser doctor remote-view
   agent-browser doctor remote-view --json
   agent-browser doctor remote-view --session google-messages --route-id guacamole:1 --json
-  agent-browser remote-view open https://www.linkedin.com/ --runtime-profile stealthcdp-default --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
+  agent-browser remote-view open https://www.linkedin.com/ --runtime-profile stealthcdp-default --browser-build chromiumQ --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
   agent-browser remote-view open linkedin.com --route-pool-entry-id pool-a --display :11 --dry-run
 "##
         }
@@ -7112,10 +7112,10 @@ Usage:
   agent-browser service gc [--dry-run|--apply --review-token <token>|--apply --force-without-review]
   agent-browser service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--display-allocations] [--abandoned-session-min-age-minutes <n>]
   agent-browser service repair-retained [--dry-run|--apply] [--missing-lease-observed-at|--no-missing-lease-observed-at]
-  agent-browser service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--session-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]
-  agent-browser service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]
-  agent-browser service browser-capability guide [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--reason <text>]
-  agent-browser service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]
+  agent-browser service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--session-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|chromiumQ|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]
+  agent-browser service browser-capability preflight --browser-build <stock_chrome|chromiumQ|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]
+  agent-browser service browser-capability guide [--browser-build <stock_chrome|chromiumQ|cdp_free_headed>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--reason <text>]
+  agent-browser service browser-capability prefer --browser-build <stock_chrome|chromiumQ|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]
   agent-browser service profiles
   agent-browser service profiles <profile-id> diagnose
   agent-browser service profiles <profile-id> repair --capability-file /absolute/private/path/profile.cap
@@ -7157,7 +7157,7 @@ Cold owned tab_new reuses an empty bootstrap about:blank target and reports
 coldLaunch, tabAcquisitionDecision, initialTargetCount, and restoredTargetCount.
 An explicit --browser-build selection wins over site, profile, preference, and
 service defaults, including browserBuild nested under service request params.
-Google and Gmail use headed stealthcdp_chromium for attachable first sign-in.
+Google and Gmail use headed chromiumQ for attachable first sign-in.
 Only requiresCdpFree site policy forces detached CDP-free first login.
 Access plans expose decision.lifecycleReplacement with owner generation, lifecycle
 and cleanup states, terminal evidence, replacementEligible, requiredAction, and
@@ -7367,9 +7367,9 @@ Notes:
   - pnpm test:service-shutdown-health-live validates the polite-shutdown failure remedy against live service state.
   - Runtime profile and custom profile launches populate linked service profile and session records, including profileSelectionReason, profileLeaseDisposition, profileLeaseConflictSessionIds, and browserCapabilityLaunch diagnostics when known. When an access plan supplies both, dashboard guided launches pass the runtime-profile identity and exact custom profile path together instead of substituting a same-named managed runtime directory.
   - Service-scoped launches reject active exclusive profile conflicts by default before browser start; set profileLeasePolicy=wait and profileLeaseWaitTimeoutMs to keep the job queued while polling for release, leaving the worker available for other commands. Same-session retained browser reuse remains allowed.
-  - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.<build>.manifestPath. launchConfig.profileSmoke tells API, MCP, and CLI clients whether the WSL Windows chromium-stealthcdp profile-write smoke is applicable. If stealthcdp_chromium is selected but no executable path or ready manifest exists, status reports a warning. Ordinary launch and queued tab paths consume service.defaultBrowserBuild through the service access-plan resolver unless the caller explicitly supplies a profile, browser host, headless mode, executable, or browser build. When no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
+  - service status includes launchConfig, a no-launch diagnostic for service.defaultBrowserBuild and the resolved executablePath from config, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.<build>.manifestPath. launchConfig.profileSmoke tells API, MCP, and CLI clients whether the WSL Windows chromiumQ profile-write smoke is applicable. If chromiumQ is selected but no executable path or ready manifest exists, status reports a warning. Ordinary launch and queued tab paths consume service.defaultBrowserBuild through the service access-plan resolver unless the caller explicitly supplies a profile, browser host, headless mode, executable, or browser build. When no explicit default is configured and a ready chromiumQ manifest is available, fresh installs prefer that build automatically.
   - Ordinary service status retains every live or referenced tab and at most 50 unreferenced closed-tab rows. closedTabProjection reports retained, omitted, cap, and ordering metadata. Use --full-tab-history for the complete response-only diagnostic projection; persisted service state is never compacted by a status read.
-  - Service profiles can set browserBuild to stock_chrome, stealthcdp_chromium, or cdp_free_headed. Exact authenticated target, account, and target-site matches win first; browserBuild then breaks ties and can select a generic default profile for new identities.
+  - Service profiles can set browserBuild to stock_chrome, chromiumQ, or cdp_free_headed. Exact authenticated target, account, and target-site matches win first; browserBuild then breaks ties and can select a generic default profile for new identities.
   - service.browserCapabilityRegistry carries draft browser host, executable, capability, profile compatibility, preference binding, and validation evidence arrays into service_state.browserCapabilityRegistry for no-launch status consumers. Access-plan recommendations can use preference bindings for browserBuild selection, and populated target, account, service, and task filters are conjunctive. Guarded launches record browserCapabilityLaunch diagnostics explaining whether a local executable binding was applied or skipped. A matching failed, stale, incompatible, or operator-override row blocks launch routing even if another matching row passed.
   - service browser-capability preflight is the operator no-launch gate check for that same guarded launch path. It accepts the requested build, site/login/account hints, caller labels, profile hint, headed or headless posture, and CDP-free posture, evaluates effective configured service state, and returns browserCapabilityLaunch plus selected evidence IDs when the route passes. Manifest-derived default executables do not count as explicit operator overrides.
   - Commands should include serviceName, agentName, and taskName when available for traceability.
@@ -7390,7 +7390,7 @@ Examples:
   agent-browser service prune-retained
   agent-browser service repair-retained
   agent-browser service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --login-id canva
-  agent-browser service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace
+  agent-browser service browser-capability preflight --browser-build chromiumQ --target-service-id canva --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace
   agent-browser service browser-capability guide --browser-build stock_chrome --target-service-id only-works-on-chrome --account-id myuser
   agent-browser service browser-capability prefer --browser-build stock_chrome --target-service-id only-works-on-chrome --account-id myuser --preferred-executable-id windows-chrome-stable --reason site_requires_stock_chrome
   agent-browser service profiles
@@ -8214,7 +8214,7 @@ Options:
   --headed                   Show browser window (not headless). On Unix,
                              defaults DISPLAY to :0.0 if DISPLAY is unset
                              (or AGENT_BROWSER_HEADED env)
-  --browser-build <build>    Browser build hint: stock_chrome, stealthcdp_chromium, cdp_free_headed
+  --browser-build <build>    Browser build hint: stock_chrome, chromiumQ, cdp_free_headed
   --browser-host <host>      Launch host hint: local_headless, local_headed, docker_headed, remote_headed, cloud_provider, attached_existing
   --view-stream-provider <provider> Remote view metadata: cdp_screencast, chrome_tab_webrtc, virtual_display_webrtc, novnc, rdp_gateway, external_url
   --control-input-provider <provider> Remote input metadata: cdp_input, webrtc_input, vnc_input, manual_attached_desktop
@@ -8261,8 +8261,8 @@ Configuration:
     --headed false     (disables "headed": true from config)
 
   Extensions from user and project configs are merged (not replaced).
-  Set service.defaultBrowserBuild to stealthcdp_chromium after executablePath, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.stealthcdp_chromium.manifestPath points at the patched Chromium artifact. Managed MCP tasks, including disposable profiles, honor that executable default and reject unavailable required StealthCDP instead of discovering another Chrome executable. If no explicit default is configured and a ready stealthcdp_chromium manifest is available, fresh installs prefer that build automatically.
-  Set service.profiles.<id>.browserBuild when a profile must stay on stock_chrome, stealthcdp_chromium, or cdp_free_headed.
+  Set service.defaultBrowserBuild to chromiumQ after executablePath, AGENT_BROWSER_EXECUTABLE_PATH, or service.browserBuildManifests.chromiumQ.manifestPath points at the patched Chromium artifact. Managed MCP tasks, including disposable profiles, honor that executable default and reject unavailable required StealthCDP instead of discovering another Chrome executable. If no explicit default is configured and a ready chromiumQ manifest is available, fresh installs prefer that build automatically.
+  Set service.profiles.<id>.browserBuild when a profile must stay on stock_chrome, chromiumQ, or cdp_free_headed.
   Development provider staging requires AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL to be a reviewed public HTTPS origin and AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION to identify the immutable reviewed ingress deployment. Both must be set together; loopback remains local diagnostics only.
   An installed v1 development provider is upgradeable only when its loopback URL equals the new local diagnostic URL and every other provider identity matches. Status remains drifted until explicit provider apply writes v2 authority; all other manifest drift remains blocking.
   Plan 0158 external ingress evidence uses the manual Plan 0158 External Vantage GitHub Actions workflow. Its protected environment supplies the handoff, dashboard credentials, and expected identity as secrets; both client jobs must pass before the aggregate receipt is accepted.
@@ -8342,7 +8342,7 @@ Configuration:
   Service hints are advisory. When a configured service marks
   manualLoginPreferred, navigation to known login hosts emits a warning that
   points agents to detached `runtime login`. Built-in Google and Gmail use
-  headed stealthcdp_chromium and allow CDP during first sign-in. Only an
+  headed chromiumQ and allow CDP during first sign-in. Only an
   effective requiresCdpFree site policy requires a detached first login. Prefer
   keyring=basic_password_store for managed profiles so OS keyring modals do
   not block unattended workflows. For ordinary sites, agents can use the
@@ -9181,7 +9181,7 @@ mod tests {
                 "tabs": {}
             },
             "launchConfig": {
-                "defaultBrowserBuild": "stealthcdp_chromium",
+                "defaultBrowserBuild": "chromiumQ",
                 "stealthCdpChromiumRequired": true,
                 "stealthCdpChromiumReady": false,
                 "executablePath": "/missing/chrome",
@@ -9194,11 +9194,11 @@ mod tests {
                     "reason": "stealthcdp_executable_not_found",
                     "isWsl": true,
                     "executableOnWindowsMount": false,
-                    "description": "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene."
+                    "description": "Launches Windows chromiumQ from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene."
                 },
                 "warnings": [{
                     "code": "stealthcdp_executable_not_found",
-                    "message": "stealthcdp_chromium is selected, but the configured executable path does not exist"
+                    "message": "chromiumQ is selected, but the configured executable path does not exist"
                 }]
             },
             "retainedDisplayAllocations": {
@@ -9242,10 +9242,10 @@ mod tests {
             rendered.contains("Service: worker=idle browser=ready queue=1/64 waiting_profile_leases=2 browsers=1 tabs=0")
         );
         assert!(rendered.contains(
-            "Launch config: browser_build=stealthcdp_chromium executable=/missing/chrome executable_source=config executable_exists=no stealthcdp_ready=no"
+            "Launch config: browser_build=chromiumQ executable=/missing/chrome executable_source=config executable_exists=no stealthcdp_ready=no"
         ));
         assert!(rendered.contains(
-            "warning stealthcdp_executable_not_found: stealthcdp_chromium is selected, but the configured executable path does not exist"
+            "warning stealthcdp_executable_not_found: chromiumQ is selected, but the configured executable path does not exist"
         ));
         assert!(rendered.contains(
             "Retained display allocations: total=3 apply_safe=2 retained=1 classes=diagnostic-retained=1,safe-orphan-display=1,stale-route-reference=1"
@@ -9327,7 +9327,7 @@ mod tests {
             "browserCapabilityLaunch": {
                 "applied": true,
                 "reason": "validated_binding_applied",
-                "browserBuild": "stealthcdp_chromium",
+                "browserBuild": "chromiumQ",
                 "profileId": "canva-default",
                 "bindingId": "canva-stealth",
                 "hostId": "linux-local",
@@ -9389,25 +9389,25 @@ mod tests {
                 }
             },
             "browserBuildSelectionSummary": {
-                "browserBuild": "stealthcdp_chromium",
+                "browserBuild": "chromiumQ",
                 "source": "browser_preference_binding",
                 "evidenceSource": "service.browserCapabilityRegistry",
                 "operatorOverride": false,
                 "profileCompatibilityStatus": "compatible",
                 "validationEvidenceStatus": "passed",
                 "selectedPreferenceBindingId": "canva-stealth-preference",
-                "compact": "build=stealthcdp_chromium source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=canva-stealth-preference"
+                "compact": "build=chromiumQ source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=canva-stealth-preference"
             }
         });
 
         let rendered = format_service_access_plan_text(&data).unwrap();
 
         assert!(rendered.contains("Access plan: action=use_selected_profile profile=canva-default"));
-        assert!(rendered.contains("browser_build=stealthcdp_chromium"));
+        assert!(rendered.contains("browser_build=chromiumQ"));
         assert!(rendered
             .contains("profile_selection status=selected reason=target_match effect=no_effect"));
         assert!(rendered.contains("preference_binding=canva-stealth-preference"));
-        assert!(rendered.contains("browser_build_summary=build=stealthcdp_chromium"));
+        assert!(rendered.contains("browser_build_summary=build=chromiumQ"));
         assert!(
             rendered.contains("profile_reuse action=reuse_existing_browser browser=browser-canva")
         );
@@ -9957,7 +9957,7 @@ mod tests {
                         "sessionId": "session-1",
                         "applied": true,
                         "reason": "validated_binding_applied",
-                        "browserBuild": "stealthcdp_chromium",
+                        "browserBuild": "chromiumQ",
                         "bindingId": "binding-1",
                         "hostId": "local",
                         "executableId": "stealth-current",
@@ -10082,7 +10082,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 targets=acs,google control=cdp,cdp_free display=private_virtual_display lifecycleOnlyJobs=1 attention=incidents_present events=1 jobs=1 incidents=1 activity=1\nBrowser capability launches: 1\n  source=session session=session-1 browser=browser-1 profile=work build=stealthcdp_chromium applied=true reason=validated_binding_applied binding=binding-1 host=local executable=stealth-current\nDisplay allocations: recorded=1 unrecorded=0\n  display=private_virtual_display count=1 jobs=job-1\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
+            "Trace: events=2 jobs=1 incidents=1 activity=1\nSummary: contexts=1 namingWarnings=0\n  context service=JournalDownloader agent=codex task=probeACSwebsite browser=browser-1 profile=work session=session-1 targets=acs,google control=cdp,cdp_free display=private_virtual_display lifecycleOnlyJobs=1 attention=incidents_present events=1 jobs=1 incidents=1 activity=1\nBrowser capability launches: 1\n  source=session session=session-1 browser=browser-1 profile=work build=chromiumQ applied=true reason=validated_binding_applied binding=binding-1 host=local executable=stealth-current\nDisplay allocations: recorded=1 unrecorded=0\n  display=private_virtual_display count=1 jobs=job-1\nProfile lease waits: 1\n  2026-04-25T00:00:03Z profile_lease_wait job=job-1 profile=work outcome=ready waited_ms=3000 retry_after_ms=50 conflicts=active-session service=JournalDownloader agent=codex task=probeACSwebsite\n2026-04-25T00:00:00Z browser_health_changed source=event id=activity-1 browser=browser-1 profile=work session=session-1 service=JournalDownloader agent=codex task=probeACSwebsite Browser failed"
         );
     }
 

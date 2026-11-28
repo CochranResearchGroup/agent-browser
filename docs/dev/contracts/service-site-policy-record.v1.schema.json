@@ -117,7 +117,7 @@
           "type": "string",
           "enum": [
             "stock_chrome",
-            "stealthcdp_chromium",
+            "chromiumQ",
             "cdp_free_headed"
           ]
         },

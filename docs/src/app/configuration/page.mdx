@@ -55,9 +55,9 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
     }
   },
   "service": {
-    "defaultBrowserBuild": "stealthcdp_chromium",
+    "defaultBrowserBuild": "chromiumQ",
     "browserBuildManifests": {
-      "stealthcdp_chromium": {
+      "chromiumQ": {
         "manifestPath": "/opt/agent-browser/chromium-stealthcdp/current/manifest.json"
       }
     },
@@ -88,7 +88,7 @@ If you do not set <code>profile</code> or <code>runtimeProfile</code>, agent-bro
         "name": "Work",
         "allocation": "per_service",
         "keyring": "basic_password_store",
-        "browserBuild": "stealthcdp_chromium",
+        "browserBuild": "chromiumQ",
         "sharedServiceIds": ["JournalDownloader"],
         "manualLoginPreferred": true
       }
@@ -182,12 +182,12 @@ resources. Installation checks both production and default development
 identity for non-interference. Do not reuse their writable roots.
 
 Set <code>service.defaultBrowserBuild</code> to
-<code>stealthcdp_chromium</code> only when service-owned launches should prefer
+<code>chromiumQ</code> only when service-owned launches should prefer
 the patched Chromium posture. If no explicit default is configured and a ready
-<code>stealthcdp_chromium</code> manifest is available, fresh installs prefer
-that build automatically. <code>agent-browser install stealthcdp-chromium</code>
+<code>chromiumQ</code> manifest is available, fresh installs prefer
+that build automatically. <code>agent-browser install chromiumQ</code>
 installs the public <code>chromium-stealthcdp</code> Windows asset under
-<code>%LOCALAPPDATA%\chromium-stealthcdp</code> on Windows or the matching
+<code>%LOCALAPPDATA%\chromiumQ</code> on Windows or the matching
 WSL-mounted <code>AppData/Local</code> directory when available, then exposes
 <code>current/manifest.json</code> and <code>current/chrome.exe</code>.
 When WSL launches that Windows <code>chrome.exe</code>, agent-browser translates
@@ -196,9 +196,9 @@ for Chrome arguments and adds <code>--no-sandbox</code>, which this host mode
 requires for the patched Windows build to expose DevTools reliably.
 Provide the current binary location with <code>executablePath</code>,
 <code>AGENT_BROWSER_EXECUTABLE_PATH</code>,
-<code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH</code>,
-<code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT</code>, or
-<code>service.browserBuildManifests.stealthcdp_chromium.manifestPath</code>.
+<code>AGENT_BROWSER_CHROMIUMQ_MANIFEST_PATH</code>,
+<code>AGENT_BROWSER_CHROMIUMQ_INSTALL_ROOT</code>, or
+<code>service.browserBuildManifests.chromiumQ.manifestPath</code>.
 A manifest path points at a promoted artifact <code>manifest.json</code>, and
 agent-browser resolves the executable relative to that manifest before
 launching.
@@ -213,14 +213,14 @@ reducing the obvious automation signal exposed by ordinary DevTools-attached
 Chromium. It is not a captcha bypass, but it is a better default for
 bot-sensitive sites that still tolerate CDP-backed control.
 The built-in Google and Gmail policies use headed
-<code>stealthcdp_chromium</code>, so first sign-in remains attachable and may be
+<code>chromiumQ</code>, so first sign-in remains attachable and may be
 automated. Detached CDP-free first login is required only when the effective
 site policy sets <code>requiresCdpFree</code>. Failed sign-in or challenge
 attempts may still require operator intervention. An explicit
 <code>browserBuild</code> selection wins over site, profile, preference-binding,
 and service defaults, including when a service request nests the field under
 <code>params</code>.
-Profiles can set <code>browserBuild</code> to <code>stealthcdp_chromium</code>,
+Profiles can set <code>browserBuild</code> to <code>chromiumQ</code>,
 <code>stock_chrome</code>, or <code>cdp_free_headed</code>. Exact authenticated
 target, account, and target-site matches still win first; browser build then
 breaks ties and can select a generic default profile for new identities. Use a
@@ -275,8 +275,8 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
     <tr><td><code>runtimeProfile</code></td><td><code>--runtime-profile</code></td><td>string</td></tr>
     <tr><td><code>sessionName</code></td><td><code>--session-name</code></td><td>string</td></tr>
     <tr><td><code>executablePath</code></td><td><code>--executable-path</code></td><td>string</td></tr>
-    <tr><td><code>service.defaultBrowserBuild</code></td><td>Service launch posture label. Use <code>stealthcdp_chromium</code> with <code>executablePath</code>, <code>AGENT_BROWSER_EXECUTABLE_PATH</code>, or <code>service.browserBuildManifests.stealthcdp_chromium.manifestPath</code> for the patched Chromium build.</td><td>string</td></tr>
-    <tr><td><code>service.profiles.&lt;id&gt;.browserBuild</code></td><td>Profile-level browser build preference. Values: <code>stock_chrome</code>, <code>stealthcdp_chromium</code>, or <code>cdp_free_headed</code>.</td><td>string</td></tr>
+    <tr><td><code>service.defaultBrowserBuild</code></td><td>Service launch posture label. Use <code>chromiumQ</code> with <code>executablePath</code>, <code>AGENT_BROWSER_EXECUTABLE_PATH</code>, or <code>service.browserBuildManifests.chromiumQ.manifestPath</code> for the patched Chromium build.</td><td>string</td></tr>
+    <tr><td><code>service.profiles.&lt;id&gt;.browserBuild</code></td><td>Profile-level browser build preference. Values: <code>stock_chrome</code>, <code>chromiumQ</code>, or <code>cdp_free_headed</code>.</td><td>string</td></tr>
     <tr><td><code>service.browserBuildManifests.&lt;build&gt;.manifestPath</code></td><td>Promoted browser artifact manifest used to resolve the executable and report artifact metadata in service status.</td><td>string</td></tr>
     <tr><td><code>service.browserCapabilityRegistry</code></td><td>Draft advisory registry for browser hosts, executables, capabilities, profile compatibility, preference bindings, and validation evidence exposed under service status. Populated preference binding filters such as target and account must all match the request.</td><td>object</td></tr>
     <tr><td><code>extensions</code></td><td><code>--extension</code></td><td>string[]</td></tr>
@@ -410,8 +410,8 @@ These environment variables configure additional daemon and runtime behavior:
     <tr><td><code>AGENT_BROWSER_EXTENSIONS</code></td><td>Comma-separated browser extension paths. Extensions work in both headed and headless mode.</td><td>(none)</td></tr>
     <tr><td><code>AGENT_BROWSER_EXECUTABLE_PATH</code></td><td>Custom browser executable path. Overrides config and manifest-resolved executable paths.</td><td>(auto-discovered browser)</td></tr>
     <tr><td><code>AGENT_BROWSER_CDP_BOOTSTRAP_MODE</code></td><td>CDP bootstrap for newly launched local Chrome: <code>eager</code>, or experimental <code>navigation_minimal</code> to enable only the Page domain initially. A <code>networkidle</code> navigation promotes that target before using network lifecycle events. Existing-browser, provider, runtime-handoff, and Lightpanda connections remain eager. This is a diagnostic boundary, not a CAPTCHA bypass.</td><td><code>eager</code></td></tr>
-    <tr><td><code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH</code></td><td>Promoted <code>stealthcdp_chromium</code> artifact manifest used to resolve the executable path when no explicit executable path is set.</td><td>(auto-discovered stable install manifest when present)</td></tr>
-    <tr><td><code>AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT</code></td><td>Override the install and auto-discovery root for <code>agent-browser install stealthcdp-chromium</code>. The default is <code>%LOCALAPPDATA%\chromium-stealthcdp</code> on Windows or the matching WSL-mounted <code>AppData/Local</code> path.</td><td>(platform default)</td></tr>
+    <tr><td><code>AGENT_BROWSER_CHROMIUMQ_MANIFEST_PATH</code></td><td>Promoted <code>chromiumQ</code> artifact manifest used to resolve the executable path when no explicit executable path is set.</td><td>(auto-discovered stable install manifest when present)</td></tr>
+    <tr><td><code>AGENT_BROWSER_CHROMIUMQ_INSTALL_ROOT</code></td><td>Override the install and auto-discovery root for <code>agent-browser install chromiumQ</code>. The default is <code>%LOCALAPPDATA%\chromiumQ</code> on Windows or the matching WSL-mounted <code>AppData/Local</code> path.</td><td>(platform default)</td></tr>
     <tr><td><code>AGENT_BROWSER_HEADED</code></td><td>Show browser window instead of running headless (<code>1</code> to enable).</td><td>(disabled)</td></tr>
     <tr><td><code>AGENT_BROWSER_RUNTIME_PROFILE</code></td><td>Managed runtime profile name used for persistent browser state.</td><td><code>default</code></td></tr>
     <tr><td><code>AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH</code></td><td>Allow an operator-forced runtime profile launch when the configured profile browser family does not match the resolved browser executable family.</td><td>(disabled)</td></tr>

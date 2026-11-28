@@ -441,7 +441,7 @@ function createBrokerFirstFetch({
     }
 
     if (method === 'GET' && parsed.pathname === '/api/service/browser-capability/preflight') {
-      assert.equal(parsed.searchParams.get('browserBuild'), 'stealthcdp_chromium');
+      assert.equal(parsed.searchParams.get('browserBuild'), 'chromiumQ');
       assert.equal(parsed.searchParams.get('serviceName'), serviceName);
       assert.equal(parsed.searchParams.get('agentName'), agentName);
       assert.equal(parsed.searchParams.get('taskName'), taskName);
@@ -454,7 +454,7 @@ function createBrokerFirstFetch({
         browserCapabilityLaunch: {
           applied: true,
           reason: 'validated_preference_binding',
-          browserBuild: 'stealthcdp_chromium',
+          browserBuild: 'chromiumQ',
           profileId,
         },
       });
@@ -656,10 +656,10 @@ function accessPlanResponse(selectedProfile, { dueMonitorRecommended = false } =
         recommendedBeforeUse: Boolean(selectedProfile),
         reason: selectedProfile ? 'browser_capability_evidence_available' : 'browser_build_unavailable',
         selectedProfileId: selectedProfile?.id ?? null,
-        browserBuild: selectedProfile ? 'stealthcdp_chromium' : null,
+        browserBuild: selectedProfile ? 'chromiumQ' : null,
         request: selectedProfile
           ? {
-              browserBuild: 'stealthcdp_chromium',
+              browserBuild: 'chromiumQ',
               serviceName,
               agentName,
               taskName,
@@ -671,7 +671,7 @@ function accessPlanResponse(selectedProfile, { dueMonitorRecommended = false } =
       },
       launchPosture: {
         browserHost: 'local_headed',
-        browserBuild: selectedProfile ? 'stealthcdp_chromium' : 'stock_chrome',
+        browserBuild: selectedProfile ? 'chromiumQ' : 'stock_chrome',
         browserBuildSource: selectedProfile ? 'browser_preference_binding' : 'service_default',
         source: 'service_default',
         headed: true,
@@ -694,7 +694,7 @@ function accessPlanResponse(selectedProfile, { dueMonitorRecommended = false } =
 
 function browserBuildSelection(selectedProfile) {
   return {
-    browserBuild: selectedProfile ? 'stealthcdp_chromium' : 'stock_chrome',
+    browserBuild: selectedProfile ? 'chromiumQ' : 'stock_chrome',
     source: selectedProfile ? 'browser_preference_binding' : 'service_default',
     evidenceSource: selectedProfile ? 'service.browserCapabilityRegistry' : 'service_default',
     summary: selectedProfile
@@ -733,7 +733,7 @@ function browserBuildSelection(selectedProfile) {
 
 function expectedBrowserBuildSelectionSummary() {
   return {
-    browserBuild: 'stealthcdp_chromium',
+    browserBuild: 'chromiumQ',
     source: 'browser_preference_binding',
     evidenceSource: 'service.browserCapabilityRegistry',
     summary: 'Browser capability registry preference binding selected this build.',
@@ -752,7 +752,7 @@ function expectedBrowserBuildSelectionSummary() {
     auditFlags: ['preference_binding_selected'],
     attentionRequired: false,
     compact:
-      'build=stealthcdp_chromium source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=journal-stealth-preference',
+      'build=chromiumQ source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=journal-stealth-preference',
     raw: browserBuildSelection(brokerProfile()),
   };
 }

@@ -3257,8 +3257,8 @@ async function main() {
       },
       browserBuildProof: {
         state: 'matched',
-        requestedBrowserBuild: 'stealthcdp_chromium',
-        selectedBrowserBuild: 'stealthcdp_chromium',
+        requestedBrowserBuild: 'chromiumQ',
+        selectedBrowserBuild: 'chromiumQ',
         actualExecutablePath: '/opt/chromium-stealthcdp/chrome',
       },
     },
@@ -3302,8 +3302,8 @@ async function main() {
   assert.equal(remoteViewOpenSummary.serviceTabHandle?.targetId, 'target-facebook');
   assert.equal(remoteViewOpenSummary.visualProof, 'browser_window_visible');
   assert.equal(remoteViewOpenSummary.browserBuildState, 'matched');
-  assert.equal(remoteViewOpenSummary.requestedBrowserBuild, 'stealthcdp_chromium');
-  assert.equal(remoteViewOpenSummary.selectedBrowserBuild, 'stealthcdp_chromium');
+  assert.equal(remoteViewOpenSummary.requestedBrowserBuild, 'chromiumQ');
+  assert.equal(remoteViewOpenSummary.selectedBrowserBuild, 'chromiumQ');
   assert.equal(remoteViewOpenSummary.actualExecutablePath, '/opt/chromium-stealthcdp/chrome');
   assert.match(remoteViewOpenSummary.summary, /operatorVisible=ready/);
   assert.match(remoteViewOpenSummary.summary, /buildProof=matched/);

@@ -36,7 +36,7 @@
         },
         "browserBuild": {
           "type": ["string", "null"],
-          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed", null]
+          "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed", null]
         },
         "profileId": {
           "type": ["string", "null"]
@@ -88,7 +88,7 @@
       "properties": {
         "browserBuild": {
           "type": ["string", "null"],
-          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed", null]
+          "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed", null]
         },
         "profileId": {
           "type": ["string", "null"]

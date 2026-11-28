@@ -275,13 +275,13 @@ pub(crate) async fn execute_shared_remote_view_open(
                     },
                 )
             }
-            Some("stealthcdp_chromium") => {
+            Some("chromiumQ") => {
                 let flags = crate::flags::parse_flags(&["agent-browser".into()]);
                 let manifest = flags
                     .browser_build_manifest_status
-                    .get("stealthcdp_chromium")
+                    .get("chromiumQ")
                     .filter(|status| status["ready"] == true)
-                    .ok_or("browser_build_manifest_unavailable:stealthcdp_chromium")?;
+                    .ok_or("browser_build_manifest_unavailable:chromiumQ")?;
                 Some(PathBuf::from(required_string(manifest, "executablePath")?))
             }
             Some(_) => return Err("browser_build_selector_unsupported".into()),

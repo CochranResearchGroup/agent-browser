@@ -1170,7 +1170,7 @@ fn service_mcp_tools() -> Vec<Value> {
                     },
                     "browserBuild": {
                         "type": "string",
-                        "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+                        "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed", "stealthcdp_chromium"],
                         "description": "Optional browser-build preference for profile selection and launch posture."
                     },
                     "browserHost": {
@@ -1565,7 +1565,7 @@ fn service_mcp_tools() -> Vec<Value> {
                     },
                     "browserBuild": {
                         "type": "string",
-                        "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+                        "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed", "stealthcdp_chromium"],
                         "description": "Optional browser-build preference for profile selection and launch routing."
                     },
                     "browserHost": {
@@ -2550,7 +2550,7 @@ fn service_mcp_tools() -> Vec<Value> {
                 "properties": {
                     "browserBuild": {
                         "type": "string",
-                        "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+                        "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed", "stealthcdp_chromium"],
                         "description": "Requested browser build to preflight."
                     },
                     "targetServiceId": {
@@ -3622,7 +3622,7 @@ fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
         "browserBuild".to_string(),
         json!({
             "type": "string",
-            "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+            "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed", "stealthcdp_chromium"],
             "description": "Optional browser-build preference for profile selection and launch routing."
         }),
     );
@@ -6564,11 +6564,7 @@ fn call_service_browser_capability_preflight(
     arguments: &Value,
     session: &str,
 ) -> Result<Value, JsonRpcError> {
-    let browser_build = optional_enum_string_argument(
-        arguments,
-        "browserBuild",
-        &["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
-    )?
+    let browser_build = optional_browser_build_argument(arguments)?
     .ok_or_else(|| JsonRpcError::invalid_params("browserBuild is required"))?;
     let service_name = optional_string_argument(arguments, "serviceName")?;
     let agent_name = optional_string_argument(arguments, "agentName")?;
@@ -10843,6 +10839,18 @@ fn optional_enum_string_argument<'a>(
     Ok(value)
 }
 
+fn optional_browser_build_argument(arguments: &Value) -> Result<Option<&'static str>, JsonRpcError> {
+    optional_string_argument(arguments, "browserBuild")?
+        .map(|value| {
+            crate::native::service_model::BrowserBuild::parse_label(value)
+                .map(|build| build.label())
+                .ok_or_else(|| JsonRpcError::invalid_params(
+                    "browserBuild must be one of stock_chrome, chromiumQ, cdp_free_headed",
+                ))
+        })
+        .transpose()
+}
+
 fn optional_profile_lease_policy_argument(arguments: &Value) -> Result<Option<&str>, JsonRpcError> {
     optional_enum_string_argument(arguments, "profileLeasePolicy", &["reject", "wait"])
 }
@@ -10964,11 +10972,7 @@ fn access_plan_params_from_arguments(
             params.push((name.to_string(), value.to_string()));
         }
     }
-    if let Some(browser_build) = optional_enum_string_argument(
-        arguments,
-        "browserBuild",
-        &["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
-    )? {
+    if let Some(browser_build) = optional_browser_build_argument(arguments)? {
         params.push(("browserBuild".to_string(), browser_build.to_string()));
     }
     if let Some(browser_host) = optional_enum_string_argument(
@@ -16308,7 +16312,7 @@ mod tests {
         );
         assert_eq!(
             payload["data"]["query"]["browserBuild"],
-            "stealthcdp_chromium"
+            "chromiumQ"
         );
         assert_eq!(payload["data"]["query"]["browserHost"], "remote_headed");
         assert_eq!(

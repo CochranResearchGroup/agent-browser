@@ -296,7 +296,7 @@
     },
     "browserBuild": {
       "type": "string",
-      "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"],
+      "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed", "stealthcdp_chromium"],
       "description": "Optional browser-build preference for profile selection and launch routing."
     },
     "browserHost": {

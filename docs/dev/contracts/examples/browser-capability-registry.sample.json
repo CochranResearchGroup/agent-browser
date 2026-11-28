@@ -35,7 +35,7 @@
       "browserFamily": "chromium",
       "vendor": "custom",
       "channel": "custom",
-      "buildLabel": "stealthcdp_chromium",
+      "buildLabel": "chromiumQ",
       "executablePath": "/opt/agent-browser/chromium-stealthcdp/current/chrome-linux/chrome",
       "source": "manifest",
       "manifestPath": "/opt/agent-browser/chromium-stealthcdp/current/manifest.json",
@@ -143,7 +143,7 @@
       "preferredHostId": "linux-local",
       "preferredExecutableId": "linux-stealthcdp-current",
       "preferredCapabilityId": "linux-stealthcdp-capability",
-      "browserBuild": "stealthcdp_chromium",
+      "browserBuild": "chromiumQ",
       "priority": 10,
       "reason": "Preferred default for fresh service-owned profiles when a ready stealth CDP Chromium artifact is available."
     },

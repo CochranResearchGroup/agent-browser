@@ -221,6 +221,26 @@ function selectRecommendations(files, base) {
     add('pnpm test:service-client-types', 'service client type coverage may drift');
   }
 
+  if (files.some(file => [
+    'scripts/lib/p47-viewer-client.js',
+    'scripts/smoke-remote-headed-utils.js',
+    'scripts/test-p47-viewer-client-separation.js',
+  ].includes(file))) {
+    add('pnpm test:p47-viewer-client-separation', 'viewer-client ownership or manifest discovery fixture changed');
+  }
+
+  if (files.includes('scripts/test-cross-seam-interlocks.js')) {
+    add('pnpm test:cross-seam-interlocks', 'cross-seam service and dashboard routing fixture changed');
+  }
+
+  for (const [file, command, reason] of [
+    ['scripts/test-dashboard-service-trace.js', 'pnpm test:dashboard-trace', 'dashboard service trace fixture changed'],
+    ['scripts/test-dashboard-superuser-operator-agent.js', 'pnpm test:dashboard-superuser-operator-agent', 'dashboard operator launch fixture changed'],
+    ['scripts/test-dashboard-workspace-nodes.js', 'pnpm test:dashboard-workspace-nodes', 'dashboard workspace navigator fixture changed'],
+  ]) {
+    if (files.includes(file)) add(command, reason);
+  }
+
   if (files.some(isBrowserCapabilityRegistryDraftSurface)) {
     add(
       'pnpm test:browser-capability-registry-draft',

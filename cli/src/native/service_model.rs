@@ -3039,7 +3039,7 @@ mod tests {
 
         let value = serde_json::to_value(policy).unwrap();
         assert_eq!(value["browserHost"], "docker_headed");
-        assert_eq!(value["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(value["browserBuild"], "chromiumQ");
         assert_eq!(value["viewStream"], "virtual_display_webrtc");
         assert_eq!(value["controlInput"], "webrtc_input");
         assert_eq!(value["requiresCdpFree"], true);
@@ -5133,7 +5133,7 @@ mod tests {
                     "browserFamily": "chromium",
                     "vendor": "chromium",
                     "channel": "custom",
-                    "buildLabel": "stealthcdp_chromium",
+                    "buildLabel": "chromiumQ",
                     "executablePath": "/opt/agent-browser/chromium-stealthcdp/chrome",
                     "source": "manifest",
                     "version": "136.0.0.0",
@@ -5242,7 +5242,7 @@ mod tests {
         );
         assert_eq!(
             decoded.browser_capability_registry.browser_executables[0]["buildLabel"],
-            "stealthcdp_chromium"
+            "chromiumQ"
         );
     }
 

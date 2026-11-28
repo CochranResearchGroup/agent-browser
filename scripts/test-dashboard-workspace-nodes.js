@@ -677,7 +677,7 @@ const nodes = deriveWorkspaceNodes({
       profileId: 'profile-ready',
       host: 'local',
       health: 'ready',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       pid: 1234,
       cdpEndpoint: 'ws://127.0.0.1:4101/devtools/browser/live',
       processStats: {
@@ -835,7 +835,7 @@ const nodes = deriveWorkspaceNodes({
       profileId: 'profile-takeover',
       host: 'remote',
       health: 'ready',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       viewStreams: [
         {
           provider: 'rdp_gateway',
@@ -852,7 +852,7 @@ const nodes = deriveWorkspaceNodes({
       profileId: 'profile-route-switch',
       host: 'remote_headed',
       health: 'ready',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       pid: 4234,
       viewStreams: [
         {
@@ -876,7 +876,7 @@ const nodes = deriveWorkspaceNodes({
       profileId: 'stealthcdp-default',
       host: 'remote_headed',
       health: 'ready',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       displayName: ':10',
       pid: 3234,
       viewStreams: [
@@ -895,7 +895,7 @@ const nodes = deriveWorkspaceNodes({
       profileId: 'stealthcdp-default',
       host: 'remote_headed',
       health: 'process_exited',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       displayName: ':10',
       lastError: 'Recorded browser PID 3941149 is no longer running',
       viewStreams: [
@@ -913,7 +913,7 @@ const nodes = deriveWorkspaceNodes({
       profileId: 'profile-dashboard-viewer',
       host: 'remote_headed',
       health: 'ready',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       displayName: ':109',
       pid: 97113,
       cdpEndpoint: 'ws://127.0.0.1:36877/devtools/browser/viewer',
@@ -1128,7 +1128,7 @@ const nodes = deriveWorkspaceNodes({
     {
       profileId: 'profile-ready',
       profileName: 'Research profile',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       serviceNames: ['JournalDownloader'],
       targetReadiness: [
         {
@@ -1161,12 +1161,12 @@ const nodes = deriveWorkspaceNodes({
     {
       profileId: 'profile-dashboard-viewer',
       profileName: 'Dashboard viewer profile',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
     },
     {
       profileId: 'profile-takeover',
       profileName: 'Manual takeover profile',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       serviceNames: ['DashboardSmoke'],
       waitingJobIds: ['job-takeover-wait'],
       conflictSessionIds: ['session-agent-waiting'],
@@ -1175,13 +1175,13 @@ const nodes = deriveWorkspaceNodes({
     {
       profileId: 'profile-route-switch',
       profileName: 'Route switch profile',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       serviceNames: ['DashboardSmoke'],
     },
     {
       profileId: 'stealthcdp-default',
       profileName: 'Stealth CDP default',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       serviceNames: ['AgentBrowserDashboard'],
       taskNames: ['restoreGuacRemoteViewportFinal'],
       browserIds: ['session:odollo-carrier-ups', 'session:session-2'],
@@ -1404,7 +1404,7 @@ const odolloUps = byId(nodes, 'browser:session:odollo-carrier-ups');
 assert.equal(odolloUps.group, 'active');
 assert.equal(odolloUps.state, 'controllable');
 assert.equal(odolloUps.label, 'Odollo UPS: 1Z2G26X60300020412');
-assert.match(odolloUps.secondaryLabel, /Odollo UPS \/ remote_headed \/ stealthcdp_chromium/);
+assert.match(odolloUps.secondaryLabel, /Odollo UPS \/ remote_headed \/ chromiumQ/);
 assert.match(odolloUps.attentionReason ?? '', /Use the existing browser/);
 assert.match(odolloUps.viewStream?.url ?? '', /\/guacamole\/#\/client\//);
 assert.equal(odolloUps.viewStream?.controllable, true);
@@ -1772,7 +1772,7 @@ const manualNodes = deriveWorkspaceNodes({
       profilePath: '/tmp/last30days-facebook/user-data',
       pid: 592914,
       browserFamily: 'chromium',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       display: ':10',
       launchMode: 'manual',
       targetUrl: 'https://x.com',

@@ -221,7 +221,7 @@ export interface ServiceProfileRecord {
   profileClass: 'default' | 'managed_one_time' | 'durable_named' | 'operator_supplied' | string;
   accessPolicy: ServiceProfileAccessPolicy | null;
   userDataDir: string | null;
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   targetServiceIds: string[];
   authenticatedServiceIds: string[];
   accountIds: string[];
@@ -244,7 +244,7 @@ export interface ServiceProfileRegistration {
 
 export interface ServiceProfileBrowserCompatibilityEvidence {
   browserFamily: string | null;
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   browserVersion: string | null;
   evidence: string;
   observedAt: string | null;
@@ -290,7 +290,7 @@ export interface ServiceProfileAllocation {
   profileClass: 'default' | 'managed_one_time' | 'durable_named' | 'operator_supplied' | string;
   allocation: string;
   keyring: string;
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   targetServiceIds: string[];
   authenticatedServiceIds: string[];
   accountIds: string[];
@@ -347,7 +347,7 @@ export interface ServiceProfileAllocationBrowserHealthSummary {
 }
 
 export interface ServiceAccessPlanBrowserBuildSelectionSummary {
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   source:
     | 'request'
     | 'site_policy'
@@ -372,7 +372,7 @@ export interface ServiceAccessPlanBrowserBuildSelectionSummary {
   selectedProfileId: string | null;
   selectedProfileBrowserBuild:
     | 'stock_chrome'
-    | 'stealthcdp_chromium'
+    | 'chromiumQ'
     | 'cdp_free_headed'
     | string
     | null;
@@ -434,7 +434,7 @@ export interface ServiceDisplayAllocationRecord {
   ownerBrowserId: string | null;
   ownerSessionId: string | null;
   profileId: string | null;
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   host: 'local_headless' | 'local_headed' | 'docker_headed' | 'remote_headed' | 'cloud_provider' | 'attached_existing' | string;
   state: 'allocating' | 'ready' | 'degraded' | 'released' | 'orphaned' | 'failed' | string;
   routeIds?: string[];
@@ -2010,7 +2010,7 @@ export interface ServiceTraceBrowserCapabilityLaunch {
   sessionId: string | null;
   applied: boolean;
   reason: string | null;
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   bindingId: string | null;
   hostId: string | null;
   executableId: string | null;
@@ -2457,7 +2457,7 @@ export interface ServiceLoginProfileRegistrationOptions extends ServiceObservabi
   name?: string;
   allocation?: string;
   keyring?: string;
-  browserBuild?: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  browserBuild?: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string;
   persistent?: boolean;
   authenticated?: boolean;
   userDataDir?: string;
@@ -2479,7 +2479,7 @@ export interface ServiceExternalProfileRegistrationOptions extends ServiceObserv
   profileOrigin?: 'external_byop' | 'external_observed' | string;
   allocation?: string;
   keyring?: string;
-  browserBuild?: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  browserBuild?: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string;
   browserFamily?: string;
   browserVersion?: string;
   compatibilityEvidence?: string;
@@ -2778,7 +2778,7 @@ export interface ServiceAccessPlanBrowserCapabilityPreflight {
     | 'browser_build_unavailable'
     | string;
   selectedProfileId: string | null;
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   request: ServiceBrowserCapabilityPreflightOptions;
   http: {
     method: 'GET';
@@ -2961,7 +2961,7 @@ export interface ServiceAccessPlanProfileReuse {
 
 export interface ServiceAccessPlanLaunchPosture {
   browserHost: string;
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string;
   browserBuildSource:
     | 'request'
     | 'site_policy'
@@ -3000,7 +3000,7 @@ export interface ServiceAccessPlanLaunchPosture {
 }
 
 export interface ServiceAccessPlanBrowserBuildSelection {
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string;
   source:
     | 'request'
     | 'site_policy'
@@ -3021,7 +3021,7 @@ export interface ServiceAccessPlanBrowserBuildSelection {
   operatorOverride: boolean;
   requiresCdpFree: boolean;
   selectedProfileId: string | null;
-  selectedProfileBrowserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  selectedProfileBrowserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   selectedPreferenceBindingId: string | null;
   selectedPreferenceBindingReason: string | null;
   profileCompatibility: {
@@ -3076,7 +3076,7 @@ export interface ServiceProfileIdentityMatchOptions {
   /** Desired account identity within a target site, for example an email address, tenant slug, or username. */
   accountId?: string;
   /** Optional browser-build preference for profile selection and launch routing. */
-  browserBuild?: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  browserBuild?: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string;
   /** Target URL used to derive a site policy and target-service identity when possible. */
   url?: string;
   /** Additional desired login identities. */
@@ -3227,7 +3227,7 @@ export interface ServiceProfileLookupQuery {
   accountIds: string[];
   url: string | null;
   readinessProfileId: string | null;
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   profileIds: string[];
   profileNames: string[];
   hostnames: string[];
@@ -3346,8 +3346,8 @@ export interface ServiceAccessPlanBrowserCapabilityEvidence {
   routingApplied: boolean;
   routingScope: 'none' | 'access_plan_recommendation';
   source: 'service.browserCapabilityRegistry';
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | null;
-  browserBuildLabel: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | null;
+  browserBuildLabel: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | null;
   selectedProfileId: string | null;
   selectedPreferenceBinding: Record<string, unknown> | null;
   targetServiceIds: string[];
@@ -3421,7 +3421,7 @@ export interface ServiceAccessPlanResponse {
 export interface ServiceBrowserCapabilityLaunchDecision {
   applied: boolean;
   reason: string;
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   profileId: string | null;
   bindingId?: string | null;
   hostId?: string | null;
@@ -3435,7 +3435,7 @@ export interface ServiceBrowserCapabilityLaunchDecision {
 }
 
 export interface ServiceBrowserCapabilityPreflightRequestEcho {
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string | null;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string | null;
   profileId: string | null;
   headless: boolean;
   cdpFree: boolean;
@@ -3479,7 +3479,7 @@ export interface ServiceBrowserPreferenceBindingOptions extends ServiceQueryOpti
   /** Optional binding ID. When omitted, the helper derives one from build, filters, and executable. */
   id?: string;
   /** Browser build selected by this preference. */
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string;
   /** Preferred executable ID from service.browserCapabilityRegistry.browserExecutables. */
   preferredExecutableId: string;
   /** Optional preferred host ID. The launch gate can also derive this from the executable record. */
@@ -3515,7 +3515,7 @@ export interface ServiceBrowserPreferenceBindingOptions extends ServiceQueryOpti
 }
 
 export interface ServiceBrowserPreferenceCommandOptions {
-  browserBuild?: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  browserBuild?: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string;
   targetServiceId?: string;
   siteId?: string;
   loginId?: string;
@@ -3564,7 +3564,7 @@ export interface ServiceBrowserPreferenceCommandSummary {
 
 export interface ServiceBrowserCapabilityPreflightOptions extends ServiceAccessPlanOptions {
   /** Requested browser build to preflight. */
-  browserBuild: 'stock_chrome' | 'stealthcdp_chromium' | 'cdp_free_headed' | string;
+  browserBuild: 'stock_chrome' | 'chromiumQ' | 'cdp_free_headed' | string;
   /** Explicit managed runtime profile id. */
   runtimeProfile?: string;
   /** Explicit custom user-data directory. */

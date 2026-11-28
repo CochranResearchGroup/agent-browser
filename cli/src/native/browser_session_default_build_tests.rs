@@ -60,7 +60,7 @@ impl Fixture {
         let config = root.join("config.json");
         fs::write(
             &config,
-            r#"{"service":{"defaultBrowserBuild":"stealthcdp_chromium"}}"#,
+            r#"{"service":{"defaultBrowserBuild":"chromiumQ"}}"#,
         )
         .unwrap();
         environment.set("AGENT_BROWSER_CONFIG", config.to_str().unwrap());
@@ -108,7 +108,7 @@ fn managed_host_refuses_missing_required_stealthcdp_instead_of_testing_cache() {
         .err()
         .expect("required StealthCDP must not permit generic Chrome discovery");
     assert!(
-        error.contains("stealthcdp_chromium"),
+        error.contains("chromiumQ"),
         "missing build must identify its remedy: {error}"
     );
 }

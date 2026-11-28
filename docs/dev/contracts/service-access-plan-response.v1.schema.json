@@ -80,7 +80,7 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"]
+              "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed"]
             },
             {
               "type": "null"
@@ -477,7 +477,7 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"]
+              "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed"]
             },
             {
               "type": "null"
@@ -486,7 +486,7 @@
         },
         "browserBuildLabel": {
           "type": ["string", "null"],
-          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed", null]
+          "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed", null]
         },
         "selectedProfileId": {
           "type": ["string", "null"]
@@ -736,7 +736,7 @@
               "type": "string",
               "enum": [
                 "stock_chrome",
-                "stealthcdp_chromium",
+                "chromiumQ",
                 "cdp_free_headed"
               ]
             },
@@ -838,7 +838,7 @@
                   "type": "string",
                   "enum": [
                     "stock_chrome",
-                    "stealthcdp_chromium",
+                    "chromiumQ",
                     "cdp_free_headed"
                   ]
                 },
@@ -882,7 +882,7 @@
                       "type": "string",
                       "enum": [
                         "stock_chrome",
-                        "stealthcdp_chromium",
+                        "chromiumQ",
                         "cdp_free_headed"
                       ]
                     },
@@ -1361,7 +1361,7 @@
               "oneOf": [
                 {
                   "type": "string",
-                  "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"]
+                  "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed"]
                 },
                 {
                   "type": "null"

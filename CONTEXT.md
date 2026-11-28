@@ -32,9 +32,9 @@ explicit custom launch arguments remain a separate opt-out. Retained browsers
 keep their original launch posture.
 
 **Managed executable default**: The browser owner resolves its startup executable
-from explicit environment/configuration and the StealthCDP artifact manifest.
+from explicit environment/configuration and the chromiumQ artifact manifest.
 This is independent of a service access-plan recommendation. A required missing
-StealthCDP default cannot authorize generic testing-Chrome discovery; existing
+chromiumQ default cannot authorize generic testing-Chrome discovery; existing
 profile selection and running-browser custody remain separate.
 
 **Mode replacement handoff lineage**: The owner's frozen original handoff target,

@@ -1,6 +1,7 @@
 //! Passive, advisory browser capability registry contracts.
 
-use serde::{Deserialize, Serialize};
+use crate::BrowserBuild;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 /// Draft browser capability registry carried by service config and service state.
@@ -12,12 +13,39 @@ use serde_json::Value;
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserCapabilityRegistry {
     pub browser_hosts: Vec<Value>,
+    #[serde(deserialize_with = "deserialize_build_records")]
     pub browser_executables: Vec<Value>,
     pub browser_capabilities: Vec<Value>,
     pub profile_compatibility: Vec<Value>,
+    #[serde(deserialize_with = "deserialize_build_records")]
     pub browser_preference_bindings: Vec<Value>,
     pub validation_evidence: Vec<Value>,
     pub generated_at: Option<String>,
+}
+
+fn deserialize_build_records<'de, D>(deserializer: D) -> Result<Vec<Value>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let mut records = Vec::<Value>::deserialize(deserializer)?;
+    for record in &mut records {
+        normalize_browser_build_record(record);
+    }
+    Ok(records)
+}
+
+/// Canonicalize recognized build labels while preserving custom records.
+pub fn normalize_browser_build_record(record: &mut Value) {
+    let Some(fields) = record.as_object_mut() else {
+        return;
+    };
+    for name in ["buildLabel", "browserBuild"] {
+        if let Some(value) = fields.get_mut(name) {
+            if let Some(build) = value.as_str() {
+                *value = Value::String(BrowserBuild::normalize_chromiumq_label(build).to_owned());
+            }
+        }
+    }
 }
 
 impl BrowserCapabilityRegistry {
@@ -116,6 +144,22 @@ mod tests {
         assert_eq!(
             serde_json::from_value::<BrowserCapabilityRegistry>(known).unwrap(),
             registry
+        );
+    }
+
+    #[test]
+    fn retained_build_records_emit_canonical_identity() {
+        let registry: BrowserCapabilityRegistry = serde_json::from_value(json!({
+            "browserExecutables": [{"buildLabel": "stealthcdp_chromium"}, {"buildLabel": "custom"}],
+            "browserPreferenceBindings": [{"browserBuild": "stealthcdp_chromium"}]
+        }))
+        .unwrap();
+        let output = serde_json::to_value(registry).unwrap();
+        assert_eq!(output["browserExecutables"][0]["buildLabel"], "chromiumQ");
+        assert_eq!(output["browserExecutables"][1]["buildLabel"], "custom");
+        assert_eq!(
+            output["browserPreferenceBindings"][0]["browserBuild"],
+            "chromiumQ"
         );
     }
 

@@ -399,7 +399,7 @@ Follow these steps to create one operator-visible browser handoff:
    agent-browser --json remote-view open https://example.com/secure \
      --service-name codex --agent-name Codex --task-name "Review secure page" --origin-kind agent \
      --runtime-profile operator-review \
-     --browser-build stealthcdp_chromium \
+     --browser-build chromiumQ \
      --view-stream-provider rdp_gateway
    ```
 
@@ -427,7 +427,7 @@ const handoff = await requestServiceRemoteViewHandoff({
   agentName: "codex",
   taskName: "review-secure-page",
   runtimeProfile: "operator-review",
-  browserBuild: "stealthcdp_chromium",
+  browserBuild: "chromiumQ",
   viewStreamProvider: "rdp_gateway",
   url: "https://example.com/secure",
 });
@@ -966,7 +966,7 @@ require their explicit managed join; this path does not fabricate one.
 Successful navigations retain their URL in durable session history.
 
 On Linux, managed Remote View open honors explicit `stock_chrome` and
-`stealthcdp_chromium` selections. Chromium Stealth requires a ready configured
+`chromiumQ` selections. Chromium Stealth requires a ready configured
 build manifest. An incompatible executable already using the selected profile
 returns `browser_build_reuse_conflict` before navigation. Successful selection
 returns `browserBuildProof` from the actual process executable. This proof does

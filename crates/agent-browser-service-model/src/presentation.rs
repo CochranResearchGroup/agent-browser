@@ -108,6 +108,7 @@ pub struct DisplayAllocation {
     pub owner_browser_id: Option<String>,
     pub owner_session_id: Option<String>,
     pub profile_id: Option<String>,
+    #[serde(deserialize_with = "crate::deserialize_browser_build_label")]
     pub browser_build: Option<String>,
     pub host: Option<BrowserHost>,
     pub state: String,

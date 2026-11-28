@@ -26,6 +26,10 @@ Builds: [defaults/readiness](references/cli-and-service.md#build-readiness).
 
 `candidate status` exposes `coordinationLedger`; `candidate inspect` uses `--input-closure`; `candidate install` needs `--sealed-artifact`. [Guide](references/cli-and-service.md#sealed-candidate-maintenance).
 
+Use `chromiumQ` when an explicit browser-build selection is needed.
+The legacy `stealthcdp_chromium` input continues to select the same browser
+during migration. New service output uses `chromiumQ`.
+
 ## Handoff creator context
 
 Immutable `serviceName`, `agentName` and concrete `taskName` attribute creation; they are not authenticated identity. [Creator context](references/cli-and-service.md#handoff-creator-context).

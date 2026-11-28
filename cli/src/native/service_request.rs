@@ -16,7 +16,7 @@ use crate::native::service_contracts::{DESKTOP_CAPTURE_HARD_MAX_BYTES, SERVICE_R
 use crate::native::service_failure_journal::{
     ServiceFailureCategory, ServiceFailureRecord, ServiceFailureReferences,
 };
-use crate::native::service_model::ServiceState;
+use crate::native::service_model::{BrowserBuild, ServiceState};
 use crate::native::service_principal::{AuthenticatedServicePrincipal, ServicePrincipalProvenance};
 use crate::native::service_profile_access_policy::ServiceProfileAccessDecision;
 
@@ -27,7 +27,12 @@ const REPAIR_POLICIES: &[&str] = &[
     "open_if_missing",
     "replace_duplicates",
 ];
-const BROWSER_BUILDS: &[&str] = &["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"];
+const BROWSER_BUILDS: &[&str] = &[
+    "stock_chrome",
+    "chromiumQ",
+    "cdp_free_headed",
+    "stealthcdp_chromium",
+];
 const BROWSER_HOSTS: &[&str] = &[
     "local_headless",
     "local_headed",
@@ -858,6 +863,16 @@ pub(crate) fn normalize_service_request(
         }
     }
 
+    if let Some(build) = request_browser_build(request)? {
+        let command_fields = command.as_object_mut().expect("command is an object");
+        command_fields.remove("browser_build");
+        command_fields.remove("browser-build");
+        command["browserBuild"] = json!(build.label());
+        if request.contains_key("browserBuild") {
+            trace["browserBuild"] = json!(build.label());
+        }
+    }
+
     if let Some(open_id) = request.get("openRequestId") {
         if command["dryRun"] == true
             || (command.get("url").is_none()
@@ -1130,6 +1145,35 @@ fn desktop_interact_operation_principal_id(request: &Map<String, Value>) -> Stri
         "operation-principal-v1:{:x}",
         Sha256::digest(canonical.as_bytes())
     )
+}
+
+fn request_browser_build(
+    request: &Map<String, Value>,
+) -> Result<Option<BrowserBuild>, ServiceRequestIssue> {
+    let top_level = request.get("browserBuild").into_iter();
+    let nested = ["browserBuild", "browser_build", "browser-build"]
+        .into_iter()
+        .filter_map(|key| request.get("params").and_then(|params| params.get(key)));
+    let mut selected = None;
+    for value in top_level.chain(nested) {
+        let build = value
+            .as_str()
+            .and_then(BrowserBuild::parse_label)
+            .ok_or_else(|| {
+                issue(
+                    ServiceRequestIssueKind::InvalidRequest,
+                    "browserBuild must select a supported browser build",
+                )
+            })?;
+        if selected.is_some_and(|previous| previous != build) {
+            return Err(issue(
+                ServiceRequestIssueKind::InvalidRequest,
+                "conflicting browserBuild declarations",
+            ));
+        }
+        selected = Some(build);
+    }
+    Ok(selected)
 }
 
 fn validate_canonical_fields(request: &Map<String, Value>) -> Result<(), ServiceRequestIssue> {
@@ -2799,6 +2843,25 @@ mod tests {
             request_id: "test-normalizer-request",
             effective_session: Some("test-normalizer"),
         })
+    }
+
+    #[test]
+    fn browser_build_request_accepts_alias_and_rejects_conflicting_declarations() {
+        let request = |top, nested| {
+            json!({
+                "action": "tab_new",
+                "url": "https://example.test/",
+                "serviceName": "test",
+                "agentName": "test",
+                "taskName": "test",
+                "browserBuild": top,
+                "params": {"browserBuild": nested}
+            })
+        };
+        let accepted = normalize(request("stealthcdp_chromium", "chromiumQ")).unwrap();
+        assert_eq!(accepted.command["browserBuild"], "chromiumQ");
+        assert_eq!(accepted.trace["browserBuild"], "chromiumQ");
+        assert!(normalize(request("chromiumQ", "stock_chrome")).is_err());
     }
 
     #[test]

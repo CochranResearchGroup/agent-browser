@@ -69,7 +69,8 @@ export function dashboardStateScript({ browserId, sessionName, tabId }) {
 }
 
 export function verifiedChromiumFromInstallDoctor(installDoctorJson) {
-  const manifest = installDoctorJson?.data?.launchConfig?.browserBuildManifests?.stealthcdp_chromium;
+  const manifests = installDoctorJson?.data?.launchConfig?.browserBuildManifests;
+  const manifest = manifests?.chromiumQ ?? manifests?.stealthcdp_chromium;
   if (manifest?.ready === true && manifest?.executablePathExists === true && existsSync(manifest.executablePath)) {
     return manifest.executablePath;
   }

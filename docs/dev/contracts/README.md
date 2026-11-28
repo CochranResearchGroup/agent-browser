@@ -425,7 +425,7 @@ yet authoritative routing policy.
 
 The draft separates current access-plan browser posture labels from future
 executable placement. Current posture labels such as `stock_chrome`,
-`stealthcdp_chromium`, and `cdp_free_headed` continue to describe what a site
+`chromiumQ`, and `cdp_free_headed` continue to describe what a site
 or account needs. Future registry records will describe which host,
 executable, capability, profile compatibility rule, and preference binding can
 satisfy that posture.
@@ -459,7 +459,7 @@ the `browser_launch_recorded` event details, including `applied`, `reason`,
 `browserBuild`, and selected binding or executable IDs when available.
 
 `examples/browser-capability-registry.sample.json` shows the intended shape for
-a local Linux `stealthcdp_chromium` default plus a future Windows
+a local Linux `chromiumQ` default plus a future Windows
 `stock_chrome` primary binding for one site/account identity. The sample is
 illustrative and should not be read as live host inventory.
 

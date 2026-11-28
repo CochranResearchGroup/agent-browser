@@ -5283,11 +5283,11 @@ pub(crate) mod service_commands {
                     "browserBuild": "stock_chrome"
                 },
                 "serviceState": {
-                    "defaultBrowserBuild": "stealthcdp_chromium",
+                    "defaultBrowserBuild": "chromiumQ",
                     "sitePolicies": {
                         "google": {
                             "id": "google",
-                            "browserBuild": "stealthcdp_chromium"
+                            "browserBuild": "chromiumQ"
                         }
                     }
                 }
@@ -5311,7 +5311,7 @@ pub(crate) mod service_commands {
             let command = json!({
                 "targetServiceId": "google",
                 "params": {
-                    "browserBuild": "stealthcdp_chromium"
+                    "browserBuild": "chromiumQ"
                 },
                 "serviceState": {
                     "profiles": {
@@ -5336,7 +5336,7 @@ pub(crate) mod service_commands {
             assert_eq!(plan["selectedProfile"]["id"], "google-login");
             assert_eq!(
                 plan["decision"]["launchPosture"]["browserBuild"],
-                "stealthcdp_chromium"
+                "chromiumQ"
             );
             assert_eq!(plan["readinessSummary"]["manualSeedingRequired"], false);
             assert_eq!(

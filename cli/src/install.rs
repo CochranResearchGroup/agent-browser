@@ -245,12 +245,14 @@ fn sha256_bytes(bytes: &[u8]) -> String {
 
 fn stealthcdp_chromium_release_url() -> String {
     format!(
-        "https://github.com/CochranResearchGroup/chromium-stealthcdp/releases/download/{STEALTHCDP_CHROMIUM_RELEASE_TAG}/{STEALTHCDP_CHROMIUM_RELEASE_ASSET}"
+        "https://github.com/CochranResearchGroup/chromiumQ/releases/download/{STEALTHCDP_CHROMIUM_RELEASE_TAG}/{STEALTHCDP_CHROMIUM_RELEASE_ASSET}"
     )
 }
 
 fn stealthcdp_chromium_install_root() -> Result<PathBuf, String> {
-    if let Ok(root) = std::env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT") {
+    if let Ok(root) = std::env::var("AGENT_BROWSER_CHROMIUMQ_INSTALL_ROOT")
+        .or_else(|_| std::env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT"))
+    {
         let trimmed = root.trim();
         if !trimmed.is_empty() {
             return Ok(PathBuf::from(trimmed));
@@ -260,18 +262,18 @@ fn stealthcdp_chromium_install_root() -> Result<PathBuf, String> {
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
         let trimmed = local_app_data.trim();
         if !trimmed.is_empty() {
-            return Ok(PathBuf::from(trimmed).join("chromium-stealthcdp"));
+            return Ok(PathBuf::from(trimmed).join("chromiumQ"));
         }
     }
 
     if let Some(local_app_data) = find_wsl_windows_local_app_data() {
-        return Ok(local_app_data.join("chromium-stealthcdp"));
+        return Ok(local_app_data.join("chromiumQ"));
     }
 
     dirs::data_local_dir()
-        .map(|path| path.join("chromium-stealthcdp"))
+        .map(|path| path.join("chromiumQ"))
         .ok_or_else(|| {
-            "could not determine an install root; set AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT"
+            "could not determine an install root; set AGENT_BROWSER_CHROMIUMQ_INSTALL_ROOT"
                 .to_string()
         })
 }
@@ -325,7 +327,7 @@ fn write_stealthcdp_manifest(artifact_dir: &Path, executable_relative: &str) -> 
     fs::write(
         &manifest_path,
         serde_json::to_vec_pretty(&json!({
-            "schema": "chromium-stealthcdp.artifact.v1",
+            "schema": "chromiumQ.artifact.v1",
             "artifactName": STEALTHCDP_CHROMIUM_ARTIFACT_NAME,
             "chromeVersion": format!("Chromium {STEALTHCDP_CHROMIUM_VERSION}"),
             "chromium": {
@@ -337,7 +339,7 @@ fn write_stealthcdp_manifest(artifact_dir: &Path, executable_relative: &str) -> 
                 "patchQueueSha256": STEALTHCDP_CHROMIUM_PATCH_QUEUE_SHA256
             },
             "release": {
-                "repo": "CochranResearchGroup/chromium-stealthcdp",
+                "repo": "CochranResearchGroup/chromiumQ",
                 "tag": STEALTHCDP_CHROMIUM_RELEASE_TAG,
                 "asset": STEALTHCDP_CHROMIUM_RELEASE_ASSET,
                 "assetSha256": STEALTHCDP_CHROMIUM_RELEASE_ASSET_SHA256
@@ -362,10 +364,13 @@ fn flatten_stealthcdp_artifact_root(extracted_dir: &Path) -> Result<(), String> 
         return Ok(());
     }
 
-    let nested_dir = extracted_dir.join("chromium-stealthcdp");
-    if !nested_dir.join("chrome.exe").is_file() {
+    let Some(nested_dir) = ["chromiumQ", "chromium-stealthcdp"]
+        .into_iter()
+        .map(|name| extracted_dir.join(name))
+        .find(|path| path.join("chrome.exe").is_file())
+    else {
         return Ok(());
-    }
+    };
 
     let entries = fs::read_dir(&nested_dir)
         .map_err(|err| format!("Failed to read {}: {err}", nested_dir.display()))?;
@@ -510,7 +515,7 @@ fn install_stealthcdp_chromium_archive_bytes(
 }
 
 pub fn run_install_stealthcdp_chromium(force: bool) {
-    println!("{}", color::cyan("Installing chromium-stealthcdp..."));
+    println!("{}", color::cyan("Installing chromiumQ..."));
 
     let install_root = match stealthcdp_chromium_install_root() {
         Ok(path) => path,
@@ -522,7 +527,7 @@ pub fn run_install_stealthcdp_chromium(force: bool) {
     let current = install_root.join("current");
     if current.join("chrome.exe").is_file() && current.join("manifest.json").is_file() && !force {
         println!(
-            "{} chromium-stealthcdp is already installed",
+            "{} chromiumQ is already installed",
             color::success_indicator()
         );
         println!("  Location: {}", current.display());
@@ -562,7 +567,7 @@ pub fn run_install_stealthcdp_chromium(force: bool) {
     ) {
         Ok(current) => {
             println!(
-                "{} chromium-stealthcdp installed successfully",
+                "{} chromiumQ installed successfully",
                 color::success_indicator()
             );
             println!("  Location: {}", current.display());
@@ -614,7 +619,7 @@ pub fn run_install(flags: &Flags, with_deps: bool, with_remote_view_privileges: 
 
     let stealth_ready = flags
         .browser_build_manifest_status
-        .get("stealthcdp_chromium")
+        .get("chromiumQ")
         .and_then(|status| status["ready"].as_bool())
         == Some(true);
     match crate::native::cdp::chrome::find_chrome() {
@@ -1571,7 +1576,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
     if stealth_required && !stealth_ready {
         issues.push(json!({
             "code": "launch_config_not_ready",
-            "message": "configured stealthcdp_chromium launch posture is not ready"
+            "message": "configured chromiumQ launch posture is not ready"
         }));
     }
 
@@ -6191,7 +6196,7 @@ EOF
         let manifest: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(current.join("manifest.json")).unwrap())
                 .unwrap();
-        assert_eq!(manifest["schema"], "chromium-stealthcdp.artifact.v1");
+        assert_eq!(manifest["schema"], "chromiumQ.artifact.v1");
         assert_eq!(manifest["executable"]["relativePath"], "chrome.exe");
         assert_eq!(fs::read(current.join("smoke.json")).unwrap(), smoke);
 

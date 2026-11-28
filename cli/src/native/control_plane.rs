@@ -3382,7 +3382,7 @@ mod tests {
                         "reason": "stealthcdp_chromium_not_selected",
                         "isWsl": false,
                         "executableOnWindowsMount": false,
-                        "description": "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene."
+                        "description": "Launches Windows chromiumQ from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene."
                     },
                     "warnings": []
                 }),

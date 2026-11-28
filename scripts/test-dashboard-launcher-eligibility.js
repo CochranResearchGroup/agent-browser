@@ -23,7 +23,7 @@ const registry = {
     {
       id: 'stealth-exe',
       hostId: 'local-host',
-      buildLabel: 'stealthcdp_chromium',
+      buildLabel: 'chromiumQ',
       executablePath: '/opt/chromium-stealth/chrome',
       fresh: true,
     },
@@ -111,7 +111,7 @@ const profiles = [
   {
     id: 'profile-ready',
     name: 'Research profile',
-    browserBuild: 'stealthcdp_chromium',
+    browserBuild: 'chromiumQ',
     targetServiceIds: ['acs'],
     accountIds: ['research@example.test'],
     targetReadiness: [
@@ -172,11 +172,11 @@ const accessPlans = [
   {
     comboId: 'launch:profile-ready:registry:local-host:stealth-exe',
     profileId: 'profile-ready',
-    browserBuild: 'stealthcdp_chromium',
+    browserBuild: 'chromiumQ',
     decision: {
       recommendedAction: 'queue_service_tab_request',
       launchPosture: {
-        browserBuild: 'stealthcdp_chromium',
+        browserBuild: 'chromiumQ',
         viewStreamProvider: 'rdp_gateway',
         controlInputProvider: 'manual_attached_desktop',
         displayIsolation: 'private_virtual_display',
@@ -205,7 +205,7 @@ const accessPlans = [
           taskName: 'downloadArticle',
           targetServiceIds: ['acs'],
           accountIds: ['research@example.test'],
-          browserBuild: 'stealthcdp_chromium',
+          browserBuild: 'chromiumQ',
           runtimeProfile: 'profile-ready',
           profileLeasePolicy: 'wait',
           params: {
@@ -222,7 +222,7 @@ const accessPlans = [
         {
           id: 'stealth-exe',
           hostId: 'local-host',
-          buildLabel: 'stealthcdp_chromium',
+          buildLabel: 'chromiumQ',
           executablePath: '/opt/chromium-stealth/chrome',
         },
       ],
@@ -260,7 +260,7 @@ const accessPlans = [
   {
     comboId: 'launch:profile-manual:registry:local-host:stealth-exe',
     profileId: 'profile-manual',
-    browserBuild: 'stealthcdp_chromium',
+    browserBuild: 'chromiumQ',
     decision: {
       recommendedAction: 'manual_seeding_required',
       serviceRequest: {
@@ -441,7 +441,7 @@ assert.deepEqual(posture, {
   helper: 'requestServiceTab',
   route: '/api/service/request',
   profileLeasePolicy: 'wait',
-  browserBuild: 'stealthcdp_chromium',
+  browserBuild: 'chromiumQ',
   url: '',
   displayIsolation: 'private_virtual_display',
   viewStreamProvider: 'rdp_gateway',
@@ -462,7 +462,7 @@ assert.deepEqual(request, {
   taskName: 'downloadArticle',
   targetServiceIds: ['acs'],
   accountIds: ['research@example.test'],
-  browserBuild: 'stealthcdp_chromium',
+  browserBuild: 'chromiumQ',
   runtimeProfile: 'profile-ready',
   profileLeasePolicy: 'wait',
   jobTimeoutMs: 60000,
@@ -557,7 +557,7 @@ assert.deepEqual(rdpRequest, {
 const postureOnlyRdpRequest = createLauncherServiceRequestFromAccessPlan({
   decision: {
     launchPosture: {
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       viewStreamProvider: 'rdp_gateway',
       controlInputProvider: 'manual_attached_desktop',
       displayIsolation: 'shared_display',
@@ -566,7 +566,7 @@ const postureOnlyRdpRequest = createLauncherServiceRequestFromAccessPlan({
       available: true,
       request: {
         action: 'tab_new',
-        browserBuild: 'stealthcdp_chromium',
+        browserBuild: 'chromiumQ',
         runtimeProfile: 'profile-ready',
         profileLeasePolicy: 'wait',
       },
@@ -579,7 +579,7 @@ const postureOnlyRdpRequest = createLauncherServiceRequestFromAccessPlan({
 });
 assert.deepEqual(postureOnlyRdpRequest, {
   action: 'tab_new',
-  browserBuild: 'stealthcdp_chromium',
+  browserBuild: 'chromiumQ',
   runtimeProfile: 'profile-ready',
   profileLeasePolicy: 'wait',
   params: {

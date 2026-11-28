@@ -130,14 +130,14 @@ async fn test_service_status_via_actions_does_not_launch_browser() {
         "holder" : { "id" : "holder", "profileId" : "work", "lease" : "exclusive" } },
         "displayAllocations" : { "display-orphan" : { "id" : "display-orphan", "state" :
         "released", "routeIds" : [] } } }, "launchConfig" : { "defaultBrowserBuild" :
-        "stealthcdp_chromium", "stealthCdpChromiumRequired" : true,
+        "chromiumQ", "stealthCdpChromiumRequired" : true,
         "stealthCdpChromiumReady" : false, "executablePath" : null,
         "executablePathSource" : null, "executablePathExists" : null,
         "browserBuildManifests" : {}, "profileSmoke" : { "available" : false, "command" :
         "pnpm test:wsl-windows-chromium-profile-live", "reason" :
         "stealthcdp_executable_missing", "isWsl" : true, "executableOnWindowsMount" :
         false, "description" :
-        "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene."
+        "Launches Windows chromiumQ from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene."
         }, "warnings" : [{ "code" : "stealthcdp_executable_missing", "severity" :
         "warning", "message" : "missing" }] } }
     );

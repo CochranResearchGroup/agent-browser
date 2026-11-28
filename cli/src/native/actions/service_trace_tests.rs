@@ -153,7 +153,7 @@ async fn test_service_trace_returns_related_records_and_activity() {
         "JournalDownloader", "agentName" : "codex", "taskName" : "probeACSwebsite",
         "profileId" : "work", "browserIds" : ["browser-1"], "browserCapabilityLaunch" : {
         "applied" : true, "reason" : "validated_binding_applied", "browserBuild" :
-        "stealthcdp_chromium", "bindingId" : "binding-1", "hostId" : "local",
+        "chromiumQ", "bindingId" : "binding-1", "hostId" : "local",
         "executableId" : "stealth-current", "capabilityId" : "stealth-cdp",
         "executablePath" : "/opt/chromium-stealthcdp/chrome" } } }, "incidents" : [{ "id"
         : "browser-1", "browserId" : "browser-1", "label" : "browser-1", "state" :
@@ -193,7 +193,7 @@ async fn test_service_trace_returns_related_records_and_activity() {
     );
     assert_eq!(
         result["data"]["summary"]["browserCapabilityLaunches"]["launches"][0]["browserBuild"],
-        "stealthcdp_chromium"
+        "chromiumQ"
     );
     assert_eq!(
         result["data"]["summary"]["browserCapabilityLaunches"]["launches"][0]["reason"],

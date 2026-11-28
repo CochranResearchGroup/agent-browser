@@ -774,11 +774,11 @@
         },
         "stealthCdpChromiumRequired": {
           "type": "boolean",
-          "description": "True when the service default or at least one site policy selects stealthcdp_chromium."
+          "description": "True when the service default or at least one site policy selects chromiumQ."
         },
         "stealthCdpChromiumReady": {
           "type": "boolean",
-          "description": "True when stealthcdp_chromium is not selected, or it has a configured executable path that exists."
+          "description": "True when chromiumQ is not selected, or it has a configured executable path that exists."
         },
         "executablePath": {
           "type": ["string", "null"],
@@ -794,7 +794,7 @@
         },
         "browserBuildManifests": {
           "type": "object",
-          "description": "Resolved browser-build manifest diagnostics keyed by browser build id, such as stealthcdp_chromium.",
+          "description": "Resolved browser-build manifest diagnostics keyed by browser build id, such as chromiumQ.",
           "additionalProperties": {
             "type": "object",
             "properties": {
@@ -833,7 +833,7 @@
           "properties": {
             "available": {
               "type": "boolean",
-              "description": "True when this host is WSL, stealthcdp_chromium is selected and ready, and the resolved executable is on a Windows mount."
+              "description": "True when this host is WSL, chromiumQ is selected and ready, and the resolved executable is on a Windows mount."
             },
             "command": {
               "type": "string",
