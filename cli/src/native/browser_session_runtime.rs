@@ -1842,7 +1842,16 @@ fn run_browser_worker(
                 path,
                 reply,
             } => {
-                profile_executables.insert(profile_id, path);
+                if super::browser_session_host::browser_build_selection::reject_testing_chrome(
+                    Path::new(&path),
+                )
+                .is_err()
+                {
+                    // Retired historical pins cannot override the configured launch build.
+                    profile_executables.remove(&profile_id);
+                } else {
+                    profile_executables.insert(profile_id, path);
+                }
                 let _ = reply.send(Ok(()));
             }
             BrowserRuntimeCommand::SelectExecutable { path, reply } => {
@@ -3616,7 +3625,19 @@ mod tests {
         runtime
             .select_profile_browser_executable("source".into(), pinned.clone())
             .unwrap();
-        for (id, expected) in [("source", &pinned), ("unrelated", &default)] {
+        let retired = root
+            .0
+            .join("chrome-for-testing")
+            .to_string_lossy()
+            .into_owned();
+        runtime
+            .select_profile_browser_executable("retired".into(), retired)
+            .unwrap();
+        for (id, expected) in [
+            ("source", &pinned),
+            ("unrelated", &default),
+            ("retired", &default),
+        ] {
             let directory = root.0.join(id);
             fs::create_dir_all(&directory).unwrap();
             let profile = BrowserProfileCatalogEntry {

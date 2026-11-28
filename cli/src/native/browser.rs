@@ -599,7 +599,8 @@ impl BrowserManager {
         let headed = !options.headless;
         let private_launch = options.private_launch_environment.is_some();
         let phase = std::sync::Mutex::new("validation");
-        let result = Self::launch_inner(options, engine, &phase)
+        let mut cause = None;
+        let result = Self::launch_inner(options, engine, &phase, &mut cause)
             .await
             .map_err(|error| {
                 if private_launch {
@@ -620,6 +621,7 @@ impl BrowserManager {
             .with_details(json!({
                 "engine": engine_name,
                 "phase": *phase.lock().expect("launch phase lock poisoned"),
+                "causeCode": cause,
                 "profileConfigured": profile_configured,
                 "headed": headed,
             }));
@@ -632,6 +634,7 @@ impl BrowserManager {
         options: LaunchOptions,
         engine: Option<&str>,
         phase: &std::sync::Mutex<&'static str>,
+        cause: &mut Option<&'static str>,
     ) -> Result<Self, String> {
         let engine = engine.unwrap_or("chrome");
         let bootstrap_mode = if engine == "chrome" {
@@ -680,9 +683,15 @@ impl BrowserManager {
                 (url, BrowserProcess::Lightpanda(lp))
             }
             _ => {
-                let chrome = tokio::task::spawn_blocking(move || launch_chrome(&options))
-                    .await
-                    .map_err(|e| format!("Chrome launch task failed: {}", e))??;
+                let (launch, launch_cause) = tokio::task::spawn_blocking(move || {
+                    let mut launch_cause = None;
+                    let launch = launch_chrome(&options, &mut launch_cause);
+                    (launch, launch_cause)
+                })
+                .await
+                .map_err(|e| format!("Chrome launch task failed: {}", e))?;
+                *cause = launch_cause;
+                let chrome = launch?;
                 let url = chrome.ws_url.clone();
                 (url, BrowserProcess::Chrome(chrome))
             }
@@ -3750,6 +3759,10 @@ mod tests {
         assert_eq!(
             record.details.as_ref().unwrap()["phase"],
             "process_endpoint"
+        );
+        assert_eq!(
+            record.details.as_ref().unwrap()["causeCode"],
+            "chrome_exited_before_devtools"
         );
         let serialized = serde_json::to_string(&record).unwrap();
         assert!(!serialized.contains("synthetic-secret-value"));
