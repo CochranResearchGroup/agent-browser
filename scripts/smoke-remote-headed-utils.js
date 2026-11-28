@@ -39,9 +39,11 @@ export function loadAgentBrowserEnvFromRealHome() {
   }
 
   const configPath = join(agentHome, 'config.json');
-  if (!process.env.AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH && existsSync(configPath)) {
+  if (!process.env.AGENT_BROWSER_CHROMIUMQ_MANIFEST_PATH &&
+      !process.env.AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH && existsSync(configPath)) {
     const config = JSON.parse(readFileSync(configPath, 'utf8'));
-    const manifestPath = config?.service?.browserBuildManifests?.chromiumQ?.manifestPath;
+    const manifests = config?.service?.browserBuildManifests;
+    const manifestPath = (manifests?.chromiumQ ?? manifests?.stealthcdp_chromium)?.manifestPath;
     if (typeof manifestPath === 'string' && manifestPath.trim()) {
       process.env.AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH = manifestPath.trim();
     }

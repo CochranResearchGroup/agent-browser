@@ -116,7 +116,7 @@ function seedServiceState() {
             targetServiceIds: [targetServiceId],
             authenticatedServiceIds: [targetServiceId],
             sharedServiceIds: [serviceName],
-            browserBuild: 'chromiumQ',
+            browserBuild: 'stealthcdp_chromium',
             defaultBrowserHost: 'remote_headed',
             persistent: true,
           },
@@ -130,7 +130,7 @@ function seedServiceState() {
 
 function remoteHeadedHints() {
   return {
-    browserBuild: 'chromiumQ',
+    browserBuild: 'stealthcdp_chromium',
     displayIsolation: 'private_virtual_display',
   };
 }

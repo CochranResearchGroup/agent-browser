@@ -113,6 +113,19 @@ try {
     assert.ok(governance.recommendations.some(check => check.command === command));
   const mdx = reportForChangedPaths(['docs/src/app/example/page.mdx']);
   assert.ok(mdx.recommendations.some(check => check.command === 'pnpm --dir docs build'));
+  for (const [file, expectedCheck] of [
+    ['scripts/lib/p47-viewer-client.js', 'pnpm test:p47-viewer-client-separation'],
+    ['scripts/smoke-remote-headed-utils.js', 'pnpm test:p47-viewer-client-separation'],
+    ['scripts/test-p47-viewer-client-separation.js', 'pnpm test:p47-viewer-client-separation'],
+    ['scripts/test-cross-seam-interlocks.js', 'pnpm test:cross-seam-interlocks'],
+    ['scripts/test-dashboard-service-trace.js', 'pnpm test:dashboard-trace'],
+    ['scripts/test-dashboard-superuser-operator-agent.js', 'pnpm test:dashboard-superuser-operator-agent'],
+    ['scripts/test-dashboard-workspace-nodes.js', 'pnpm test:dashboard-workspace-nodes'],
+  ]) {
+    const selected = reportForChangedPaths([file]);
+    assert.equal(selected.coverage.complete, true, file);
+    assert.ok(selected.recommendations.some(check => check.command === expectedCheck), file);
+  }
   const unknown = reportForChangedPaths(['unmapped/new-surface.txt']);
   assert.equal(unknown.coverage.complete, false);
   assert.deepEqual(unknown.coverage.gaps, [{file:'unmapped/new-surface.txt',reason:'unknown_surface'}]);

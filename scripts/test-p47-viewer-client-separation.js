@@ -15,6 +15,7 @@ import {
   resolveViewerClientDebuggingPort,
   verifiedChromiumFromInstallDoctor,
 } from './lib/p47-viewer-client.js';
+import { loadAgentBrowserEnvFromRealHome } from './smoke-remote-headed-utils.js';
 
 const moduleSource = readFileSync('scripts/lib/p47-viewer-client.js', 'utf8');
 const runnerSource = readFileSync('scripts/run-p46-stress-scenario.js', 'utf8');
@@ -121,6 +122,37 @@ assert.equal(resolved.verifiedChromium, process.execPath);
 
 const artifactDir = mkdtempSync(join(tmpdir(), 'agent-browser-p47-viewer-client-'));
 try {
+  const envNames = [
+    'AGENT_BROWSER_HOME',
+    'AGENT_BROWSER_CHROMIUMQ_MANIFEST_PATH',
+    'AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH',
+  ];
+  const before = envNames.map(name => [name, process.env[name]]);
+  try {
+    process.env.AGENT_BROWSER_HOME = artifactDir;
+    writeFileSync(join(artifactDir, '.env'), '');
+    delete process.env.AGENT_BROWSER_CHROMIUMQ_MANIFEST_PATH;
+    for (const build of ['chromiumQ', 'stealthcdp_chromium']) {
+      delete process.env.AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH;
+      const manifestPath = join(artifactDir, build, 'manifest.json');
+      writeFileSync(join(artifactDir, 'config.json'), JSON.stringify({
+        service: {browserBuildManifests: {[build]: {manifestPath}}},
+      }));
+      loadAgentBrowserEnvFromRealHome();
+      assert.equal(process.env.AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH, manifestPath);
+      assert.equal(verifiedChromiumFromInstallDoctor({
+        data: {launchConfig: {browserBuildManifests: {
+          [build]: {ready: true, executablePathExists: true, executablePath: process.execPath},
+        }}},
+      }), process.execPath);
+    }
+  } finally {
+    for (const [name, value] of before) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+
   assert.equal(resolveViewerClientDebuggingPort({}), 0);
   assert.equal(resolveViewerClientDebuggingPort({ P47_VIEWER_CLIENT_REMOTE_DEBUGGING_PORT: '43211' }), 43211);
   assert.throws(
