@@ -1034,14 +1034,14 @@ fn operator_prompt_actions(prompt: &str) -> Vec<OperatorPromptAction> {
             url: url.clone(),
             selector: None,
             request_fields: vec![
-                ("browserBuild", json!("stealthcdp_chromium")),
+                ("browserBuild", json!("chromiumQ")),
                 ("displayIsolation", json!("private_virtual_display")),
                 ("profileLeasePolicy", json!("wait")),
                 ("profileLeaseWaitTimeoutMs", json!(30_000)),
             ],
             extra_params: vec![
                 ("headless", json!(false)),
-                ("browserBuild", json!("stealthcdp_chromium")),
+                ("browserBuild", json!("chromiumQ")),
                 ("displayIsolation", json!("private_virtual_display")),
                 ("viewStreamProvider", json!("cdp")),
                 ("controlInputProvider", json!("cdp")),
@@ -1899,7 +1899,7 @@ mod tests {
         assert_eq!(launch_action["kind"], "service_request");
         assert_eq!(
             launch_action["request"]["browserBuild"],
-            "stealthcdp_chromium"
+            "chromiumQ"
         );
         assert_eq!(
             launch_action["request"]["displayIsolation"],

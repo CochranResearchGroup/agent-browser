@@ -787,7 +787,10 @@ pub fn upsert_browser_capability_registry_record(
     body: Value,
 ) -> Result<(Value, BrowserCapabilityRegistry, Value), String> {
     let label = registry_collection_label(collection)?;
-    let body = object_body_with_path_id(body, id, label)?;
+    let mut body = object_body_with_path_id(body, id, label)?;
+    if matches!(collection, "browserExecutables" | "browserPreferenceBindings") {
+        agent_browser_service_model::normalize_browser_build_record(&mut body);
+    }
     let collection_records =
         registry_collection_mut(&mut state.browser_capability_registry, collection)?;
     if let Some(existing) = collection_records.iter_mut().find(|record| {
@@ -1292,7 +1295,7 @@ mod tests {
             "stealth-current",
             json!({
                 "hostId": "local-linux",
-                "buildLabel": "stealthcdp_chromium"
+                "buildLabel": "chromiumQ"
             }),
         )
         .unwrap();

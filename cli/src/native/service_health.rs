@@ -6054,7 +6054,7 @@ mod tests {
             Some(ServiceLaunchMetadata {
                 profile_id: Some("work".to_string()),
                 browser_capability_launch: Some(serde_json::json!({
-                    "browserBuild": "stealthcdp_chromium"
+                    "browserBuild": "chromiumQ"
                 })),
                 view_streams: vec![ViewStream {
                     id: "remote-headed-view".to_string(),
@@ -6098,7 +6098,7 @@ mod tests {
         assert_eq!(allocation.profile_id.as_deref(), Some("work"));
         assert_eq!(
             allocation.browser_build.as_deref(),
-            Some("stealthcdp_chromium")
+            Some("chromiumQ")
         );
         assert_eq!(allocation.host, Some(BrowserHost::RemoteHeaded));
         assert_eq!(allocation.state, "ready");
@@ -6704,7 +6704,7 @@ mod tests {
             browser_capability_launch: Some(serde_json::json!({
                 "applied": false,
                 "reason": "profile_compatibility_missing_or_blocked",
-                "browserBuild": "stealthcdp_chromium"
+                "browserBuild": "chromiumQ"
             })),
             ..ServiceLaunchMetadata::default()
         };

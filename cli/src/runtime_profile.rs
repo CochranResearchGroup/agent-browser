@@ -77,6 +77,7 @@ where
 pub struct RuntimeLaunchRecord {
     pub target_url: Option<String>,
     pub browser_family: Option<String>,
+    #[serde(deserialize_with = "agent_browser_service_model::deserialize_browser_build_label")]
     pub browser_build: Option<String>,
     pub display: Option<String>,
     pub remote_view_route_id: Option<String>,

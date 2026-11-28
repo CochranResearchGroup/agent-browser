@@ -306,7 +306,7 @@ fn profile_smoke_recommendation(
         "available": available,
         "command": command,
         "reason": reason,
-        "description": "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene.",
+        "description": "Launches Windows chromiumQ from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene.",
     })
 }
 
@@ -388,37 +388,43 @@ fn default_route_host_ip() -> Option<String> {
 }
 
 fn find_stable_stealthcdp_manifest() -> Option<PathBuf> {
-    if let Ok(root) = std::env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT") {
+    if let Ok(root) = std::env::var("AGENT_BROWSER_CHROMIUMQ_INSTALL_ROOT")
+        .or_else(|_| std::env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT"))
+    {
         let path = PathBuf::from(root).join("current").join("manifest.json");
         if path.is_file() {
             return Some(path);
         }
     }
-    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-        let path = PathBuf::from(local_app_data)
-            .join("chromium-stealthcdp")
-            .join("current")
-            .join("manifest.json");
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    if let Ok(entries) = fs::read_dir("/mnt/c/Users") {
-        let mut candidates = Vec::new();
-        for entry in entries.filter_map(Result::ok) {
-            let manifest = entry
-                .path()
-                .join("AppData")
-                .join("Local")
-                .join("chromium-stealthcdp")
+    for install_name in ["chromiumQ", "chromium-stealthcdp"] {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let path = PathBuf::from(local_app_data)
+                .join(install_name)
                 .join("current")
                 .join("manifest.json");
-            if manifest.is_file() {
-                candidates.push(manifest);
+            if path.is_file() {
+                return Some(path);
             }
         }
-        candidates.sort();
-        return candidates.into_iter().next();
+        if let Ok(entries) = fs::read_dir("/mnt/c/Users") {
+            let mut candidates = Vec::new();
+            for entry in entries.filter_map(Result::ok) {
+                let manifest = entry
+                    .path()
+                    .join("AppData")
+                    .join("Local")
+                    .join(install_name)
+                    .join("current")
+                    .join("manifest.json");
+                if manifest.is_file() {
+                    candidates.push(manifest);
+                }
+            }
+            candidates.sort();
+            if let Some(manifest) = candidates.into_iter().next() {
+                return Some(manifest);
+            }
+        }
     }
     None
 }

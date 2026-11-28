@@ -125,7 +125,7 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"]
+              "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed"]
             },
             {
               "type": "null"

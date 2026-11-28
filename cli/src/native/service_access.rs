@@ -942,11 +942,7 @@ fn browser_build_for_evidence(
 }
 
 fn browser_build_label(browser_build: BrowserBuild) -> &'static str {
-    match browser_build {
-        BrowserBuild::StockChrome => "stock_chrome",
-        BrowserBuild::StealthcdpChromium => "stealthcdp_chromium",
-        BrowserBuild::CdpFreeHeaded => "cdp_free_headed",
-    }
+    browser_build.label()
 }
 
 fn preference_binding_matches_access_request(
@@ -6193,7 +6189,7 @@ mod tests {
                     json!({
                         "id": "stealth-current",
                         "hostId": "local-linux",
-                        "buildLabel": "stealthcdp_chromium"
+                        "buildLabel": "chromiumQ"
                     }),
                     json!({
                         "id": "stock-current",
@@ -6225,7 +6221,7 @@ mod tests {
                     "preferredHostId": "local-linux",
                     "preferredExecutableId": "stealth-current",
                     "preferredCapabilityId": "stealth-capability",
-                    "browserBuild": "stealthcdp_chromium",
+                    "browserBuild": "chromiumQ",
                     "priority": 100,
                     "reason": "canva_bot_sensitive"
                 })],
@@ -6257,7 +6253,7 @@ mod tests {
         assert_eq!(plan["browserCapabilityEvidence"]["routingApplied"], false);
         assert_eq!(
             plan["browserCapabilityEvidence"]["browserBuildLabel"],
-            "stealthcdp_chromium"
+            "chromiumQ"
         );
         assert_eq!(
             plan["browserCapabilityEvidence"]["browserExecutables"][0]["id"],
@@ -6574,7 +6570,7 @@ mod tests {
                     json!({
                         "id": "default-new-identities-use-stealthcdp",
                         "scope": "global",
-                        "browserBuild": "stealthcdp_chromium",
+                        "browserBuild": "chromiumQ",
                         "priority": 10
                     }),
                     json!({
@@ -6689,7 +6685,7 @@ mod tests {
 
         assert_eq!(
             target_only_plan["query"]["browserBuild"],
-            "stealthcdp_chromium"
+            "chromiumQ"
         );
         assert_eq!(
             target_only_plan["browserCapabilityEvidence"]["selectedPreferenceBinding"]["id"],
@@ -6721,7 +6717,7 @@ mod tests {
                     "scope": "account",
                     "targetServiceIds": ["only-works-on-chrome"],
                     "accountIds": ["myuser"],
-                    "browserBuild": "stealthcdp_chromium",
+                    "browserBuild": "chromiumQ",
                     "priority": 100
                 })],
                 ..BrowserCapabilityRegistry::default()
@@ -7244,7 +7240,7 @@ mod tests {
         assert_eq!(plan["sitePolicySource"]["source"], "builtin");
         assert_eq!(plan["sitePolicySource"]["matchedBy"], "target_service_id");
         assert_eq!(plan["sitePolicy"]["browserHost"], "remote_headed");
-        assert_eq!(plan["sitePolicy"]["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(plan["sitePolicy"]["browserBuild"], "chromiumQ");
         assert_eq!(plan["sitePolicy"]["viewStream"], "rdp_gateway");
         assert_eq!(
             plan["sitePolicy"]["controlInput"],
@@ -7258,7 +7254,7 @@ mod tests {
         );
         assert_eq!(
             plan["decision"]["launchPosture"]["browserBuild"],
-            "stealthcdp_chromium"
+            "chromiumQ"
         );
         assert_eq!(
             plan["decision"]["launchPosture"]["browserBuildSource"],

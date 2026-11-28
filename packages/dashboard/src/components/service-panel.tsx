@@ -3105,7 +3105,7 @@ function browserExecutableSource({
 }
 
 function browserExecutableKind(source: string): "stealth" | "chromium" | "chrome" | "browser" {
-  if (source.includes("stealthcdp") || source.includes("stealth-cdp")) return "stealth";
+  if (source.includes("chromiumq") || source.includes("stealthcdp") || source.includes("stealth-cdp")) return "stealth";
   if (source.includes("chromium")) return "chromium";
   if (source.includes("chrome")) return "chrome";
   return "browser";
@@ -3118,14 +3118,14 @@ function browserExecutablePlatform(source: string): "windows" | "linux" | "host"
 }
 
 function browserExecutableLabel(kind: ReturnType<typeof browserExecutableKind>): string {
-  if (kind === "stealth") return "Stealth Chromium";
+  if (kind === "stealth") return "chromiumQ";
   if (kind === "chromium") return "Chromium";
   if (kind === "chrome") return "Chrome";
   return "Browser";
 }
 
 function browserExecutableBadgeText(kind: ReturnType<typeof browserExecutableKind>): string {
-  if (kind === "stealth") return "St";
+  if (kind === "stealth") return "Q";
   if (kind === "chromium") return "Cr";
   if (kind === "chrome") return "Ch";
   return "Br";
@@ -5184,7 +5184,7 @@ function RuntimeProfileConfigDialog({
                   <select value={form.browserBuild} onChange={(event) => updateField("browserBuild", event.target.value)}>
                     <option value="">Service default</option>
                     <option value="stock_chrome">stock_chrome</option>
-                    <option value="stealthcdp_chromium">stealthcdp_chromium</option>
+                    <option value="chromiumQ">chromiumQ</option>
                     <option value="cdp_free_headed">cdp_free_headed</option>
                   </select>
                 </label>

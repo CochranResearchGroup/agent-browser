@@ -503,7 +503,7 @@ curl -L -o ~/.local/bin/agent-browser \
   https://github.com/CochranResearchGroup/agent-browser/releases/download/$VERSION/agent-browser-linux-x64
 chmod +x ~/.local/bin/agent-browser
 agent-browser install  # Check for installed Stock Chrome or configured Chromium StealthCDP
-agent-browser install stealthcdp-chromium  # Optional preferred patched Chromium
+agent-browser install chromiumQ  # Optional preferred patched Chromium
 agent-browser install doctor  # Check user-scoped binary drift and launch readiness
 agent-browser install --with-deps --with-remote-view-privileges  # Linux RDP/Guacamole desktop setup
 agent-browser install workstation --dry-run --json  # Preview source-free workstation payload
@@ -1177,7 +1177,7 @@ agent-browser install doctor --json
 
 The doctor reports drift when the command on `PATH` does not match the pnpm
 global package binary or the current workspace binary, and it reports launch
-readiness problems when `stealthcdp_chromium` is selected without a ready
+readiness problems when `chromiumQ` is selected without a ready
 executable or manifest. Structured observations with `severity: "warning"`
 remain visible but do not make doctor exit nonzero. A quiescent historical
 supervisor is advisory; a supervisor with active-process or stream evidence,
@@ -1339,7 +1339,7 @@ RDP or Guacamole:
 agent-browser --json remote-view open https://example.com/secure \
   --service-name codex --agent-name Codex --task-name "Review secure page" --origin-kind agent \
   --runtime-profile operator-review \
-  --browser-build stealthcdp_chromium \
+  --browser-build chromiumQ \
   --view-stream-provider rdp_gateway
 ```
 
@@ -2344,7 +2344,7 @@ agent-browser reload                  # Reload page
 
 ```bash
 agent-browser install                 # Check for installed Stock Chrome or configured Chromium StealthCDP
-agent-browser install stealthcdp-chromium  # Download the preferred patched Chromium release when available
+agent-browser install chromiumQ  # Download the preferred patched Chromium release when available
 agent-browser install doctor          # Check binary drift, launch readiness, and remote-view privilege state
 agent-browser doctor windows-browser  # Diagnose WSL to Windows browser CDP routing
 agent-browser doctor windows-browser --scan-ports --firewall  # Scan bounded ports and query Windows firewall state
@@ -2781,7 +2781,7 @@ await registerExternalProfile({
   loginId: 'chatgpt',
   accountId: 'consult@example.com',
   userDataDir: '/home/me/.auracall/browser-profiles/chatgpt',
-  browserBuild: 'stealthcdp_chromium',
+  browserBuild: 'chromiumQ',
   browserFamily: 'chromium',
   compatibilityEvidence: 'validated_with_existing_provider_profile',
 });
@@ -3302,7 +3302,7 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `--screenshot-quality <n>` | JPEG quality 0-100 (or `AGENT_BROWSER_SCREENSHOT_QUALITY` env) |
 | `--screenshot-format <fmt>` | Screenshot format: `png`, `jpeg` (or `AGENT_BROWSER_SCREENSHOT_FORMAT` env) |
 | `--headed` | Show browser window (not headless). On Unix, agent-browser defaults `DISPLAY` to `:0.0` if `DISPLAY` is unset (or `AGENT_BROWSER_HEADED` env) |
-| `--browser-build <build>` | Browser build hint for commands that can launch a browser: `stock_chrome`, `stealthcdp_chromium`, or `cdp_free_headed` |
+| `--browser-build <build>` | Browser build hint for commands that can launch a browser: `stock_chrome`, `chromiumQ`, or `cdp_free_headed` |
 | `--browser-host <host>` | Launch host hint for a fresh daemon: `local_headless`, `local_headed`, `docker_headed`, `remote_headed`, `cloud_provider`, or `attached_existing` |
 | `--view-stream-provider <provider>` | Remote view metadata: `cdp_screencast`, `chrome_tab_webrtc`, `virtual_display_webrtc`, `novnc`, `rdp_gateway`, or `external_url` |
 | `--control-input-provider <provider>` | Remote control-input metadata: `cdp_input`, `webrtc_input`, `vnc_input`, or `manual_attached_desktop` |
@@ -3683,9 +3683,9 @@ Create an `agent-browser.json` file to set persistent defaults instead of repeat
   "profile": "./browser-data",
   "userAgent": "my-agent/1.0",
   "service": {
-    "defaultBrowserBuild": "stealthcdp_chromium",
+    "defaultBrowserBuild": "chromiumQ",
     "browserBuildManifests": {
-      "stealthcdp_chromium": {
+      "chromiumQ": {
         "manifestPath": "/opt/agent-browser/chromium-stealthcdp/current/manifest.json"
       }
     },
@@ -3718,7 +3718,7 @@ Create an `agent-browser.json` file to set persistent defaults instead of repeat
         "userDataDir": "~/.agent-browser/runtime-profiles/stealthcdp-default/user-data",
         "allocation": "per_identity",
         "keyring": "basic_password_store",
-        "browserBuild": "stealthcdp_chromium",
+        "browserBuild": "chromiumQ",
         "defaultBrowserHost": "local_headless",
         "persistent": true
       }
@@ -3783,11 +3783,15 @@ default development identity for non-interference.
 
 All options from the table above can be set in the config file using camelCase keys (e.g., `--executable-path` becomes `"executablePath"`, `--proxy-bypass` becomes `"proxyBypass"`). Unknown keys are ignored for forward compatibility.
 
-Set `service.defaultBrowserBuild` to `stealthcdp_chromium` when service-owned launches should prefer the patched Chromium posture. Managed MCP tasks, including disposable profiles, resolve their default executable from `AGENT_BROWSER_EXECUTABLE_PATH`, `executablePath`, then the StealthCDP build manifest. An unavailable required StealthCDP build is an error instead of permission to discover another Chrome executable. Ordinary launch and queued tab paths consume that default through the same access-plan resolver used by service clients, so a matching managed profile, site policy, remote view posture, and browser capability binding are applied unless the caller explicitly supplies a profile, browser host, headless mode, executable, or browser build. If no explicit default is configured and a ready `stealthcdp_chromium` manifest is available, fresh installs prefer that build automatically. `agent-browser install stealthcdp-chromium` installs the public `chromium-stealthcdp` Windows asset under `%LOCALAPPDATA%\chromium-stealthcdp` on Windows or the matching WSL-mounted `AppData/Local` directory when available, then exposes `current/manifest.json` and `current/chrome.exe`. When WSL launches that Windows `chrome.exe`, agent-browser translates mounted Windows paths such as `/mnt/c/...` to `C:\...` for Chrome arguments and adds `--no-sandbox`, which this host mode requires for the patched Windows build to expose DevTools. Provide the binary through `executablePath`, `AGENT_BROWSER_EXECUTABLE_PATH`, `AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH`, `AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT`, or `service.browserBuildManifests.stealthcdp_chromium.manifestPath`. A manifest path points at a promoted artifact `manifest.json`; agent-browser resolves the executable relative to that manifest and reports artifact metadata from the same source. `agent-browser service status` and `GET /api/service/status` include a no-launch `launchConfig` diagnostic with the selected default browser build, executable source, resolved executable path, manifest metadata, file-existence check, `profileSmoke` readiness for validating WSL Windows profile writes, and warnings when `stealthcdp_chromium` is selected without a usable binary or ready manifest.
+The canonical build ID is `chromiumQ`. During migration, existing
+`stealthcdp_chromium` input resolves to the same build and service status reports
+`chromiumQ`. Manifests can use either documented schema during this period.
 
-`stealthcdp_chromium` is worthwhile for the default service posture because it keeps the CDP control plane available while reducing the obvious automation signal exposed by ordinary DevTools-attached Chromium. The built-in Google and Gmail policies therefore use headed stealth Chromium and allow attachable first sign-in. A detached CDP-free first login remains mandatory only when the effective site policy sets `requiresCdpFree: true`. A failed sign-in or challenge can still require operator intervention. An explicit `--browser-build` selection wins over site, profile, preference-binding, and service defaults, including when a service request carries `browserBuild` inside `params`.
+Set `service.defaultBrowserBuild` to `chromiumQ` when service-owned launches should prefer the patched Chromium posture. Managed MCP tasks, including disposable profiles, resolve their default executable from `AGENT_BROWSER_EXECUTABLE_PATH`, `executablePath`, then the chromiumQ build manifest. An unavailable required chromiumQ build is an error instead of permission to discover another Chrome executable. Ordinary launch and queued tab paths consume that default through the same access-plan resolver used by service clients, so a matching managed profile, site policy, remote view posture, and browser capability binding are applied unless the caller explicitly supplies a profile, browser host, headless mode, executable, or browser build. If no explicit default is configured and a ready `chromiumQ` manifest is available, fresh installs prefer that build automatically. `agent-browser install chromiumQ` installs the public `chromium-stealthcdp` Windows asset under `%LOCALAPPDATA%\chromiumQ` on Windows or the matching WSL-mounted `AppData/Local` directory when available, then exposes `current/manifest.json` and `current/chrome.exe`. When WSL launches that Windows `chrome.exe`, agent-browser translates mounted Windows paths such as `/mnt/c/...` to `C:\...` for Chrome arguments and adds `--no-sandbox`, which this host mode requires for the patched Windows build to expose DevTools. Provide the binary through `executablePath`, `AGENT_BROWSER_EXECUTABLE_PATH`, `AGENT_BROWSER_CHROMIUMQ_MANIFEST_PATH`, `AGENT_BROWSER_CHROMIUMQ_INSTALL_ROOT`, or `service.browserBuildManifests.chromiumQ.manifestPath`. A manifest path points at a promoted artifact `manifest.json`; agent-browser resolves the executable relative to that manifest and reports artifact metadata from the same source. `agent-browser service status` and `GET /api/service/status` include a no-launch `launchConfig` diagnostic with the selected default browser build, executable source, resolved executable path, manifest metadata, file-existence check, `profileSmoke` readiness for validating WSL Windows profile writes, and warnings when `chromiumQ` is selected without a usable binary or ready manifest.
 
-Profile records can set `browserBuild` to `stealthcdp_chromium`, `stock_chrome`, or `cdp_free_headed`. Profile discovery prefers exact authenticated target, account or account label, profile ID or name, alias, login, origin or hostname, tag, auth or freshness state, caller service, and free-text matches before browser build. An identity search never substitutes an unrelated generic browser-build default. Use `agent-browser service profiles lookup --search <text>` or the narrower `--hostname`, `--profile-id`, `--profile-name`, `--login-id`, `--account-id`, `--authentication-state`, `--freshness-state`, and `--tag` filters to receive ranked match evidence and a concrete launch, add-tab, view, seed, wait, or holder-inspection recommendation without launching a browser. The same contract is available from `GET /api/service/profiles/lookup`, MCP profile lookup, and `lookupServiceProfile()`. Use `agent-browser service profiles <profile-id> diagnose`, HTTP `GET /api/service/profiles/<profile-id>/diagnosis`, MCP `agent-browser://profiles/{profile_id}/diagnosis`, or `getServiceProfileDiagnosis()` to join current process, owner, lease, Chrome lock, authentication, and presentation evidence without changing the profile. Task continuation and handoff resolution reconcile resident and durable snapshots inside the SQLite writer transaction. Independent task edits continue together; current resource identity wins an overlapping observation, whose differing evidence is retained in private append-only runtime receipts. Reconciliation publishes metadata only and never repeats a browser action. A live or unobserved Chrome singleton lock is an advisory finding, not a workflow veto: an otherwise ready diagnosis recommends `continue_authorized_workflow`. Continue with exact browser/process checks and preserve the lock; actual execution failures retain their request evidence. A shared-local profile can continue with a stable self-declared identity when no stricter policy applies; retained historical identity remains advisory unless current occupancy proves a conflict.
+`chromiumQ` is worthwhile for the default service posture because it keeps the CDP control plane available while reducing the obvious automation signal exposed by ordinary DevTools-attached Chromium. The built-in Google and Gmail policies therefore use headed stealth Chromium and allow attachable first sign-in. A detached CDP-free first login remains mandatory only when the effective site policy sets `requiresCdpFree: true`. A failed sign-in or challenge can still require operator intervention. An explicit `--browser-build` selection wins over site, profile, preference-binding, and service defaults, including when a service request carries `browserBuild` inside `params`.
+
+Profile records can set `browserBuild` to `chromiumQ`, `stock_chrome`, or `cdp_free_headed`. Profile discovery prefers exact authenticated target, account or account label, profile ID or name, alias, login, origin or hostname, tag, auth or freshness state, caller service, and free-text matches before browser build. An identity search never substitutes an unrelated generic browser-build default. Use `agent-browser service profiles lookup --search <text>` or the narrower `--hostname`, `--profile-id`, `--profile-name`, `--login-id`, `--account-id`, `--authentication-state`, `--freshness-state`, and `--tag` filters to receive ranked match evidence and a concrete launch, add-tab, view, seed, wait, or holder-inspection recommendation without launching a browser. The same contract is available from `GET /api/service/profiles/lookup`, MCP profile lookup, and `lookupServiceProfile()`. Use `agent-browser service profiles <profile-id> diagnose`, HTTP `GET /api/service/profiles/<profile-id>/diagnosis`, MCP `agent-browser://profiles/{profile_id}/diagnosis`, or `getServiceProfileDiagnosis()` to join current process, owner, lease, Chrome lock, authentication, and presentation evidence without changing the profile. Task continuation and handoff resolution reconcile resident and durable snapshots inside the SQLite writer transaction. Independent task edits continue together; current resource identity wins an overlapping observation, whose differing evidence is retained in private append-only runtime receipts. Reconciliation publishes metadata only and never repeats a browser action. A live or unobserved Chrome singleton lock is an advisory finding, not a workflow veto: an otherwise ready diagnosis recommends `continue_authorized_workflow`. Continue with exact browser/process checks and preserve the lock; actual execution failures retain their request evidence. A shared-local profile can continue with a stable self-declared identity when no stricter policy applies; retained historical identity remains advisory unless current occupancy proves a conflict.
 
 Known occupied or reserved capacity can justify separate bounded capacity for
 an independent task. The original reservation stays intact. Failed window
@@ -4251,7 +4255,7 @@ and client access-plan requests can set `browserHost`, `viewStreamProvider`,
 `shared_display`, or `ambient_display` when a caller needs to force an isolated
 virtual display, reuse a configured shared display, or deliberately use the
 daemon's inherited `DISPLAY`. The shipped UPS policy selects
-`stealthcdp_chromium`, `remote_headed`, `rdp_gateway`, and
+`chromiumQ`, `remote_headed`, `rdp_gateway`, and
 `manual_attached_desktop` because headed stealth Chromium loaded UPS tracking
 where true headless did not. The shipped Google Sheets policy applies the same
 inspectable remote stealth lane for `https://docs.google.com/spreadsheets`
@@ -5527,7 +5531,7 @@ no-launch HTTP/client route-preflight path and bounded latency without starting
 a browser. Use
 `requestServiceRemoteViewOpen()` or
 `agent-browser remote-view open <url> --runtime-profile <id> --browser-build
-stealthcdp_chromium --view-stream-provider rdp_gateway --job-timeout-ms 120000`
+chromiumQ --view-stream-provider rdp_gateway --job-timeout-ms 120000`
 when a caller needs the service to
 select the route binding, launch or reuse a remote-headed browser on that bound
 display, open the requested tab, check visible browser window evidence on the
@@ -5682,7 +5686,7 @@ for the agent-browser daemon session, and use `--session-name` for saved
 browser state. For a Facebook-style operator handoff, the durable one-liner is:
 
 ```bash
-agent-browser --json remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
+agent-browser --json remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build chromiumQ --view-stream-provider rdp_gateway --service-name codex --agent-name Codex --task-name "Open browser task" --origin-kind agent
 ```
 
 ```json
@@ -5691,7 +5695,7 @@ agent-browser --json remote-view open https://www.facebook.com/ --runtime-profil
   "agentName": "codex",
   "taskName": "manual-auth",
   "runtimeProfile": "stealthcdp-default",
-  "browserBuild": "stealthcdp_chromium",
+  "browserBuild": "chromiumQ",
   "action": "remote_view_open",
   "url": "https://www.linkedin.com/",
   "params": {
@@ -5862,7 +5866,7 @@ compatible profile or throwaway browser.
 Clients can use it for logs, prompts, dashboard chips, or popups, but
 agent-browser does not prescribe the presentation.
 Access-plan `decision.launchPosture.browserBuildSelection` explains why
-`stealthcdp_chromium`, `stock_chrome`, or `cdp_free_headed` won before launch.
+`chromiumQ`, `stock_chrome`, or `cdp_free_headed` won before launch.
 It includes the winning source, evidence source, explicit operator override
 status, selected preference binding, profile compatibility summary, and
 validation evidence summary so agents and software can audit browser routing
@@ -5872,7 +5876,7 @@ needs a compact routing audit string plus selected build, source, evidence
 source, operator override, preference binding, profile compatibility, validation
 evidence, and attention flags without copying nested access-plan parsing logic.
 Use `agent-browser service browser-capability preflight --browser-build
-stealthcdp_chromium --target-service-id canva --runtime-profile canva-default
+chromiumQ --target-service-id canva --runtime-profile canva-default
 --headed --service-name CanvaCLI --agent-name codex --task-name
 openCanvaWorkspace` when an operator wants the actual launch-routing gate
 before Chrome opens. The preflight uses the same host, executable, profile
@@ -5983,7 +5987,7 @@ the browser into a shared display pool where focus and window state must be
 coordinated by the service queue. The shipped Canva
 site policy recommends `cdp_free_headed` by default because some Canva sessions
 can fail before the page loads when DevTools is attached. The shipped UPS site
-policy recommends `stealthcdp_chromium` with a remote-view-capable headed host
+policy recommends `chromiumQ` with a remote-view-capable headed host
 because live testing on 2026-05-17 showed true headless stealth Chromium failed
 UPS tracking navigation while headed stealth Chromium loaded the tracking page.
 When manual seeding is required, `seedingHandoff.operatorIntervention` is the
@@ -7504,7 +7508,7 @@ require their explicit managed join; this path does not fabricate one.
 Successful navigations retain their URL in durable session history.
 
 On Linux, managed Remote View open honors explicit `stock_chrome` and
-`stealthcdp_chromium` selections. Chromium Stealth requires a ready configured
+`chromiumQ` selections. Chromium Stealth requires a ready configured
 build manifest. An incompatible executable already using the selected profile
 returns `browser_build_reuse_conflict` before navigation. Successful selection
 returns `browserBuildProof` from the actual process executable. This proof does

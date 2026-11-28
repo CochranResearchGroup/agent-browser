@@ -948,7 +948,7 @@ function captureS1() {
     '--runtime-profile',
     'p46-s1-profile',
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
   ], 's1 remote-view open', {
@@ -1053,7 +1053,7 @@ async function captureS2() {
     '--runtime-profile',
     'p46-s2-profile',
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
   ], 's2 remote-view open', {
@@ -1342,7 +1342,7 @@ async function captureS3() {
     'open',
     'https://example.com/?p46=s3-tab-a',
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
   ], 's3 default-profile remote-view open', {
@@ -1726,7 +1726,7 @@ async function captureS4() {
     '--runtime-profile',
     profileId,
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
   ];
@@ -2105,7 +2105,7 @@ async function captureS5(mode = 's5') {
   const poolEnv = routePoolEnv(before.routePool.json);
   const commonOpenArgs = [
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
   ];
@@ -2511,7 +2511,7 @@ async function captureS7() {
   const poolEnv = routePoolEnv(before.routePool.json);
   const commonOpenArgs = [
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
   ];
@@ -2655,7 +2655,7 @@ async function captureS8() {
     'open',
     'https://example.com/?p46=s8-display-access',
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
     '--route-pool-entry-id',
@@ -2765,7 +2765,7 @@ async function captureS9() {
     'open',
     duplicateUrl,
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
   ], 's9 route-bound open duplicate tab A', {
@@ -3096,7 +3096,7 @@ async function captureS10() {
     '--runtime-profile',
     'p46-s10-service-owned',
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
   ], 's10 route-bound service-owned browser open', {
@@ -3333,7 +3333,7 @@ async function captureS11() {
     '--runtime-profile',
     'p46-s11-profile',
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
   ], 's11 route-bound browser open', {
@@ -3535,7 +3535,7 @@ async function captureS12() {
         '--runtime-profile',
         runtimeProfile,
         '--browser-build',
-        'stealthcdp_chromium',
+        'chromiumQ',
         '--view-stream-provider',
         'rdp_gateway',
       ], `${label} route-bound browser open`, {
@@ -3702,7 +3702,7 @@ function captureS3OpenProof() {
     'open',
     'https://example.com/?p50=s3-open',
     '--browser-build',
-    'stealthcdp_chromium',
+    'chromiumQ',
     '--view-stream-provider',
     'rdp_gateway',
   ], 'p50 s3-open route-bound remote-view open', {

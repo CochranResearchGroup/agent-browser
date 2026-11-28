@@ -80,19 +80,19 @@ pub fn gen_id() -> String {
 }
 
 const SERVICE_PROFILE_VERIFY_SEEDING_USAGE: &str = "service profiles <profile-id> verify-seeding <target-service-id> [--state <fresh|stale|seeded_unknown_freshness|blocked_by_attached_devtools>] [--evidence <text>] [--account-id <id>] [--account-ids <id,id>] [--last-verified-at <rfc3339>] [--freshness-expires-at <rfc3339>] [--no-authenticated-service-update]";
-const SERVICE_PROFILE_LOOKUP_USAGE: &str = "service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>]";
+const SERVICE_PROFILE_LOOKUP_USAGE: &str = "service profiles lookup [--search <text>] [--hostname <host>] [--profile-id <id>] [--profile-name <name>] [--service-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--authentication-state <state>] [--freshness-state <state>] [--tag <tag>] [--url <url>] [--readiness-profile-id <id>] [--browser-build <stock_chrome|chromiumQ|cdp_free_headed>]";
 const SERVICE_PROFILE_LEASES_USAGE: &str = "service leases [doctor|capability-status --principal-id <id> --profile-id <id>|register --principal-id <id> --profile-id <id> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|rotate-capability --principal-id <id> --profile-id <id> --expected-capability-id <id> --expected-registry-revision <n> --capability-out <absolute-path> [--display-name <name>] [--registered-by <name>]|<lease-id> [inspect|explain|rejoin|renew|release|recover plan|recover apply] [--revision <revision>] [--capability-file <absolute-path>] [--expires-at <rfc3339>] [--idempotency-key <key>] [--plan-file <absolute-path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]]";
 const SERVICE_PROFILE_RECOVERY_USAGE: &str = "service recovery <acquire --profile-id <id> --capability-file <absolute-path> [--expires-at <rfc3339>] [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|plan --profile-id <id> --capability-file <absolute-path> --expires-at <rfc3339> [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]|apply --plan-file <absolute-path> --capability-file <absolute-path> --session-name <daemon-route>|status <recovery-id> --capability-file <absolute-path>>";
 const SERVICE_PROFILE_REPAIR_USAGE: &str = "service profiles <profile-id> repair [--apply --plan <absolute-path> --session-name <daemon-route>] --capability-file <absolute-path> [--expires-at <rfc3339>] [--idempotency-key <key>] [--target-service-id <id>] [--service-name <name>] [--agent-name <name>] [--task-name <name>]";
 const SERVICE_PROFILE_RESET_USAGE: &str = "service profiles <profile-id> reset --scope <runtime|authentication|profile-data> [--target-service-id <id>] [--apply --plan <absolute-path>] --capability-file <absolute-path> [--expires-at <rfc3339>] [--idempotency-key <key>]";
 
-const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
+const SERVICE_BROWSER_CAPABILITY_PREFLIGHT_USAGE: &str = "service browser-capability preflight --browser-build <stock_chrome|chromiumQ|cdp_free_headed> [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--runtime-profile <id>] [--profile <path>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--headed|--headless] [--cdp-free]";
 
-const SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE: &str = "service browser-capability guide [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--reason <text>]";
+const SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE: &str = "service browser-capability guide [--browser-build <stock_chrome|chromiumQ|cdp_free_headed>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--reason <text>]";
 
-const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capability prefer --browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]";
+const SERVICE_BROWSER_CAPABILITY_PREFER_USAGE: &str = "service browser-capability prefer --browser-build <stock_chrome|chromiumQ|cdp_free_headed> --preferred-executable-id <id> [--id <binding-id>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--service-name <name>] [--task-name <name>] [--preferred-host-id <id>] [--preferred-capability-id <id>] [--priority <n>] [--reason <text>]";
 
-const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--session-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
+const SERVICE_ACCESS_PLAN_USAGE: &str = "service access-plan [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--session-name <name>] [--target-service-id <id>] [--site-id <id>] [--login-id <id>] [--account-id <id>] [--url <url>] [--site-policy-id <id>] [--challenge-id <id>] [--readiness-profile-id <id>] [--runtime-profile <id>] [--browser-build <stock_chrome|chromiumQ|cdp_free_headed>] [--browser-host <local_headless|local_headed|docker_headed|remote_headed|cloud_provider|attached_existing>] [--view-stream-provider <cdp_screencast|chrome_tab_webrtc|virtual_display_webrtc|novnc|rdp_gateway|external_url>] [--control-input-provider <cdp_input|webrtc_input|vnc_input|manual_attached_desktop>] [--display-isolation <private_virtual_display|shared_display|ambient_display>]";
 const SERVICE_STATE_VALIDATE_USAGE: &str = "service state validate --path <absolute-path> [--json]";
 const DESKTOP_CAPTURE_USAGE: &str = "desktop capture --browser-id <id> [--max-bytes <bytes>]";
 const DESKTOP_LOCATE_USAGE: &str = "desktop locate --browser-id <id> --locator-id <id> [--max-candidates <count>] [--include-visualization]";
@@ -145,15 +145,16 @@ fn parse_service_profile_lookup(
                 usage: SERVICE_PROFILE_LOOKUP_USAGE,
             });
         };
-        if field == "browserBuild"
-            && crate::native::service_model::BrowserBuild::parse_label(value).is_none()
-        {
-            return Err(ParseError::InvalidValue {
-                message: format!("Invalid --browser-build value: {}", value),
-                usage: SERVICE_PROFILE_LOOKUP_USAGE,
-            });
-        }
-        cmd[field] = json!(value);
+        cmd[field] = if field == "browserBuild" {
+            let build = crate::native::service_model::BrowserBuild::parse_label(value)
+                .ok_or_else(|| ParseError::InvalidValue {
+                    message: format!("Invalid --browser-build value: {}", value),
+                    usage: SERVICE_PROFILE_LOOKUP_USAGE,
+                })?;
+            json!(build.label())
+        } else {
+            json!(value)
+        };
         i += 2;
     }
     Ok(cmd)
@@ -687,7 +688,7 @@ fn parse_service_profile_reset(
     Ok(command)
 }
 
-const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--view-stream-provider <rdp_gateway>] [--provider <rdp_gateway>] [--profile <path>] [--route-pool-entry-id <id>] [--route-pool-entry-json <json>] [--route-id <id>] [--display <name>] [--display-allocation-id <id>] [--browser-id <id>] [--session-name <name>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--origin-kind <kind>] [--job-timeout-ms <ms>] [--manual-login-launch] [--dry-run]";
+const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--browser-build <stock_chrome|chromiumQ|cdp_free_headed>] [--view-stream-provider <rdp_gateway>] [--provider <rdp_gateway>] [--profile <path>] [--route-pool-entry-id <id>] [--route-pool-entry-json <json>] [--route-id <id>] [--display <name>] [--display-allocation-id <id>] [--browser-id <id>] [--session-name <name>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--origin-kind <kind>] [--job-timeout-ms <ms>] [--manual-login-launch] [--dry-run]";
 
 fn remote_view_route_pool_from_env_value(raw: Option<String>) -> Result<Option<Value>, ParseError> {
     let Some(raw) = raw else {
@@ -906,7 +907,7 @@ fn parse_service_access_plan(
                     });
                 };
                 match crate::native::service_model::BrowserBuild::parse_label(value) {
-                    Some(_) => cmd["browserBuild"] = json!(value),
+                    Some(build) => cmd["browserBuild"] = json!(build.label()),
                     None => {
                         return Err(ParseError::InvalidValue {
                             message: format!("Invalid --browser-build value: {}", value),
@@ -1062,7 +1063,7 @@ fn parse_service_browser_capability_preflight(
                     });
                 };
                 match crate::native::service_model::BrowserBuild::parse_label(value) {
-                    Some(_) => cmd["browserBuild"] = json!(value),
+                    Some(build) => cmd["browserBuild"] = json!(build.label()),
                     None => {
                         return Err(ParseError::InvalidValue {
                             message: format!("Invalid --browser-build value: {}", value),
@@ -1253,7 +1254,7 @@ fn parse_service_browser_capability_guide(
                     SERVICE_BROWSER_CAPABILITY_GUIDE_USAGE,
                 )?;
                 match crate::native::service_model::BrowserBuild::parse_label(&value) {
-                    Some(_) => cmd["browserBuild"] = json!(value),
+                    Some(build) => cmd["browserBuild"] = json!(build.label()),
                     None => {
                         return Err(ParseError::InvalidValue {
                             message: format!("Invalid --browser-build value: {}", value),
@@ -1373,7 +1374,7 @@ fn parse_service_browser_capability_prefer(
                     SERVICE_BROWSER_CAPABILITY_PREFER_USAGE,
                 )?;
                 match crate::native::service_model::BrowserBuild::parse_label(&value) {
-                    Some(_) => browser_build = Some(value),
+                    Some(build) => browser_build = Some(build.label().to_string()),
                     None => {
                         return Err(ParseError::InvalidValue {
                             message: format!("Invalid --browser-build value: {}", value),
@@ -2187,7 +2188,7 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
             "--browser-build" => {
                 let value = required_next(rest, i, "--browser-build", REMOTE_VIEW_OPEN_USAGE)?;
                 match crate::native::service_model::BrowserBuild::parse_label(&value) {
-                    Some(_) => cmd["browserBuild"] = json!(value),
+                    Some(build) => cmd["browserBuild"] = json!(build.label()),
                     None => {
                         return Err(ParseError::InvalidValue {
                             message: format!("Invalid --browser-build value: {}", value),
@@ -7157,7 +7158,7 @@ mod tests {
         let mut flags = default_flags();
         flags.runtime_profile = Some("last30days-facebook".to_string());
         flags.cli_runtime_profile = true;
-        flags.browser_build = Some("stealthcdp_chromium".to_string());
+        flags.browser_build = Some("chromiumQ".to_string());
         flags.cli_browser_build = true;
         flags.browser_host = Some("remote_headed".to_string());
         flags.cli_browser_host = true;
@@ -7173,7 +7174,7 @@ mod tests {
         assert_eq!(cmd["action"], "navigate");
         assert_eq!(cmd["url"], "https://x.com/home");
         assert_eq!(cmd["runtimeProfile"], "last30days-facebook");
-        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["browserBuild"], "chromiumQ");
         assert_eq!(cmd["browserHost"], "remote_headed");
         assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
         assert_eq!(cmd["controlInputProvider"], "manual_attached_desktop");
@@ -8983,7 +8984,7 @@ mod tests {
 
         assert_eq!(
             cmd["launchConfig"]["defaultBrowserBuild"],
-            "stealthcdp_chromium"
+            "chromiumQ"
         );
         assert_eq!(cmd["launchConfig"]["stealthCdpChromiumRequired"], true);
         assert_eq!(cmd["launchConfig"]["stealthCdpChromiumReady"], false);
@@ -9430,13 +9431,13 @@ mod tests {
     #[test]
     fn test_service_browser_capability_preflight() {
         let cmd = parse_command(
-            &args("service browser-capability preflight --browser-build stealthcdp_chromium --target-service-id canva --account-id work --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace"),
+            &args("service browser-capability preflight --browser-build chromiumQ --target-service-id canva --account-id work --runtime-profile canva-default --headed --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace"),
             &default_flags(),
         )
         .unwrap();
 
         assert_eq!(cmd["action"], "service_browser_capability_preflight");
-        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["browserBuild"], "chromiumQ");
         assert_eq!(cmd["targetServiceId"], "canva");
         assert_eq!(cmd["accountId"], "work");
         assert_eq!(cmd["runtimeProfile"], "canva-default");
@@ -9450,10 +9451,10 @@ mod tests {
     #[test]
     fn test_service_browser_capability_preflight_preserves_cleaned_global_flags() {
         let all_args = args(
-            "service browser-capability preflight --browser-build stealthcdp_chromium --runtime-profile last30days-facebook --profile /srv/browser-profiles/facebook --headed --target-service-id facebook",
+            "service browser-capability preflight --browser-build chromiumQ --runtime-profile last30days-facebook --profile /srv/browser-profiles/facebook --headed --target-service-id facebook",
         );
         let mut flags = default_flags();
-        flags.browser_build = Some("stealthcdp_chromium".to_string());
+        flags.browser_build = Some("chromiumQ".to_string());
         flags.cli_browser_build = true;
         flags.runtime_profile = Some("last30days-facebook".to_string());
         flags.cli_runtime_profile = true;
@@ -9466,7 +9467,7 @@ mod tests {
         let cmd = parse_command(&cleaned, &flags).unwrap();
 
         assert_eq!(cmd["action"], "service_browser_capability_preflight");
-        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["browserBuild"], "chromiumQ");
         assert_eq!(cmd["runtimeProfile"], "last30days-facebook");
         assert_eq!(cmd["profile"], "/srv/browser-profiles/facebook");
         assert_eq!(cmd["headless"], false);
@@ -9576,7 +9577,7 @@ mod tests {
     #[test]
     fn test_service_access_plan_accepts_identity_and_browser_build() {
         let cmd = parse_command(
-            &args("service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --session-name bill-soylei --login-id canva --account-id user@example.test --runtime-profile canva-default --browser-build stealthcdp_chromium --browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display"),
+            &args("service access-plan --service-name CanvaCLI --agent-name codex --task-name openCanvaWorkspace --session-name bill-soylei --login-id canva --account-id user@example.test --runtime-profile canva-default --browser-build chromiumQ --browser-host remote_headed --view-stream-provider rdp_gateway --control-input-provider manual_attached_desktop --display-isolation private_virtual_display"),
             &default_flags(),
         )
         .unwrap();
@@ -9589,7 +9590,7 @@ mod tests {
         assert_eq!(cmd["loginId"], "canva");
         assert_eq!(cmd["accountId"], "user@example.test");
         assert_eq!(cmd["runtimeProfile"], "canva-default");
-        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["browserBuild"], "chromiumQ");
         assert_eq!(cmd["browserHost"], "remote_headed");
         assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
         assert_eq!(cmd["controlInputProvider"], "manual_attached_desktop");
@@ -9682,7 +9683,7 @@ mod tests {
 
     #[test]
     fn test_remote_view_open_builds_route_bound_service_action() {
-        let raw = args("--runtime-profile stealthcdp-default --display-isolation shared_display remote-view open linkedin.com --browser-build stealthcdp_chromium --provider rdp_gateway --route-pool-entry-id pool-a --service-name AuraCall --agent-name codex --task-name authenticateLinkedIn --manual-login-launch --dry-run");
+        let raw = args("--runtime-profile stealthcdp-default --display-isolation shared_display remote-view open linkedin.com --browser-build chromiumQ --provider rdp_gateway --route-pool-entry-id pool-a --service-name AuraCall --agent-name codex --task-name authenticateLinkedIn --manual-login-launch --dry-run");
         let flags = crate::flags::parse_flags(&raw);
         let clean = crate::flags::clean_args(&raw);
         let cmd = parse_command(&clean, &flags).unwrap();
@@ -9690,7 +9691,7 @@ mod tests {
         assert_eq!(cmd["action"], "remote_view_open");
         assert_eq!(cmd["url"], "https://linkedin.com");
         assert_eq!(cmd["runtimeProfile"], "stealthcdp-default");
-        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["browserBuild"], "chromiumQ");
         assert_eq!(cmd["browserHost"], "remote_headed");
         assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
         assert_eq!(cmd["provider"], "rdp_gateway");
@@ -9707,7 +9708,7 @@ mod tests {
 
     #[test]
     fn test_remote_view_open_accepts_canonical_view_stream_provider() {
-        let raw = args("--runtime-profile stealthcdp-default --display-isolation shared_display remote-view open linkedin.com --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --route-pool-entry-id pool-a --service-name AuraCall --agent-name codex --task-name authenticateLinkedIn --dry-run");
+        let raw = args("--runtime-profile stealthcdp-default --display-isolation shared_display remote-view open linkedin.com --browser-build chromiumQ --view-stream-provider rdp_gateway --route-pool-entry-id pool-a --service-name AuraCall --agent-name codex --task-name authenticateLinkedIn --dry-run");
         let flags = crate::flags::parse_flags(&raw);
         let clean = crate::flags::clean_args(&raw);
         let cmd = parse_command(&clean, &flags).unwrap();
@@ -9716,7 +9717,7 @@ mod tests {
         assert_eq!(cmd["url"], "https://linkedin.com");
         assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
         assert!(cmd.get("provider").is_none());
-        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["browserBuild"], "chromiumQ");
         assert_eq!(cmd["routePoolEntryId"], "pool-a");
         assert_eq!(cmd["dryRun"], true);
     }
@@ -9813,7 +9814,7 @@ mod tests {
 
     #[test]
     fn test_remote_view_open_preserves_global_flags_after_subcommand() {
-        let raw = args("remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --session-name last30days-facebook-state --session last30days-facebook-daemon --browser-build stealthcdp_chromium --provider rdp_gateway --dry-run");
+        let raw = args("remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --session-name last30days-facebook-state --session last30days-facebook-daemon --browser-build chromiumQ --provider rdp_gateway --dry-run");
         let flags = crate::flags::parse_flags(&raw);
         let clean = crate::flags::clean_args(&raw);
         let cmd = parse_command(&clean, &flags).unwrap();
@@ -9823,7 +9824,7 @@ mod tests {
         assert_eq!(cmd["url"], "https://www.facebook.com/");
         assert_eq!(cmd["runtimeProfile"], "last30days-facebook");
         assert_eq!(cmd["sessionName"], "last30days-facebook-state");
-        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["browserBuild"], "chromiumQ");
         assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
         assert_eq!(cmd["provider"], "rdp_gateway");
         assert_eq!(cmd["dryRun"], true);

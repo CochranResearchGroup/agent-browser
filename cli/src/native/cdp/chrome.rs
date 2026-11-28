@@ -1344,7 +1344,11 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
             launch_record: Some(RuntimeLaunchRecord {
                 target_url: options.args.first().cloned(),
                 browser_family: options.expected_browser_family.clone(),
-                browser_build: options.expected_browser_family.clone(),
+                browser_build: options
+                    .expected_browser_family
+                    .as_deref()
+                    .map(agent_browser_service_model::BrowserBuild::normalize_chromiumq_label)
+                    .map(str::to_owned),
                 display: launch_display.clone(),
                 started_at: time::OffsetDateTime::now_utc()
                     .format(&time::format_description::well_known::Rfc3339)

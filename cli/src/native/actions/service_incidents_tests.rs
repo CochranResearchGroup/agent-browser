@@ -370,7 +370,7 @@ async fn test_service_incident_activity_returns_normalized_timeline() {
         "serviceName" : "JournalDownloader", "agentName" : "codex", "taskName" :
         "probeACSwebsite", "profileId" : "work", "browserIds" : ["browser-1"],
         "browserCapabilityLaunch" : { "applied" : true, "reason" :
-        "validated_binding_applied", "browserBuild" : "stealthcdp_chromium", "bindingId"
+        "validated_binding_applied", "browserBuild" : "chromiumQ", "bindingId"
         : "binding-1", "hostId" : "local", "executableId" : "stealth-current",
         "capabilityId" : "stealth-cdp", "executablePath" :
         "/opt/chromium-stealthcdp/chrome" } } }, "incidents" : [{ "id" : "browser-1",

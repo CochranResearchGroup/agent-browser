@@ -291,7 +291,7 @@ impl StatusLaunchConfiguration {
                 reason: "stealthcdp_chromium_not_selected".to_string(),
                 is_wsl: false,
                 executable_on_windows_mount: false,
-                description: "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene.".to_string(),
+                description: "Launches Windows chromiumQ from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene.".to_string(),
                 additional_properties: Map::new(),
             },
             warnings: Vec::new(),

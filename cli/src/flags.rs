@@ -224,7 +224,7 @@ pub struct RuntimeProfileConfig {
     pub preferences: Option<RuntimeProfilePreferencesConfig>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserBuildManifestConfig {
     #[serde(alias = "path")]
@@ -592,19 +592,21 @@ fn browser_build_manifest_configs_from_sources(
         .as_ref()
         .and_then(|service| service.browser_build_manifests.clone())
         .unwrap_or_default();
-    if !manifests.contains_key("stealthcdp_chromium") {
+    if !manifests.contains_key("chromiumQ") {
         if let Some(path) = default_stealthcdp_chromium_manifest_path() {
             manifests.insert(
-                "stealthcdp_chromium".to_string(),
+                "chromiumQ".to_string(),
                 BrowserBuildManifestConfig {
                     manifest_path: Some(path.display().to_string()),
                 },
             );
         }
     }
-    if let Ok(path) = env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH") {
+    if let Ok(path) = env::var("AGENT_BROWSER_CHROMIUMQ_MANIFEST_PATH")
+        .or_else(|_| env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_MANIFEST_PATH"))
+    {
         manifests.insert(
-            "stealthcdp_chromium".to_string(),
+            "chromiumQ".to_string(),
             BrowserBuildManifestConfig {
                 manifest_path: Some(path),
             },
@@ -614,29 +616,30 @@ fn browser_build_manifest_configs_from_sources(
 }
 
 fn default_stealthcdp_chromium_manifest_path() -> Option<PathBuf> {
-    if let Ok(root) = env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT") {
+    if let Ok(root) = env::var("AGENT_BROWSER_CHROMIUMQ_INSTALL_ROOT")
+        .or_else(|_| env::var("AGENT_BROWSER_STEALTHCDP_CHROMIUM_INSTALL_ROOT"))
+    {
         let path = PathBuf::from(root).join("current").join("manifest.json");
         if path.is_file() {
             return Some(path);
         }
     }
-
-    if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
-        let path = PathBuf::from(local_app_data)
-            .join("chromium-stealthcdp")
-            .join("current")
-            .join("manifest.json");
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-
-    find_wsl_stealthcdp_chromium_manifest_path()
+    let local_app_data = env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    let linux_data = (!cfg!(windows)).then(dirs::data_local_dir).flatten();
+    ["chromiumQ", "chromium-stealthcdp"]
+        .into_iter()
+        .find_map(|name| {
+            [&local_app_data, &linux_data]
+                .into_iter()
+                .filter_map(|root| root.as_ref())
+                .map(|root| root.join(name).join("current").join("manifest.json"))
+                .find(|manifest| manifest.is_file())
+                .or_else(|| find_wsl_stealthcdp_chromium_manifest_path(name))
+        })
 }
 
-fn find_wsl_stealthcdp_chromium_manifest_path() -> Option<PathBuf> {
-    let users_dir = Path::new("/mnt/c/Users");
-    let entries = fs::read_dir(users_dir).ok()?;
+fn find_wsl_stealthcdp_chromium_manifest_path(install_name: &str) -> Option<PathBuf> {
+    let entries = fs::read_dir("/mnt/c/Users").ok()?;
     let mut candidates = Vec::new();
     for entry in entries.filter_map(Result::ok) {
         let name = entry.file_name().to_string_lossy().to_string();
@@ -650,7 +653,7 @@ fn find_wsl_stealthcdp_chromium_manifest_path() -> Option<PathBuf> {
             .path()
             .join("AppData")
             .join("Local")
-            .join("chromium-stealthcdp")
+            .join(install_name)
             .join("current")
             .join("manifest.json");
         if manifest.is_file() {
@@ -785,7 +788,10 @@ fn resolve_browser_build_manifest(
 
     let mut warnings = Vec::new();
     let schema = value_string(&manifest, "/schema");
-    if schema.as_deref() != Some("chromium-stealthcdp.artifact.v1") {
+    if !matches!(
+        schema.as_deref(),
+        Some("chromiumQ.artifact.v1" | "chromium-stealthcdp.artifact.v1")
+    ) {
         warnings.push(json!({
             "code": "browser_build_manifest_schema_unsupported",
             "severity": "warning",
@@ -860,16 +866,16 @@ pub(crate) fn managed_browser_executable() -> Result<Option<String>, String> {
     let executable = env::var("AGENT_BROWSER_EXECUTABLE_PATH")
         .ok()
         .or(config.executable_path)
-        .or_else(|| manifest_executable_path(&manifests, "stealthcdp_chromium"));
+        .or_else(|| manifest_executable_path(&manifests, "chromiumQ"));
     if required
         && (executable
             .as_ref()
             .is_none_or(|path| !Path::new(path).is_file())
             || manifests
-                .get("stealthcdp_chromium")
+                .get("chromiumQ")
                 .is_some_and(|status| status["ready"] != true))
     {
-        return Err("browser_build_executable_unavailable:stealthcdp_chromium: configure an available executable and ready build manifest".into());
+        return Err("browser_build_executable_unavailable:chromiumQ: configure an available executable and ready build manifest".into());
     }
     Ok(executable)
 }
@@ -957,9 +963,9 @@ fn apply_runtime_profile_overrides(config: &mut Config, runtime_profile_name: &s
     config.runtime_profile = Some(runtime_profile_name.to_string());
 }
 
-fn normalize_service_config(config: &mut Config) {
+fn normalize_service_config(config: &mut Config) -> Result<(), String> {
     let Some(service) = config.service.as_mut() else {
-        return;
+        return Ok(());
     };
 
     if let Some(site_policies) = service.site_policies.as_mut() {
@@ -977,6 +983,20 @@ fn normalize_service_config(config: &mut Config) {
             }
         }
     }
+    if let Some(manifests) = service.browser_build_manifests.as_mut() {
+        if let Some(legacy) = manifests.remove("stealthcdp_chromium") {
+            match manifests.get("chromiumQ") {
+                Some(canonical) if *canonical != legacy => {
+                    return Err("conflicting browserBuildManifests entries for chromiumQ and stealthcdp_chromium".into());
+                }
+                Some(_) => {}
+                None => {
+                    manifests.insert("chromiumQ".into(), legacy);
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn manual_login_preferred_services(config: &Config) -> Vec<String> {
@@ -1008,16 +1028,19 @@ fn manual_login_preferred_services(config: &Config) -> Vec<String> {
     names
 }
 
-fn read_config_file(path: &Path) -> Option<Config> {
-    let content = fs::read_to_string(path).ok()?;
+fn read_config_file(path: &Path) -> Result<Option<Config>, String> {
+    let Ok(content) = fs::read_to_string(path) else {
+        return Ok(None);
+    };
     match serde_json::from_str::<Config>(&content) {
         Ok(mut config) => {
             config.idle_timeout = parse_idle_timeout_value(
                 config.idle_timeout.take(),
                 &format!("config file {}", path.display()),
             );
-            normalize_service_config(&mut config);
-            Some(config)
+            normalize_service_config(&mut config)
+                .map_err(|error| format!("invalid config file {}: {error}", path.display()))?;
+            Ok(Some(config))
         }
         Err(e) => {
             eprintln!(
@@ -1026,7 +1049,7 @@ fn read_config_file(path: &Path) -> Option<Config> {
                 path.display(),
                 e
             );
-            None
+            Ok(None)
         }
     }
 }
@@ -1238,16 +1261,18 @@ pub fn load_config(args: &[String]) -> Result<Config, String> {
         if !path.exists() {
             return Err(format!("config file not found: {}", path_str));
         }
-        return read_config_file(&path)
+        return read_config_file(&path)?
             .ok_or_else(|| format!("failed to load config from {}", path_str));
     }
 
     let user_config = dirs::home_dir()
         .map(|d| d.join(CONFIG_DIR).join(CONFIG_FILENAME))
-        .and_then(|p| read_config_file(&p))
+        .map(|p| read_config_file(&p))
+        .transpose()?
+        .flatten()
         .unwrap_or_default();
 
-    let project_config = read_config_file(&PathBuf::from(PROJECT_CONFIG_FILENAME));
+    let project_config = read_config_file(Path::new(PROJECT_CONFIG_FILENAME))?;
 
     let mut merged = match project_config {
         Some(project) => user_config.merge(project),
@@ -1376,9 +1401,7 @@ pub fn launch_config_status(flags: &Flags) -> Value {
         .executable_path
         .as_ref()
         .map(|path| Path::new(path).is_file());
-    let stealth_manifest = flags
-        .browser_build_manifest_status
-        .get("stealthcdp_chromium");
+    let stealth_manifest = flags.browser_build_manifest_status.get("chromiumQ");
     let stealth_manifest_ready = stealth_manifest
         .and_then(|status| status.get("ready"))
         .and_then(|value| value.as_bool());
@@ -1388,20 +1411,20 @@ pub fn launch_config_status(flags: &Flags) -> Value {
         warnings.push(json!({
             "code": "stealthcdp_executable_missing",
             "severity": "warning",
-            "message": "stealthcdp_chromium is selected, but no executablePath, AGENT_BROWSER_EXECUTABLE_PATH, or browser build manifest executable is configured"
+            "message": "chromiumQ is selected, but no executablePath, AGENT_BROWSER_EXECUTABLE_PATH, or browser build manifest executable is configured"
         }));
     } else if stealth_cdp_chromium_required && executable_path_exists == Some(false) {
         warnings.push(json!({
             "code": "stealthcdp_executable_not_found",
             "severity": "warning",
-            "message": "stealthcdp_chromium is selected, but the configured executable path does not exist"
+            "message": "chromiumQ is selected, but the configured executable path does not exist"
         }));
     }
     if stealth_cdp_chromium_required && stealth_manifest_ready == Some(false) {
         warnings.push(json!({
             "code": "stealthcdp_manifest_not_ready",
             "severity": "warning",
-            "message": "stealthcdp_chromium manifest is configured but not ready"
+            "message": "chromiumQ manifest is configured but not ready"
         }));
     }
 
@@ -1469,7 +1492,7 @@ fn launch_profile_smoke_status(
         "reason": reason,
         "isWsl": is_wsl,
         "executableOnWindowsMount": executable_on_windows_mount,
-        "description": "Launches Windows chromium-stealthcdp from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene.",
+        "description": "Launches Windows chromiumQ from WSL with an isolated daemon socket and Windows-mounted profile, then verifies profile writes and Chrome stderr path hygiene.",
     })
 }
 
@@ -1575,7 +1598,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
     let env_executable_path = env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok();
     let config_executable_path = config.executable_path.clone();
     let manifest_executable_path =
-        manifest_executable_path(&browser_build_manifest_status, "stealthcdp_chromium");
+        manifest_executable_path(&browser_build_manifest_status, "chromiumQ");
     if service_state.default_browser_build.is_none()
         && manifest_executable_path
             .as_ref()
@@ -1814,12 +1837,12 @@ pub fn parse_flags(args: &[String]) -> Flags {
             }
             "--browser-build" => {
                 if let Some(s) = args.get(i + 1) {
-                    if BrowserBuild::parse_label(s).is_some() {
-                        flags.browser_build = Some(s.clone());
+                    if let Some(build) = BrowserBuild::parse_label(s) {
+                        flags.browser_build = Some(build.label().to_string());
                         flags.cli_browser_build = true;
                     } else {
                         eprintln!(
-                            "{} --browser-build must be stock_chrome, stealthcdp_chromium, or cdp_free_headed; got {}",
+                            "{} --browser-build must be stock_chrome, chromiumQ, or cdp_free_headed; got {}",
                             color::warning_indicator(),
                             s
                         );
@@ -2493,13 +2516,15 @@ mod tests {
 
     #[test]
     fn test_parse_global_browser_build_flag() {
-        let input = args("--browser-build stealthcdp_chromium open example.com");
-        let flags = parse_flags(&input);
-        let clean = clean_args(&input);
+        for input_build in ["chromiumQ", "stealthcdp_chromium"] {
+            let input = args(&format!("--browser-build {input_build} open example.com"));
+            let flags = parse_flags(&input);
+            let clean = clean_args(&input);
 
-        assert_eq!(flags.browser_build.as_deref(), Some("stealthcdp_chromium"));
-        assert!(flags.cli_browser_build);
-        assert_eq!(clean, args("open example.com"));
+            assert_eq!(flags.browser_build.as_deref(), Some("chromiumQ"));
+            assert!(flags.cli_browser_build);
+            assert_eq!(clean, args("open example.com"));
+        }
     }
 
     #[test]
@@ -2633,7 +2658,7 @@ mod tests {
             serde_json::to_string_pretty(&json!({
                 "service": {
                     "browserBuildManifests": {
-                        "stealthcdp_chromium": {
+                        "chromiumQ": {
                             "manifestPath": manifest_path.display().to_string()
                         }
                     }
@@ -2667,11 +2692,11 @@ mod tests {
             flags.service_state.default_browser_build,
             Some(BrowserBuild::StealthcdpChromium)
         );
-        assert_eq!(launch_config["defaultBrowserBuild"], "stealthcdp_chromium");
+        assert_eq!(launch_config["defaultBrowserBuild"], "chromiumQ");
         assert_eq!(launch_config["stealthCdpChromiumReady"], true);
         assert_eq!(launch_config["executablePathSource"], "manifest");
         assert_eq!(
-            launch_config["browserBuildManifests"]["stealthcdp_chromium"]["patchsetSha"],
+            launch_config["browserBuildManifests"]["chromiumQ"]["patchsetSha"],
             "patchset-sha"
         );
         assert_eq!(
@@ -2781,7 +2806,7 @@ mod tests {
                 .as_micros()
         ));
         let home = dir.join("home");
-        let install_root = dir.join("chromium-stealthcdp");
+        let install_root = dir.join("chromiumQ");
         let current = install_root.join("current");
         fs::create_dir_all(&current).unwrap();
         fs::create_dir_all(&home).unwrap();
@@ -2795,7 +2820,7 @@ mod tests {
         fs::write(
             current.join("manifest.json"),
             r#"{
-              "schema": "chromium-stealthcdp.artifact.v1",
+              "schema": "chromiumQ.artifact.v1",
               "artifactName": "150.0.7835.0+stealthcdp.test",
               "chromeVersion": "Chromium 150.0.7835.0",
               "chromium": { "sourceSha": "chromium-sha" },
@@ -2836,7 +2861,7 @@ mod tests {
             flags.service_state.default_browser_build,
             Some(BrowserBuild::StealthcdpChromium)
         );
-        assert_eq!(launch_config["defaultBrowserBuild"], "stealthcdp_chromium");
+        assert_eq!(launch_config["defaultBrowserBuild"], "chromiumQ");
         assert_eq!(launch_config["stealthCdpChromiumReady"], true);
 
         let _ = fs::remove_dir_all(&dir);
@@ -2966,6 +2991,46 @@ mod tests {
     }
 
     // === Config file tests ===
+
+    #[test]
+    fn config_canonicalizes_build_manifest_key_and_rejects_conflicting_declarations() {
+        let parse = |manifest_entries| {
+            let mut config: Config = serde_json::from_value(json!({
+                "service": {
+                    "defaultBrowserBuild": "stealthcdp_chromium",
+                    "browserBuildManifests": manifest_entries
+                }
+            }))
+            .unwrap();
+            normalize_service_config(&mut config)?;
+            Ok::<_, String>(config.service.unwrap())
+        };
+        for key in ["stealthcdp_chromium", "chromiumQ"] {
+            let entries =
+                BTreeMap::from([(key, json!({"manifestPath": "/fixture/manifest.json"}))]);
+            let service = parse(json!(entries)).unwrap();
+            assert_eq!(service.default_browser_build.unwrap().label(), "chromiumQ");
+            let manifests = service.browser_build_manifests.unwrap();
+            assert_eq!(manifests.len(), 1);
+            assert_eq!(
+                manifests["chromiumQ"].manifest_path.as_deref(),
+                Some("/fixture/manifest.json")
+            );
+        }
+        let matching = parse(json!({
+            "chromiumQ": {"manifestPath": "/same/manifest.json"},
+            "stealthcdp_chromium": {"manifestPath": "/same/manifest.json"}
+        }))
+        .unwrap();
+        assert_eq!(matching.browser_build_manifests.unwrap().len(), 1);
+        let result = parse(json!({
+            "chromiumQ": {"manifestPath": "/new/manifest.json"},
+            "stealthcdp_chromium": {"manifestPath": "/old/manifest.json"}
+        }));
+        assert!(result
+            .unwrap_err()
+            .contains("conflicting browserBuildManifests entries"));
+    }
 
     #[test]
     fn test_config_deserialize_full() {
@@ -3269,7 +3334,7 @@ mod tests {
                 recovery_max_backoff_ms: Some(10_000),
                 default_browser_build: Some(BrowserBuild::StealthcdpChromium),
                 browser_build_manifests: Some(BTreeMap::from([(
-                    "stealthcdp_chromium".to_string(),
+                    "chromiumQ".to_string(),
                     BrowserBuildManifestConfig {
                         manifest_path: Some("/project/manifest.json".to_string()),
                     },
@@ -3513,7 +3578,7 @@ mod tests {
         let mut f = fs::File::create(&config_path).unwrap();
         writeln!(f, r#"{{"headed": true, "proxy": "http://test:1234"}}"#).unwrap();
 
-        let config = read_config_file(&config_path).unwrap();
+        let config = read_config_file(&config_path).unwrap().unwrap();
         assert_eq!(config.headed, Some(true));
         assert_eq!(config.proxy.as_deref(), Some("http://test:1234"));
 
@@ -3556,7 +3621,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = read_config_file(&config_path).unwrap();
+        let config = read_config_file(&config_path).unwrap().unwrap();
         let service = config.service.as_ref().unwrap();
 
         assert_eq!(
@@ -3644,7 +3709,7 @@ mod tests {
                         "browserFamily": "chromium",
                         "vendor": "chromium",
                         "channel": "custom",
-                        "buildLabel": "stealthcdp_chromium",
+                        "buildLabel": "chromiumQ",
                         "executablePath": "/opt/agent-browser/chromium-stealthcdp/chrome",
                         "source": "manifest",
                         "version": "136.0.0.0",
@@ -3688,7 +3753,7 @@ mod tests {
         assert_eq!(state.providers["manual"].display_name, "Dashboard approval");
         assert_eq!(
             state.browser_capability_registry.browser_executables[0]["buildLabel"],
-            "stealthcdp_chromium"
+            "chromiumQ"
         );
         assert!(state.browsers.is_empty());
     }
@@ -4069,7 +4134,7 @@ mod tests {
         let mut f = fs::File::create(&config_path).unwrap();
         writeln!(f, r#"{{"idleTimeout": "10s"}}"#).unwrap();
 
-        let config = read_config_file(&config_path).unwrap();
+        let config = read_config_file(&config_path).unwrap().unwrap();
         assert_eq!(config.idle_timeout.as_deref(), Some("10000"));
 
         let _ = fs::remove_file(&config_path);
@@ -4078,7 +4143,7 @@ mod tests {
 
     #[test]
     fn test_load_config_missing_file_returns_none() {
-        let result = read_config_file(&PathBuf::from("/nonexistent/agent-browser.json"));
+        let result = read_config_file(Path::new("/nonexistent/agent-browser.json")).unwrap();
         assert!(result.is_none());
     }
 
@@ -4091,7 +4156,7 @@ mod tests {
         let mut f = fs::File::create(&config_path).unwrap();
         writeln!(f, "{{not valid json}}").unwrap();
 
-        let result = read_config_file(&config_path);
+        let result = read_config_file(&config_path).unwrap();
         assert!(result.is_none());
 
         let _ = fs::remove_file(&config_path);

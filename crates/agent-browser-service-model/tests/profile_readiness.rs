@@ -45,7 +45,7 @@ fn compatibility_evidence_codec_preserves_existing_defaults_and_browser_build_wi
     let evidence = BrowserProfileCompatibilityEvidence::decode_json(
         r#"{
             "browserFamily":"chromium",
-            "browserBuild":"stealthcdp_chromium",
+            "browserBuild":"chromiumQ",
             "evidence":"registered",
             "observedAt":"2026-09-16T12:00:00Z"
         }"#,
@@ -61,7 +61,7 @@ fn compatibility_evidence_codec_preserves_existing_defaults_and_browser_build_wi
 
     let encoded: serde_json::Value =
         serde_json::from_str(&evidence.encode_json().unwrap()).unwrap();
-    assert_eq!(encoded["browserBuild"], "stealthcdp_chromium");
+    assert_eq!(encoded["browserBuild"], "chromiumQ");
     assert_eq!(encoded["browserVersion"], serde_json::Value::Null);
     assert!(encoded.get("browser_build").is_none());
 }
@@ -104,7 +104,7 @@ fn profile_readiness_family_uses_the_existing_snake_case_variants() {
     ];
     assert_eq!(
         serde_json::to_value(browser_builds).unwrap(),
-        serde_json::json!(["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"])
+        serde_json::json!(["stock_chrome", "chromiumQ", "cdp_free_headed"])
     );
 
     let allocations = [
@@ -202,5 +202,14 @@ fn explicit_freshness_query_matches_the_existing_model_decision() {
             ..ProfileTargetReadiness::default()
         };
         assert_eq!(readiness.has_explicit_freshness_evidence(), expected);
+    }
+}
+
+#[test]
+fn chromiumq_build_reads_legacy_state_and_writes_canonical_identity() {
+    for input in ["chromiumQ", "stealthcdp_chromium"] {
+        let build: BrowserBuild = serde_json::from_value(serde_json::json!(input)).unwrap();
+        assert_eq!(BrowserBuild::parse_label(input), Some(build));
+        assert_eq!(serde_json::to_value(build).unwrap(), "chromiumQ");
     }
 }

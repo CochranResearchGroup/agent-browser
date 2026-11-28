@@ -89,7 +89,8 @@ pub use abandoned_browser_retirement::{
     ABANDONED_BROWSER_RETIREMENT_PLAN_SCHEMA_V1,
 };
 pub use browser_capability_registry::{
-    browser_profile_compatibility_matches, BrowserCapabilityRegistry,
+    browser_profile_compatibility_matches, normalize_browser_build_record,
+    BrowserCapabilityRegistry,
 };
 pub use browser_desktop_selector::{
     select_least_crowded_remote_view_desktop, RemoteViewDesktopCandidate,
@@ -221,8 +222,8 @@ pub use profile_policy_migration::{
     PROFILE_POLICY_MIGRATION_SCHEMA_VERSION,
 };
 pub use profile_readiness::{
-    BrowserBuild, BrowserProfileCompatibilityEvidence, ProfileAllocationPolicy,
-    ProfileKeyringPolicy, ProfileReadinessState, ProfileTargetReadiness,
+    deserialize_browser_build_label, BrowserBuild, BrowserProfileCompatibilityEvidence,
+    ProfileAllocationPolicy, ProfileKeyringPolicy, ProfileReadinessState, ProfileTargetReadiness,
     SERVICE_BROWSER_BUILD_VALUES, SERVICE_PROFILE_ALLOCATION_VALUES,
     SERVICE_PROFILE_KEYRING_VALUES, SERVICE_PROFILE_READINESS_VALUES,
 };

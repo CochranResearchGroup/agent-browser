@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::ProfileSeedingMode;
 
 pub const SERVICE_BROWSER_BUILD_VALUES: [&str; 3] =
-    ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed"];
+    ["stock_chrome", "chromiumQ", "cdp_free_headed"];
 
 pub const SERVICE_PROFILE_ALLOCATION_VALUES: [&str; 5] = [
     "shared_service",
@@ -34,11 +34,31 @@ pub const SERVICE_PROFILE_READINESS_VALUES: [&str; 6] = [
 #[serde(rename_all = "snake_case")]
 pub enum BrowserBuild {
     StockChrome,
+    #[serde(rename = "chromiumQ", alias = "stealthcdp_chromium")]
     StealthcdpChromium,
     CdpFreeHeaded,
 }
 
 impl BrowserBuild {
+    /// Canonical identity used in configuration and wire output.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::StockChrome => "stock_chrome",
+            Self::StealthcdpChromium => "chromiumQ",
+            Self::CdpFreeHeaded => "cdp_free_headed",
+        }
+    }
+
+    /// Normalize the migrated identity in string-valued records, preserving
+    /// custom browser-build labels and unrelated diagnostics.
+    pub fn normalize_chromiumq_label(value: &str) -> &str {
+        if Self::parse_label(value) == Some(Self::StealthcdpChromium) {
+            Self::StealthcdpChromium.label()
+        } else {
+            value
+        }
+    }
+
     /// Parse the established browser-build labels accepted by the durable
     /// configuration and state model.
     pub fn parse_label(value: &str) -> Option<Self> {
@@ -46,7 +66,8 @@ impl BrowserBuild {
             "stock_chrome" | "stock-chrome" | "chrome" | "google_chrome" | "google-chrome" => {
                 Some(Self::StockChrome)
             }
-            "stealthcdp_chromium"
+            "chromiumQ"
+            | "stealthcdp_chromium"
             | "stealthcdp-chromium"
             | "stealth_chromium"
             | "stealth-chromium"
@@ -57,6 +78,15 @@ impl BrowserBuild {
             _ => None,
         }
     }
+}
+
+/// Read a string-valued build record written before the chromiumQ migration.
+pub fn deserialize_browser_build_label<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer)
+        .map(|value| value.map(|label| BrowserBuild::normalize_chromiumq_label(&label).to_owned()))
 }
 
 /// How a profile may be allocated or shared.

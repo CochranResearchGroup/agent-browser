@@ -152,7 +152,7 @@
         "buildLabel": {
           "description": "Current browser posture label compatible with service access-plan browserBuild decisions.",
           "type": "string",
-          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed", "custom"]
+          "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed", "custom"]
         },
         "executablePath": {
           "type": ["string", "null"]
@@ -361,7 +361,7 @@
         },
         "browserBuild": {
           "type": ["string", "null"],
-          "enum": ["stock_chrome", "stealthcdp_chromium", "cdp_free_headed", "custom", null]
+          "enum": ["stock_chrome", "chromiumQ", "cdp_free_headed", "custom", null]
         },
         "priority": {
           "type": "integer",

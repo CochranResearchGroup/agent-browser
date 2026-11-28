@@ -105,7 +105,7 @@ assert(
     appIntelligence.includes('service_request:cookies_clear') &&
     appIntelligence.includes('operator_confirmation') &&
     appIntelligence.includes('confirmationId') &&
-    appIntelligence.includes('stealthcdp_chromium') &&
+    appIntelligence.includes('chromiumQ') &&
     appIntelligence.includes('private_virtual_display') &&
     appIntelligence.includes('operator_dashboard_actions') &&
     appIntelligence.includes('operatorGuidance') &&

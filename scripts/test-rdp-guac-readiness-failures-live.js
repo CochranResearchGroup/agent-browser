@@ -382,7 +382,7 @@ function seedFixtureBrowser(context, {
     profileId: `${sessionName}-profile`,
     host: 'remote_headed',
     health,
-    browserBuild: 'stealthcdp_chromium',
+    browserBuild: 'chromiumQ',
     displayIsolation: 'shared_display',
     displayName,
     pid: null,

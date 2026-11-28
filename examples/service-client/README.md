@@ -229,7 +229,7 @@ due-monitor, browser-preflight, and attention fields without copying example
 logic.
 
 Use `summarizeServiceAccessPlanBrowserBuildSelection()` when a client needs to
-log why an access plan chose `stealthcdp_chromium`, `stock_chrome`, or
+log why an access plan chose `chromiumQ`, `stock_chrome`, or
 `cdp_free_headed`. The helper returns a compact routing audit string plus the
 selected build, source, evidence source, operator override flag, preference
 binding, profile compatibility, validation evidence, and attention flags.

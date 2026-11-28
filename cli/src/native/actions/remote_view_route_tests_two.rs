@@ -567,7 +567,7 @@ async fn test_remote_view_route_checkout_refreshes_stale_display_allocation_iden
             "action": "service_remote_view_route_checkout",
             "browserId": "session:current",
             "sessionName": "current",
-            "browserBuild": "stealthcdp_chromium",
+            "browserBuild": "chromiumQ",
             "displayAllocationId": "display-a",
             "routePoolEntryId": "pool-a"
         }),
@@ -580,7 +580,7 @@ async fn test_remote_view_route_checkout_refreshes_stale_display_allocation_iden
     assert_eq!(allocation.profile_id.as_deref(), Some("current-profile"));
     assert_eq!(
         allocation.browser_build.as_deref(),
-        Some("stealthcdp_chromium")
+        Some("chromiumQ")
     );
     assert_eq!(allocation.host, Some(ServiceBrowserHost::RemoteHeaded));
     assert_eq!(allocation.pid_hints, Some(json!({ "browserPid": 4242 })));

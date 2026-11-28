@@ -178,11 +178,7 @@ pub(crate) fn select_browser_capability_launch_binding(
     })
 }
 pub(crate) fn browser_build_label(browser_build: BrowserBuild) -> &'static str {
-    match browser_build {
-        BrowserBuild::StockChrome => "stock_chrome",
-        BrowserBuild::StealthcdpChromium => "stealthcdp_chromium",
-        BrowserBuild::CdpFreeHeaded => "cdp_free_headed",
-    }
+    browser_build.label()
 }
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct ProfileCompatibilityGate {

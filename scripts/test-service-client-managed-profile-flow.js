@@ -840,7 +840,7 @@ function createMockFetch({
             browserBuild: cdpFreeRequired
               ? 'cdp_free_headed'
               : selectedProfile
-                ? 'stealthcdp_chromium'
+                ? 'chromiumQ'
                 : 'stock_chrome',
             browserBuildSource: cdpFreeRequired
               ? 'requires_cdp_free'
@@ -866,10 +866,10 @@ function createMockFetch({
             recommendedBeforeUse: Boolean(selectedProfile),
             reason: selectedProfile ? 'browser_capability_evidence_available' : 'browser_build_unavailable',
             selectedProfileId: selectedProfile?.id ?? null,
-            browserBuild: selectedProfile ? 'stealthcdp_chromium' : null,
+            browserBuild: selectedProfile ? 'chromiumQ' : null,
             request: selectedProfile
               ? {
-                  browserBuild: 'stealthcdp_chromium',
+                  browserBuild: 'chromiumQ',
                   serviceName: 'CanvaCLI',
                   agentName: 'canva-cli-agent',
                   taskName: 'openCanvaWorkspace',
@@ -912,7 +912,7 @@ function createMockFetch({
     }
 
     if (method === 'GET' && parsed.pathname === '/api/service/browser-capability/preflight') {
-      assert.equal(parsed.searchParams.get('browserBuild'), 'stealthcdp_chromium');
+      assert.equal(parsed.searchParams.get('browserBuild'), 'chromiumQ');
       assert.equal(parsed.searchParams.get('serviceName'), 'CanvaCLI');
       assert.equal(parsed.searchParams.get('agentName'), 'canva-cli-agent');
       assert.equal(parsed.searchParams.get('taskName'), 'openCanvaWorkspace');
@@ -925,7 +925,7 @@ function createMockFetch({
         browserCapabilityLaunch: {
           applied: true,
           reason: 'validated_preference_binding',
-          browserBuild: 'stealthcdp_chromium',
+          browserBuild: 'chromiumQ',
           profileId: 'canva-default',
         },
       });
@@ -1048,7 +1048,7 @@ function browserBuildSelection(selectedProfile, { cdpFreeRequired = false } = {}
   const browserBuild = cdpFreeRequired
     ? 'cdp_free_headed'
     : selectedProfile
-      ? 'stealthcdp_chromium'
+      ? 'chromiumQ'
       : 'stock_chrome';
   const source = cdpFreeRequired
     ? 'requires_cdp_free'
@@ -1103,7 +1103,7 @@ function browserBuildSelection(selectedProfile, { cdpFreeRequired = false } = {}
 
 function expectedBrowserBuildSelectionSummary() {
   return {
-    browserBuild: 'stealthcdp_chromium',
+    browserBuild: 'chromiumQ',
     source: 'browser_preference_binding',
     evidenceSource: 'service.browserCapabilityRegistry',
     summary: 'Browser capability registry preference binding selected this build.',
@@ -1122,7 +1122,7 @@ function expectedBrowserBuildSelectionSummary() {
     auditFlags: ['preference_binding_selected'],
     attentionRequired: false,
     compact:
-      'build=stealthcdp_chromium source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=canva-stealth-preference',
+      'build=chromiumQ source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=canva-stealth-preference',
     raw: browserBuildSelection(profile),
   };
 }

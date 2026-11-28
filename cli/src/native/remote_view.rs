@@ -12,8 +12,8 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use super::service_model::{
-    BrowserHost, DisplayAllocation, RemoteViewAcquisitionLease, RoutePoolEntry, ServiceState,
-    ViewStreamProvider,
+    BrowserBuild, BrowserHost, DisplayAllocation, RemoteViewAcquisitionLease, RoutePoolEntry,
+    ServiceState, ViewStreamProvider,
 };
 pub use agent_browser_service_model::{route_pool_entry_matches_display, route_pool_target_string};
 
@@ -286,7 +286,8 @@ pub fn normalize_remote_view_open_intent(command: &Value) -> Result<RemoteViewOp
         service_name: command_or_params_string(command, "serviceName"),
         agent_name: command_or_params_string(command, "agentName"),
         task_name: command_or_params_string(command, "taskName"),
-        browser_build: command_or_params_string(command, "browserBuild"),
+        browser_build: command_or_params_string(command, "browserBuild")
+            .map(|label| BrowserBuild::normalize_chromiumq_label(&label).to_owned()),
         browser_host: command_or_params_string(command, "browserHost")
             .unwrap_or_else(|| "remote_headed".to_string()),
         view_stream_provider,
@@ -619,7 +620,7 @@ fn allocation_reuse_mismatches(
         if allocation
             .browser_build
             .as_deref()
-            .is_some_and(|build| build != requested_build)
+            .is_some_and(|build| BrowserBuild::normalize_chromiumq_label(build) != requested_build)
         {
             mismatches.push("browser_build_mismatch".to_string());
         }
@@ -2212,7 +2213,7 @@ fn display_allocation_diagnostic(allocation: &DisplayAllocation) -> Value {
         "ownerBrowserId": allocation.owner_browser_id,
         "ownerSessionId": allocation.owner_session_id,
         "profileId": allocation.profile_id,
-        "browserBuild": allocation.browser_build,
+        "browserBuild": allocation.browser_build.as_deref().map(BrowserBuild::normalize_chromiumq_label),
         "host": allocation.host,
         "state": allocation.state,
         "routeIds": allocation.route_ids,
@@ -2341,7 +2342,7 @@ mod tests {
         let intent = normalize_remote_view_open_intent(&json!({
             "action": "remote_view_open",
             "runtimeProfile": "last30days-facebook",
-            "browserBuild": "stealthcdp_chromium",
+            "browserBuild": "chromiumQ",
             "params": {
                 "url": "https://www.facebook.com/",
                 "viewStreamProvider": "rdp_gateway",
@@ -2357,7 +2358,7 @@ mod tests {
             intent.runtime_profile.as_deref(),
             Some("last30days-facebook")
         );
-        assert_eq!(intent.browser_build.as_deref(), Some("stealthcdp_chromium"));
+        assert_eq!(intent.browser_build.as_deref(), Some("chromiumQ"));
         assert_eq!(intent.view_stream_provider, ViewStreamProvider::RdpGateway);
         assert_eq!(intent.route_pool_entry_id.as_deref(), Some("pool-a"));
         assert!(intent.manual_login_launch);

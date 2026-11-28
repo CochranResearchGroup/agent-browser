@@ -95,7 +95,7 @@ const installDoctorJson = {
   data: {
     launchConfig: {
       browserBuildManifests: {
-        stealthcdp_chromium: {
+        chromiumQ: {
           ready: true,
           executablePathExists: true,
           executablePath: process.execPath,

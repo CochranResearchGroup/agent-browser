@@ -3426,7 +3426,7 @@
       "owningChecks": [
         {
           "path": "cli/src/native/browser_session_host.rs",
-          "owningFunction": "explicit selected stealthcdp_chromium manifest lookup"
+          "owningFunction": "explicit selected chromiumQ manifest lookup"
         }
       ],
       "policySource": "cli/src/flags.rs",

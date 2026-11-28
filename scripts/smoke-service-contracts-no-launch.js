@@ -344,7 +344,7 @@ try {
   const preflight = await httpJson(
     port,
     'GET',
-    '/api/service/browser-capability/preflight?browserBuild=stealthcdp_chromium&targetServiceId=canva&serviceName=contracts-smoke&agentName=codex&taskName=no-launch-preflight',
+    '/api/service/browser-capability/preflight?browserBuild=chromiumQ&targetServiceId=canva&serviceName=contracts-smoke&agentName=codex&taskName=no-launch-preflight',
   );
   assert(preflight.success === true, `browser capability preflight failed: ${JSON.stringify(preflight)}`);
   assert(preflight.data?.preflight === true, `preflight marker mismatch: ${JSON.stringify(preflight)}`);

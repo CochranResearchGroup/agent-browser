@@ -392,11 +392,11 @@ async function main() {
       browserCapabilityLaunch: {
         applied: true,
         reason: 'validated_preference_binding',
-        browserBuild: 'stealthcdp_chromium',
+        browserBuild: 'chromiumQ',
         profileId: 'canva-default',
       },
       request: {
-        browserBuild: 'stealthcdp_chromium',
+        browserBuild: 'chromiumQ',
         profileId: 'canva-default',
         headless: false,
         cdpFree: false,
@@ -413,7 +413,7 @@ async function main() {
   const preflightResult = await getServiceBrowserCapabilityPreflight({
     baseUrl: 'http://127.0.0.1:4849',
     fetch: preflight.fetch,
-    browserBuild: 'stealthcdp_chromium',
+    browserBuild: 'chromiumQ',
     targetServiceId: 'canva',
     accountId: 'user@example.test',
     url: 'https://www.canva.com/',
@@ -426,7 +426,7 @@ async function main() {
   });
   assert.equal(
     preflight.calls[0].url,
-    'http://127.0.0.1:4849/api/service/browser-capability/preflight?browserBuild=stealthcdp_chromium&serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&targetServiceId=canva&accountId=user%40example.test&url=https%3A%2F%2Fwww.canva.com%2F&runtimeProfile=canva-default&headed=true',
+    'http://127.0.0.1:4849/api/service/browser-capability/preflight?browserBuild=chromiumQ&serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&targetServiceId=canva&accountId=user%40example.test&url=https%3A%2F%2Fwww.canva.com%2F&runtimeProfile=canva-default&headed=true',
   );
   assert.equal(preflight.calls[0].init.method, 'GET');
   assert.equal(preflightResult.wouldLaunch, false);
@@ -441,11 +441,11 @@ async function main() {
       browserCapabilityLaunch: {
         applied: true,
         reason: 'validated_preference_binding',
-        browserBuild: 'stealthcdp_chromium',
+        browserBuild: 'chromiumQ',
         profileId: 'canva-default',
       },
       request: {
-        browserBuild: 'stealthcdp_chromium',
+        browserBuild: 'chromiumQ',
         profileId: 'canva-default',
         headless: false,
         cdpFree: false,
@@ -467,7 +467,7 @@ async function main() {
         browserCapabilityPreflight: {
           available: true,
           request: {
-            browserBuild: 'stealthcdp_chromium',
+            browserBuild: 'chromiumQ',
             targetServiceIds: ['canva'],
             runtimeProfile: 'canva-default',
             headed: true,
@@ -482,7 +482,7 @@ async function main() {
   });
   assert.equal(
     accessPlanPreflight.calls[0].url,
-    'http://127.0.0.1:4849/api/service/browser-capability/preflight?browserBuild=stealthcdp_chromium&serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&url=https%3A%2F%2Fwww.canva.com%2F&targetServiceIds=canva&runtimeProfile=canva-default&headed=true',
+    'http://127.0.0.1:4849/api/service/browser-capability/preflight?browserBuild=chromiumQ&serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&url=https%3A%2F%2Fwww.canva.com%2F&targetServiceIds=canva&runtimeProfile=canva-default&headed=true',
   );
   assert.equal(accessPlanPreflight.calls[0].init.method, 'GET');
   assert.equal(accessPlanPreflightResult.preflight, true);
@@ -1604,7 +1604,7 @@ async function main() {
   const accessPlan = createFetchRecorder((url) => {
     assert.equal(
       url,
-      'http://127.0.0.1:4849/api/service/access-plan?serviceName=CanvaCLI&clientSubjectId=client%3Acanva-cli&identityAssurance=self-declared&sessionName=bill-soylei&loginId=canva&browserBuild=stealthcdp_chromium&runtimeProfile=canva-default&sitePolicyId=canva&challengeId=challenge-1',
+      'http://127.0.0.1:4849/api/service/access-plan?serviceName=CanvaCLI&clientSubjectId=client%3Acanva-cli&identityAssurance=self-declared&sessionName=bill-soylei&loginId=canva&browserBuild=chromiumQ&runtimeProfile=canva-default&sitePolicyId=canva&challengeId=challenge-1',
     );
     return {
       success: true,
@@ -1670,7 +1670,7 @@ async function main() {
           challengeIds: [],
           launchPosture: {
             browserHost: 'local_headed',
-            browserBuild: 'stealthcdp_chromium',
+            browserBuild: 'chromiumQ',
             browserBuildSource: 'browser_preference_binding',
             source: 'service_default',
             headed: true,
@@ -1684,7 +1684,7 @@ async function main() {
               'browser_build_from_browser_preference_binding',
             ],
             browserBuildSelection: {
-              browserBuild: 'stealthcdp_chromium',
+              browserBuild: 'chromiumQ',
               source: 'browser_preference_binding',
               evidenceSource: 'service.browserCapabilityRegistry',
               summary: 'Browser capability registry preference binding selected this build.',
@@ -1727,7 +1727,7 @@ async function main() {
     identityAssurance: 'self-declared',
     sessionName: 'bill-soylei',
     loginId: 'canva',
-    browserBuild: 'stealthcdp_chromium',
+    browserBuild: 'chromiumQ',
     runtimeProfile: 'canva-default',
     profileCapability: 'private-canva-capability',
     sitePolicyId: 'canva',
@@ -1761,7 +1761,7 @@ async function main() {
   assert.equal(accessPlanResult.decision.recommendedAction, 'use_selected_profile');
   const browserBuildSelectionSummary =
     summarizeServiceAccessPlanBrowserBuildSelection(accessPlanResult);
-  assert.equal(browserBuildSelectionSummary.browserBuild, 'stealthcdp_chromium');
+  assert.equal(browserBuildSelectionSummary.browserBuild, 'chromiumQ');
   assert.equal(browserBuildSelectionSummary.source, 'browser_preference_binding');
   assert.equal(browserBuildSelectionSummary.evidenceSource, 'service.browserCapabilityRegistry');
   assert.equal(browserBuildSelectionSummary.operatorOverride, false);
@@ -1782,7 +1782,7 @@ async function main() {
   assert.equal(browserBuildSelectionSummary.attentionRequired, false);
   assert.equal(
     browserBuildSelectionSummary.compact,
-    'build=stealthcdp_chromium source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=canva-stealth-preference',
+    'build=chromiumQ source=browser_preference_binding evidence=service.browserCapabilityRegistry override=no profileCompatibility=compatible validation=passed preferenceBinding=canva-stealth-preference',
   );
   const missingBrowserBuildSelectionSummary =
     summarizeServiceAccessPlanBrowserBuildSelection(undefined);
@@ -1800,7 +1800,7 @@ async function main() {
         profileName: 'Authenticated',
         allocation: 'per_service',
         keyring: 'basic_password_store',
-        browserBuild: 'stealthcdp_chromium',
+        browserBuild: 'chromiumQ',
         targetServiceIds: ['canva'],
         authenticatedServiceIds: ['canva'],
         accountIds: [],
@@ -1978,7 +1978,7 @@ async function main() {
             accountIds: ['user@example.test'],
             authenticatedServiceIds: ['canva'],
             sharedServiceIds: ['CanvaCLI'],
-            browserBuild: 'stealthcdp_chromium',
+            browserBuild: 'chromiumQ',
           },
           selectedProfileMatch: {
             profileId: 'canva-default',
@@ -2018,7 +2018,7 @@ async function main() {
               available: true,
               recommendedBeforeUse: true,
               request: {
-                browserBuild: 'stealthcdp_chromium',
+                browserBuild: 'chromiumQ',
                 targetServiceIds: ['canva'],
                 accountIds: ['user@example.test'],
                 runtimeProfile: 'canva-default',
@@ -2045,7 +2045,7 @@ async function main() {
         browserCapabilityLaunch: {
           applied: true,
           reason: 'validated_preference_binding',
-          browserBuild: 'stealthcdp_chromium',
+          browserBuild: 'chromiumQ',
           profileId: 'canva-default',
         },
         selectedExecutablePath: '/opt/chromium-stealthcdp/chrome',
@@ -2066,7 +2066,7 @@ async function main() {
   assert.equal(preflightAcquisition.calls.length, 2);
   assert.equal(
     preflightAcquisition.calls[1].url,
-    'http://127.0.0.1:4849/api/service/browser-capability/preflight?browserBuild=stealthcdp_chromium&serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&url=https%3A%2F%2Fwww.canva.com%2F&targetServiceIds=canva&accountIds=user%40example.test&runtimeProfile=canva-default&headed=true',
+    'http://127.0.0.1:4849/api/service/browser-capability/preflight?browserBuild=chromiumQ&serviceName=CanvaCLI&agentName=codex&taskName=openCanvaWorkspace&url=https%3A%2F%2Fwww.canva.com%2F&targetServiceIds=canva&accountIds=user%40example.test&runtimeProfile=canva-default&headed=true',
   );
   assert.equal(preflightAcquisitionResult.browserCapabilityPreflight?.preflight, true);
   assert.equal(preflightAcquisitionResult.browserCapabilityPreflightRan, true);
@@ -2952,7 +2952,7 @@ async function main() {
     loginId: 'chatgpt',
     accountId: 'consult@example.com',
     userDataDir: '/home/me/.auracall/browser-profiles/chatgpt',
-    browserBuild: 'stealthcdp_chromium',
+    browserBuild: 'chromiumQ',
     browserFamily: 'chromium',
     browserVersion: '126.0.0.0',
     compatibilityEvidence: 'validated_with_existing_provider_profile',
@@ -2979,7 +2979,7 @@ async function main() {
   assert.deepEqual(external.calls[0].body.browserCompatibilityEvidence, [
     {
       browserFamily: 'chromium',
-      browserBuild: 'stealthcdp_chromium',
+      browserBuild: 'chromiumQ',
       browserVersion: '126.0.0.0',
       evidence: 'validated_with_existing_provider_profile',
       observedAt: null,

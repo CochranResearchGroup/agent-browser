@@ -2406,7 +2406,7 @@ fn test_apply_auto_launch_command_hints_honors_planned_identity_and_capability()
     guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
     let command = json!(
         { "action" : "tab_new", "serviceName" : "CanaryRunner", "targetServiceId" :
-        "canary-site", "browserBuild" : "stealthcdp_chromium", "runtimeProfile" :
+        "canary-site", "browserBuild" : "chromiumQ", "runtimeProfile" :
         "stealth-profile", "profile" : user_data_dir.display().to_string(), "params" : {
         "browserHost" : "remote_headed", "displayIsolation" : "private_virtual_display",
         "viewStreamProvider" : "rdp_gateway", "controlInputProvider" :
@@ -2415,7 +2415,7 @@ fn test_apply_auto_launch_command_hints_honors_planned_identity_and_capability()
         "browserCapabilityRegistry" : { "browserHosts" : [{ "id" : "linux-local",
         "hostKind" : "local", "reachable" : true, "lifecycleOwner" : "agent_browser" }],
         "browserExecutables" : [{ "id" : "stealth-current", "hostId" : "linux-local",
-        "buildLabel" : "stealthcdp_chromium", "executablePath" : executable.display()
+        "buildLabel" : "chromiumQ", "executablePath" : executable.display()
         .to_string() }], "browserCapabilities" : [{ "id" : "stealth-capability", "hostId"
         : "linux-local", "executableId" : "stealth-current", "cdpSupported" : true,
         "headedSupported" : true, "headlessSupported" : true }], "profileCompatibility" :
@@ -2425,7 +2425,7 @@ fn test_apply_auto_launch_command_hints_honors_planned_identity_and_capability()
         "canary-stealth-default", "scope" : "site", "targetServiceIds" : ["canary-site"],
         "preferredHostId" : "linux-local", "preferredExecutableId" : "stealth-current",
         "preferredCapabilityId" : "stealth-capability", "browserBuild" :
-        "stealthcdp_chromium", "priority" : 50 }], "validationEvidence" : [{ "id" :
+        "chromiumQ", "priority" : 50 }], "validationEvidence" : [{ "id" :
         "stealth-launch-smoke", "hostId" : "linux-local", "executableId" :
         "stealth-current", "capabilityId" : "stealth-capability", "kind" : "launch",
         "state" : "passed" }] } } }
@@ -2481,14 +2481,14 @@ fn test_apply_auto_launch_command_hints_preserves_explicit_runtime_profile() {
     let user_data_dir = home.join("stealthcdp-default");
     fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
     let service_state = json!(
-        { "defaultBrowserBuild" : "stealthcdp_chromium", "profiles" : {
+        { "defaultBrowserBuild" : "chromiumQ", "profiles" : {
         "stealthcdp-default" : { "id" : "stealthcdp-default", "name" : "Stealth default",
         "userDataDir" : user_data_dir.display().to_string(), "defaultBrowserHost" :
-        "remote_headed", "browserBuild" : "stealthcdp_chromium", "persistent" : true } },
+        "remote_headed", "browserBuild" : "chromiumQ", "persistent" : true } },
         "browserCapabilityRegistry" : { "browserHosts" : [{ "id" : "linux-local",
         "hostKind" : "local", "reachable" : true, "lifecycleOwner" : "agent_browser" }],
         "browserExecutables" : [{ "id" : "stealth-current", "hostId" : "linux-local",
-        "buildLabel" : "stealthcdp_chromium", "executablePath" : executable.display()
+        "buildLabel" : "chromiumQ", "executablePath" : executable.display()
         .to_string() }], "browserCapabilities" : [{ "id" : "stealth-capability", "hostId"
         : "linux-local", "executableId" : "stealth-current", "cdpSupported" : true,
         "headedSupported" : true, "headlessSupported" : true }], "profileCompatibility" :
@@ -2497,7 +2497,7 @@ fn test_apply_auto_launch_command_hints_preserves_explicit_runtime_profile() {
         }], "browserPreferenceBindings" : [{ "id" : "global-stealth-default", "scope" :
         "global", "preferredHostId" : "linux-local", "preferredExecutableId" :
         "stealth-current", "preferredCapabilityId" : "stealth-capability", "browserBuild"
-        : "stealthcdp_chromium", "priority" : 50 }], "validationEvidence" : [{ "id" :
+        : "chromiumQ", "priority" : 50 }], "validationEvidence" : [{ "id" :
         "stealth-launch-smoke", "hostId" : "linux-local", "executableId" :
         "stealth-current", "capabilityId" : "stealth-capability", "kind" : "launch",
         "state" : "passed" }] } }
@@ -2532,18 +2532,18 @@ fn test_open_preserves_runtime_profile_when_default_profile_is_locked_shape() {
     let requested_user_data_dir = home.join("last30days-facebook");
     fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
     let service_state = json!(
-        { "defaultBrowserBuild" : "stealthcdp_chromium", "profiles" : {
+        { "defaultBrowserBuild" : "chromiumQ", "profiles" : {
         "stealthcdp-default" : { "id" : "stealthcdp-default", "name" : "Stealth default",
         "userDataDir" : default_user_data_dir.display().to_string(), "defaultBrowserHost"
-        : "remote_headed", "browserBuild" : "stealthcdp_chromium", "persistent" : true },
+        : "remote_headed", "browserBuild" : "chromiumQ", "persistent" : true },
         "last30days-facebook" : { "id" : "last30days-facebook", "name" :
         "Last 30 Days Facebook", "userDataDir" : requested_user_data_dir.display()
         .to_string(), "defaultBrowserHost" : "remote_headed", "browserBuild" :
-        "stealthcdp_chromium", "persistent" : true } }, "browserCapabilityRegistry" : {
+        "chromiumQ", "persistent" : true } }, "browserCapabilityRegistry" : {
         "browserHosts" : [{ "id" : "linux-local", "hostKind" : "local", "reachable" :
         true, "lifecycleOwner" : "agent_browser" }], "browserExecutables" : [{ "id" :
         "stealth-current", "hostId" : "linux-local", "buildLabel" :
-        "stealthcdp_chromium", "executablePath" : executable.display().to_string() }],
+        "chromiumQ", "executablePath" : executable.display().to_string() }],
         "browserCapabilities" : [{ "id" : "stealth-capability", "hostId" : "linux-local",
         "executableId" : "stealth-current", "cdpSupported" : true, "headedSupported" :
         true, "headlessSupported" : true }], "profileCompatibility" : [{ "id" :
@@ -2554,7 +2554,7 @@ fn test_open_preserves_runtime_profile_when_default_profile_is_locked_shape() {
         "browserPreferenceBindings" : [{ "id" : "global-stealth-default", "scope" :
         "global", "preferredHostId" : "linux-local", "preferredExecutableId" :
         "stealth-current", "preferredCapabilityId" : "stealth-capability", "browserBuild"
-        : "stealthcdp_chromium", "priority" : 50 }], "validationEvidence" : [{ "id" :
+        : "chromiumQ", "priority" : 50 }], "validationEvidence" : [{ "id" :
         "stealth-launch-smoke", "hostId" : "linux-local", "executableId" :
         "stealth-current", "capabilityId" : "stealth-capability", "kind" : "launch",
         "state" : "passed" }] }, "browsers" : { "session:detected-profile-mirror-38305-2"
@@ -2564,7 +2564,7 @@ fn test_open_preserves_runtime_profile_when_default_profile_is_locked_shape() {
     );
     let command = json!(
         { "action" : "navigate", "url" : "https://x.com/home", "runtimeProfile" :
-        "last30days-facebook", "browserBuild" : "stealthcdp_chromium", "browserHost" :
+        "last30days-facebook", "browserBuild" : "chromiumQ", "browserHost" :
         "remote_headed", "serviceState" : service_state }
     );
     let mut options = LaunchOptions::default();
@@ -2592,7 +2592,7 @@ fn test_open_preserves_runtime_profile_when_default_profile_is_locked_shape() {
                 .expect("path should be utf-8")
         )
     );
-    assert_eq!(effective_command["browserBuild"], "stealthcdp_chromium");
+    assert_eq!(effective_command["browserBuild"], "chromiumQ");
     assert_eq!(effective_command["browserHost"], "remote_headed");
     let _ = fs::remove_dir_all(&home);
 }
@@ -2606,14 +2606,14 @@ fn test_apply_auto_launch_command_hints_preserves_explicit_profile_id() {
     let user_data_dir = home.join("stealthcdp-default");
     fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
     let service_state = json!(
-        { "defaultBrowserBuild" : "stealthcdp_chromium", "profiles" : {
+        { "defaultBrowserBuild" : "chromiumQ", "profiles" : {
         "stealthcdp-default" : { "id" : "stealthcdp-default", "name" : "Stealth default",
         "userDataDir" : user_data_dir.display().to_string(), "defaultBrowserHost" :
-        "remote_headed", "browserBuild" : "stealthcdp_chromium", "persistent" : true } },
+        "remote_headed", "browserBuild" : "chromiumQ", "persistent" : true } },
         "browserCapabilityRegistry" : { "browserHosts" : [{ "id" : "linux-local",
         "hostKind" : "local", "reachable" : true, "lifecycleOwner" : "agent_browser" }],
         "browserExecutables" : [{ "id" : "stealth-current", "hostId" : "linux-local",
-        "buildLabel" : "stealthcdp_chromium", "executablePath" : executable.display()
+        "buildLabel" : "chromiumQ", "executablePath" : executable.display()
         .to_string() }], "browserCapabilities" : [{ "id" : "stealth-capability", "hostId"
         : "linux-local", "executableId" : "stealth-current", "cdpSupported" : true,
         "headedSupported" : true, "headlessSupported" : true }], "profileCompatibility" :
@@ -2622,7 +2622,7 @@ fn test_apply_auto_launch_command_hints_preserves_explicit_profile_id() {
         }], "browserPreferenceBindings" : [{ "id" : "global-stealth-default", "scope" :
         "global", "preferredHostId" : "linux-local", "preferredExecutableId" :
         "stealth-current", "preferredCapabilityId" : "stealth-capability", "browserBuild"
-        : "stealthcdp_chromium", "priority" : 50 }], "validationEvidence" : [{ "id" :
+        : "chromiumQ", "priority" : 50 }], "validationEvidence" : [{ "id" :
         "stealth-launch-smoke", "hostId" : "linux-local", "executableId" :
         "stealth-current", "capabilityId" : "stealth-capability", "kind" : "launch",
         "state" : "passed" }] } }
@@ -2744,14 +2744,14 @@ fn test_apply_auto_launch_command_hints_uses_effective_service_default() {
     let user_data_dir = home.join("stealthcdp-default");
     fs::write(&executable, "#!/bin/sh\n").expect("test executable should be written");
     let service_state = json!(
-        { "defaultBrowserBuild" : "stealthcdp_chromium", "profiles" : {
+        { "defaultBrowserBuild" : "chromiumQ", "profiles" : {
         "stealthcdp-default" : { "id" : "stealthcdp-default", "name" : "Stealth default",
         "userDataDir" : user_data_dir.display().to_string(), "defaultBrowserHost" :
-        "remote_headed", "browserBuild" : "stealthcdp_chromium", "persistent" : true } },
+        "remote_headed", "browserBuild" : "chromiumQ", "persistent" : true } },
         "browserCapabilityRegistry" : { "browserHosts" : [{ "id" : "linux-local",
         "hostKind" : "local", "reachable" : true, "lifecycleOwner" : "agent_browser" }],
         "browserExecutables" : [{ "id" : "stealth-current", "hostId" : "linux-local",
-        "buildLabel" : "stealthcdp_chromium", "executablePath" : executable.display()
+        "buildLabel" : "chromiumQ", "executablePath" : executable.display()
         .to_string() }], "browserCapabilities" : [{ "id" : "stealth-capability", "hostId"
         : "linux-local", "executableId" : "stealth-current", "cdpSupported" : true,
         "headedSupported" : true, "headlessSupported" : true }], "profileCompatibility" :
@@ -2760,7 +2760,7 @@ fn test_apply_auto_launch_command_hints_uses_effective_service_default() {
         }], "browserPreferenceBindings" : [{ "id" : "global-stealth-default", "scope" :
         "global", "preferredHostId" : "linux-local", "preferredExecutableId" :
         "stealth-current", "preferredCapabilityId" : "stealth-capability", "browserBuild"
-        : "stealthcdp_chromium", "priority" : 50 }], "validationEvidence" : [{ "id" :
+        : "chromiumQ", "priority" : 50 }], "validationEvidence" : [{ "id" :
         "stealth-launch-smoke", "hostId" : "linux-local", "executableId" :
         "stealth-current", "capabilityId" : "stealth-capability", "kind" : "launch",
         "state" : "passed" }] } }
@@ -2793,7 +2793,7 @@ fn test_apply_auto_launch_command_hints_uses_effective_service_default() {
         Some(executable.to_str().expect("path should be utf-8"))
     );
     assert!(browser_capability_launch.applied);
-    assert_eq!(effective_command["browserBuild"], "stealthcdp_chromium");
+    assert_eq!(effective_command["browserBuild"], "chromiumQ");
     assert_eq!(effective_command["browserHost"], "remote_headed");
     assert_eq!(effective_command["viewStreamProvider"], "rdp_gateway");
     assert_eq!(
@@ -3043,7 +3043,7 @@ fn test_apply_service_browser_capability_selection_sets_validated_executable() {
                 ],
                 browser_executables: vec![
                     json!({ "id" : "stealth-current", "hostId" : "linux-local",
-                        "buildLabel" : "stealthcdp_chromium", "executablePath" :
+                        "buildLabel" : "chromiumQ", "executablePath" :
                         executable.display().to_string() }),
                 ],
                 browser_capabilities: vec![
@@ -3063,7 +3063,7 @@ fn test_apply_service_browser_capability_selection_sets_validated_executable() {
                         "targetServiceIds" : ["canary-site"], "preferredHostId" :
                         "linux-local", "preferredExecutableId" : "stealth-current",
                         "preferredCapabilityId" : "stealth-capability", "browserBuild" :
-                        "stealthcdp_chromium", "priority" : 50 }),
+                        "chromiumQ", "priority" : 50 }),
                 ],
                 validation_evidence: vec![
                     json!({ "id" : "stealth-launch-smoke", "hostId" : "linux-local",
@@ -3085,7 +3085,7 @@ fn test_apply_service_browser_capability_selection_sets_validated_executable() {
         &mut options,
         &json!(
             { "serviceName" : "CanaryRunner", "targetServiceId" : "canary-site",
-            "browserBuild" : "stealthcdp_chromium" }
+            "browserBuild" : "chromiumQ" }
         ),
     );
     assert!(resolution.applied);
@@ -3232,7 +3232,7 @@ async fn test_service_browser_capability_preflight_reports_validated_binding_wit
                 ],
                 browser_executables: vec![
                     json!({ "id" : "stealth-current", "hostId" : "linux-local",
-                        "buildLabel" : "stealthcdp_chromium", "executablePath" :
+                        "buildLabel" : "chromiumQ", "executablePath" :
                         executable.display().to_string() }),
                 ],
                 browser_capabilities: vec![
@@ -3251,7 +3251,7 @@ async fn test_service_browser_capability_preflight_reports_validated_binding_wit
                         "targetServiceIds" : ["canary-site"], "preferredHostId" :
                         "linux-local", "preferredExecutableId" : "stealth-current",
                         "preferredCapabilityId" : "stealth-capability", "browserBuild" :
-                        "stealthcdp_chromium", "priority" : 50 }),
+                        "chromiumQ", "priority" : 50 }),
                 ],
                 validation_evidence: vec![
                     json!({ "id" : "stealth-launch-smoke", "hostId" : "linux-local",
@@ -3265,7 +3265,7 @@ async fn test_service_browser_capability_preflight_reports_validated_binding_wit
         .expect("service state should be persisted");
     let response = handle_service_browser_capability_preflight(&json!(
         { "targetServiceId" : "canary-site", "runtimeProfile" :
-        "stealth-profile", "browserBuild" : "stealthcdp_chromium", "headless" :
+        "stealth-profile", "browserBuild" : "chromiumQ", "headless" :
         false }
     ))
     .await
@@ -3321,10 +3321,10 @@ fn test_browser_preference_binding_requires_all_identity_filters_for_launch() {
     assert!(preference_binding_matches_launch_command(
         &json!({ "id" :
         "default-new-identities-use-stealthcdp", "scope" : "global", "browserBuild" :
-        "stealthcdp_chromium" }),
+        "chromiumQ" }),
         &json!({ "targetServiceId" : "any-site",
-        "browserBuild" : "stealthcdp_chromium" }),
-        Some("stealthcdp_chromium")
+        "browserBuild" : "chromiumQ" }),
+        Some("chromiumQ")
     ));
 }
 #[tokio::test]
@@ -3336,7 +3336,7 @@ async fn test_service_access_plan_reports_browser_build_summary_without_launch()
     let response = handle_service_access_plan(&json!(
         { "serviceName" : "CanvaCLI", "agentName" : "codex", "taskName" :
         "openCanvaWorkspace", "loginId" : "canary-site", "browserBuild" :
-        "stealthcdp_chromium", "browserHost" : "remote_headed",
+        "chromiumQ", "browserHost" : "remote_headed",
         "viewStreamProvider" : "rdp_gateway", "controlInputProvider" :
         "manual_attached_desktop", "displayIsolation" : "private_virtual_display"
         }
@@ -3362,12 +3362,12 @@ async fn test_service_access_plan_reports_browser_build_summary_without_launch()
     );
     assert_eq!(
         response["browserBuildSelectionSummary"]["browserBuild"],
-        "stealthcdp_chromium"
+        "chromiumQ"
     );
     assert!(response["browserBuildSelectionSummary"]["compact"]
         .as_str()
         .expect("compact summary should be present")
-        .contains("build=stealthcdp_chromium"));
+        .contains("build=chromiumQ"));
     let _ = fs::remove_dir_all(home);
 }
 #[test]
@@ -3387,7 +3387,7 @@ fn test_apply_service_browser_capability_selection_requires_compatibility() {
                 ],
                 browser_executables: vec![
                     json!({ "id" : "stealth-current", "hostId" : "linux-local",
-                        "buildLabel" : "stealthcdp_chromium", "executablePath" :
+                        "buildLabel" : "chromiumQ", "executablePath" :
                         executable.display().to_string() }),
                 ],
                 browser_capabilities: vec![
@@ -3406,7 +3406,7 @@ fn test_apply_service_browser_capability_selection_requires_compatibility() {
                         "targetServiceIds" : ["canary-site"], "preferredHostId" :
                         "linux-local", "preferredExecutableId" : "stealth-current",
                         "preferredCapabilityId" : "stealth-capability", "browserBuild" :
-                        "stealthcdp_chromium", "priority" : 50 }),
+                        "chromiumQ", "priority" : 50 }),
                 ],
                 validation_evidence: vec![
                     json!({ "id" : "stealth-launch-smoke", "hostId" : "linux-local",
@@ -3425,7 +3425,7 @@ fn test_apply_service_browser_capability_selection_requires_compatibility() {
     let resolution = apply_service_browser_capability_selection(
         &mut options,
         &json!(
-            { "targetServiceId" : "canary-site", "browserBuild" : "stealthcdp_chromium" }
+            { "targetServiceId" : "canary-site", "browserBuild" : "chromiumQ" }
         ),
     );
     assert!(!resolution.applied);
@@ -3458,7 +3458,7 @@ fn test_apply_service_browser_capability_selection_rejects_mixed_validation() {
                 ],
                 browser_executables: vec![
                     json!({ "id" : "stealth-current", "hostId" : "linux-local",
-                        "buildLabel" : "stealthcdp_chromium", "executablePath" :
+                        "buildLabel" : "chromiumQ", "executablePath" :
                         executable.display().to_string() }),
                 ],
                 browser_capabilities: vec![
@@ -3477,7 +3477,7 @@ fn test_apply_service_browser_capability_selection_rejects_mixed_validation() {
                         "targetServiceIds" : ["canary-site"], "preferredHostId" :
                         "linux-local", "preferredExecutableId" : "stealth-current",
                         "preferredCapabilityId" : "stealth-capability", "browserBuild" :
-                        "stealthcdp_chromium", "priority" : 50 }),
+                        "chromiumQ", "priority" : 50 }),
                 ],
                 validation_evidence: vec![
                     json!({ "id" : "stealth-launch-smoke", "hostId" : "linux-local",
@@ -3499,7 +3499,7 @@ fn test_apply_service_browser_capability_selection_rejects_mixed_validation() {
     let resolution = apply_service_browser_capability_selection(
         &mut options,
         &json!(
-            { "targetServiceId" : "canary-site", "browserBuild" : "stealthcdp_chromium" }
+            { "targetServiceId" : "canary-site", "browserBuild" : "chromiumQ" }
         ),
     );
     assert!(!resolution.applied);

@@ -3101,11 +3101,13 @@ pub fn route_bound_handoff_browser_build_proof(
     launch_command: &Value,
     launch: &Value,
 ) -> Value {
-    let requested_build = intent.browser_build.as_deref();
+    let normalize = agent_browser_service_model::BrowserBuild::normalize_chromiumq_label;
+    let requested_build = intent.browser_build.as_deref().map(normalize);
     let launch_selection = launch_command.get("browserCapabilityLaunch");
     let selected_build = launch_selection
         .and_then(|value| value.get("browserBuild"))
         .and_then(Value::as_str)
+        .map(normalize)
         .or(requested_build);
     let actual_executable_path = launch_selection
         .and_then(|value| value.get("executablePath"))
@@ -3154,7 +3156,10 @@ fn route_bound_handoff_browser_build_mismatch_reason(
     }
     if requested_build == Some("stock_chrome")
         && actual_executable_path
-            .map(|path| path.to_ascii_lowercase().contains("stealth"))
+            .map(|path| {
+                let path = path.to_ascii_lowercase();
+                path.contains("stealth") || path.contains("chromiumq")
+            })
             .unwrap_or(false)
     {
         return Some("stock_chrome_resolved_to_stealth_executable");
@@ -4892,7 +4897,7 @@ mod tests {
             service_name: None,
             agent_name: None,
             task_name: None,
-            browser_build: Some("stealthcdp_chromium".to_string()),
+            browser_build: Some("chromiumQ".to_string()),
             browser_host: "remote_headed".to_string(),
             view_stream_provider: ViewStreamProvider::RdpGateway,
             control_input: "manual_attached_desktop".to_string(),
