@@ -5428,6 +5428,51 @@ fn closing_last_live_tab_closes_browser_without_deleting_handoff() {
 }
 
 #[test]
+fn mcp_enrichment_navigation_retains_agent_tab_lifetime() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let mut consumer = host(&fixture, provider, Rc::new(Cell::new(0)));
+    let mut command = serde_json::json!({
+        "action":"browser_session_open", "sessionName":"Alice", "profileId":"profile-a",
+        "url":"https://synthetic.example/profile", "serviceName":"contacts-receipts",
+        "agentName":"linkedin-connector", "taskName":"Read profile", "originKind":"agent",
+        "manualLogin":false, "activityAtMs":100
+    });
+    let opened = consumer.handle_command(&command);
+    assert_eq!(opened["success"], true, "{opened}");
+    command["sessionId"] = opened["data"]["sessionId"].clone();
+    command["action"] = "browser_session_navigate".into();
+    let navigated = consumer.handle_command(&command);
+    assert_eq!(navigated["success"], true, "{navigated}");
+    let tab_id = navigated["data"]["tabId"].as_str().unwrap();
+    assert_eq!(
+        consumer
+            .state()
+            .tab_lifetimes
+            .get(tab_id)
+            .and_then(|ttl| ttl.inactivity_ms),
+        Some(300_000)
+    );
+    let link = consumer
+        .state()
+        .remote_view_tab_handoffs
+        .values()
+        .find(|link| link.tab_id == tab_id)
+        .unwrap();
+    assert!(link.expires_at_ms.is_none());
+    assert_eq!(
+        link.resume.as_ref().unwrap().url.as_deref(),
+        Some("https://synthetic.example/profile")
+    );
+    assert_eq!(
+        consumer.state().tab_metadata[tab_id]
+            .service_name
+            .as_deref(),
+        Some("contacts-receipts")
+    );
+}
+
+#[test]
 fn unattended_enrichment_gets_finite_tab_inactivity_with_durable_link() {
     use crate::connection::stable_time::{fixture_stamp, Fixture as TimeFixture};
 
