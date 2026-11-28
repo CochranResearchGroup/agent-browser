@@ -61,6 +61,15 @@ pub(crate) type SharedBrowserSessionHost = std::sync::Arc<BrowserSessionHosts>;
 
 /// Validate pending-human configuration before any owner or browser effect.
 /// Zero selects no automatic deadline; ordinary agent work has no human hold.
+fn unattended_contacts_enrichment(command: &serde_json::Value) -> bool {
+    command["originKind"] == "agent"
+        && command["serviceName"] == "contacts-receipts"
+        && command["manualLogin"] != true
+        && command["leaveOpen"] != true
+        && matches!(pending_human_retention(command), Ok(None))
+        && command.get("resumeHandoffId").is_none()
+}
+
 fn pending_human_retention(command: &serde_json::Value) -> Result<Option<u64>, String> {
     let human_handoff = match command.get("humanHandoff") {
         None => false,
@@ -1068,6 +1077,88 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 intent.url = Some(url.to_owned());
             }
         }
+    }
+
+    fn retain_ordinary_task_handoff(
+        &mut self,
+        session: &agent_browser_service_model::ManagedBrowserSession,
+        tab: &agent_browser_service_model::ManagedBrowserTab,
+        command: &serde_json::Value,
+        now_ms: u64,
+    ) -> Result<agent_browser_service_model::RemoteViewTabHandoff, String> {
+        let id = self
+            .state
+            .remote_view_tab_handoffs
+            .values()
+            .find(|record| record.session_id == session.id && record.tab_id == tab.id)
+            .map(|record| record.id.clone())
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let mut record = agent_browser_service_model::retain_remote_view_tab_handoff_at(
+            &mut self.state,
+            &id,
+            &session.id,
+            &tab.id,
+            now_ms,
+        )?;
+        let ttl = match command.get("handoffTtlMs") {
+            Some(value) => Some(
+                value
+                    .as_u64()
+                    .filter(|ttl| *ttl > 0)
+                    .ok_or("remote_view_handoff_ttl_invalid")?,
+            ),
+            None if self
+                .state
+                .disposable_profiles
+                .contains_key(&session.profile_id) =>
+            {
+                self.state.retention_policy.disposable_handoff_ttl_ms
+            }
+            None => self.state.retention_policy.durable_handoff_ttl_ms,
+        };
+        if record.created_at_ms.is_none() {
+            let enrichment_ttl = self.manager_config.session_idle_timeout_ms;
+            if unattended_contacts_enrichment(command)
+                && enrichment_ttl > 0
+                && !self.state.tab_lifetimes.contains_key(&tab.id)
+            {
+                self.state.tab_lifetimes.insert(
+                    tab.id.clone(),
+                    agent_browser_service_model::BrowserTabLifetime {
+                        inactivity_ms: Some(enrichment_ttl),
+                        pressure_inactivity_ms: None,
+                    },
+                );
+                self.state
+                    .tab_lifetime_policy_sources
+                    .insert(id.clone(), "unattended_enrichment".to_owned());
+            }
+            if let Some(ttl) = ttl {
+                let origin = crate::connection::stable_time::authority_now()?.service_origin()?;
+                record.renew_link_lifetime(Some(origin), ttl)?;
+            } else {
+                record.initialize_profile_retention(now_ms, None)?;
+            }
+        }
+        record.resume = Some(
+            agent_browser_service_model::RemoteViewTabHandoffResumeIntent {
+                tab_lifetime: self.state.tab_lifetimes.get(&tab.id).cloned(),
+                task_metadata: self.state.tab_metadata.get(&tab.id).cloned(),
+                session_name: session.name.clone(),
+                profile_id: session.profile_id.clone(),
+                disposable_policy_id: self
+                    .state
+                    .disposable_profiles
+                    .get(&session.profile_id)
+                    .map(|allocation| allocation.policy_id.clone()),
+                url: record.resume.as_ref().and_then(|intent| intent.url.clone()),
+            },
+        );
+        self.state
+            .remote_view_tab_handoffs
+            .insert(record.id.clone(), record.clone());
+
+        Ok(record)
     }
 
     pub(crate) fn navigate(
@@ -2384,7 +2475,23 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     .or_else(|| opened.as_ref().map(|result| result.session_id.clone()))
                     .ok_or_else(|| "browser_session_field_missing:sessionId".to_string())?;
                 let url = required_string(command, "url")?;
-                let navigation = self.navigate(&session_id, url, now_ms)?;
+                let navigation = if unattended_contacts_enrichment(command) {
+                    validate_handoff_ttl(command, now_ms, &self.state.retention_policy)?;
+                    let navigation = self.manager()?.navigate(&session_id, url, now_ms)?;
+                    let tab = self.state.tabs[&navigation.tab_id].clone();
+                    let session = self.state.sessions[&session_id].clone();
+                    self.state
+                        .tab_metadata
+                        .entry(tab.id.clone())
+                        .or_insert_with(|| capture_browser_task_metadata(command, &tab));
+                    self.retain_ordinary_task_handoff(&session, &tab, command, now_ms)?;
+                    self.retain_handoff_destination(&navigation.tab_id, url);
+                    self.compact_navigation_history()?;
+                    self.commit_state()?;
+                    navigation
+                } else {
+                    self.navigate(&session_id, url, now_ms)?
+                };
                 Ok(serde_json::json!({
                     "sessionId": session_id,
                     "profileId": navigation.profile_id,
@@ -3664,82 +3771,7 @@ where
         // Retain the logical target before returning an identity to a client.
         // Provider route issuance and the operator URL are separate joins.
         let handoff = if automatic && command.get("resumeHandoffId").is_none() {
-            let id = self
-                .state
-                .remote_view_tab_handoffs
-                .values()
-                .find(|record| record.session_id == session.id && record.tab_id == tab.id)
-                .map(|record| record.id.clone())
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-            let mut record = agent_browser_service_model::retain_remote_view_tab_handoff_at(
-                &mut self.state,
-                &id,
-                &session.id,
-                &tab.id,
-                now_ms,
-            )?;
-            let ttl = match command.get("handoffTtlMs") {
-                Some(value) => Some(
-                    value
-                        .as_u64()
-                        .filter(|ttl| *ttl > 0)
-                        .ok_or("remote_view_handoff_ttl_invalid")?,
-                ),
-                None if self
-                    .state
-                    .disposable_profiles
-                    .contains_key(&session.profile_id) =>
-                {
-                    self.state.retention_policy.disposable_handoff_ttl_ms
-                }
-                None => self.state.retention_policy.durable_handoff_ttl_ms,
-            };
-            if record.created_at_ms.is_none() {
-                let enrichment_ttl = self.manager_config.session_idle_timeout_ms;
-                if command["originKind"] == "agent"
-                    && command["serviceName"] == "contacts-receipts"
-                    && command["manualLogin"] != true
-                    && command["leaveOpen"] != true
-                    && pending_human_ttl.is_none()
-                    && enrichment_ttl > 0
-                    && !self.state.tab_lifetimes.contains_key(&tab.id)
-                {
-                    self.state.tab_lifetimes.insert(
-                        tab.id.clone(),
-                        agent_browser_service_model::BrowserTabLifetime {
-                            inactivity_ms: Some(enrichment_ttl),
-                            pressure_inactivity_ms: None,
-                        },
-                    );
-                    self.state
-                        .tab_lifetime_policy_sources
-                        .insert(id.clone(), "unattended_enrichment".to_owned());
-                }
-                if let Some(ttl) = ttl {
-                    let origin =
-                        crate::connection::stable_time::authority_now()?.service_origin()?;
-                    record.renew_link_lifetime(Some(origin), ttl)?;
-                } else {
-                    record.initialize_profile_retention(now_ms, None)?;
-                }
-            }
-            record.resume = Some(
-                agent_browser_service_model::RemoteViewTabHandoffResumeIntent {
-                    tab_lifetime: self.state.tab_lifetimes.get(&tab.id).cloned(),
-                    task_metadata: self.state.tab_metadata.get(&tab.id).cloned(),
-                    session_name: session.name.clone(),
-                    profile_id: session.profile_id.clone(),
-                    disposable_policy_id: self
-                        .state
-                        .disposable_profiles
-                        .get(&session.profile_id)
-                        .map(|allocation| allocation.policy_id.clone()),
-                    url: record.resume.as_ref().and_then(|intent| intent.url.clone()),
-                },
-            );
-            self.state
-                .remote_view_tab_handoffs
-                .insert(record.id.clone(), record.clone());
+            let record = self.retain_ordinary_task_handoff(&session, &tab, command, now_ms)?;
             if self.state != self.persisted_state {
                 self.commit_state()?;
             }
